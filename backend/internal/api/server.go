@@ -44,14 +44,23 @@ func (s *Server) Routes() http.Handler {
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 
-	router.GET("/health", s.handleHealth)
-	router.GET("/agents", s.handleAgents)
-	router.POST("/rooms", s.handleCreateRoom)
-	router.GET("/rooms/:roomID", s.handleGetRoom)
-	router.GET("/rooms/:roomID/messages", s.handleGetMessages)
-	router.GET("/rooms/:roomID/ws", s.handleRoomWebSocket)
+	s.registerAPIRoutes(router.Group("/api"))
+
+	// Keep legacy routes during the transition; the frontend uses /api/* so
+	// application pages can safely own paths such as /agents and /rooms/:id.
+	s.registerAPIRoutes(router.Group(""))
 
 	return router
+}
+
+func (s *Server) registerAPIRoutes(routes gin.IRoutes) {
+	routes.GET("/health", s.handleHealth)
+	routes.GET("/agents", s.handleAgents)
+	routes.PUT("/agents/:agentID", s.handleUpdateAgent)
+	routes.POST("/rooms", s.handleCreateRoom)
+	routes.GET("/rooms/:roomID", s.handleGetRoom)
+	routes.GET("/rooms/:roomID/messages", s.handleGetMessages)
+	routes.GET("/rooms/:roomID/ws", s.handleRoomWebSocket)
 }
 
 func (s *Server) handleHealth(c *gin.Context) {
@@ -60,6 +69,34 @@ func (s *Server) handleHealth(c *gin.Context) {
 
 func (s *Server) handleAgents(c *gin.Context) {
 	c.JSON(http.StatusOK, model.AgentsResponse{Agents: s.manager.Agents()})
+}
+
+func (s *Server) handleUpdateAgent(c *gin.Context) {
+	agentID := strings.TrimSpace(c.Param("agentID"))
+	if agentID == "" {
+		writeError(c, http.StatusBadRequest, "missing agent id")
+		return
+	}
+
+	var request model.UpdateAgentRequest
+	if err := json.NewDecoder(c.Request.Body).Decode(&request); err != nil && !errors.Is(err, context.Canceled) {
+		writeError(c, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	updated, ok := s.manager.UpdateAgent(agentID, room.UpdateAgentInput{
+		Name:         request.Name,
+		Role:         request.Role,
+		Description:  request.Description,
+		SystemPrompt: request.SystemPrompt,
+		Enabled:      request.Enabled,
+	})
+	if !ok {
+		writeError(c, http.StatusNotFound, "agent not found")
+		return
+	}
+
+	c.JSON(http.StatusOK, updated.Config())
 }
 
 func (s *Server) handleCreateRoom(c *gin.Context) {

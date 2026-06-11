@@ -10,8 +10,10 @@ function MessageComposer({ disabled, onInsertMentionRef, onSend }) {
       return
     }
 
-    await onSend(nextContent)
-    setContent('')
+    const didSend = await onSend(nextContent)
+    if (didSend) {
+      setContent('')
+    }
   }
 
   const handleKeyDown = (event) => {
@@ -37,23 +39,26 @@ function MessageComposer({ disabled, onInsertMentionRef, onSend }) {
 
   return (
     <form className="composer" onSubmit={handleSubmit}>
-      <label className="composer-label" htmlFor="message-input">
-        Message
-      </label>
+      <div className="composer-toolbar">
+        <label className="composer-label" htmlFor="message-input">
+          发送消息
+        </label>
+        <span className={`composer-status${disabled ? ' composer-status--disabled' : ''}`}>{disabled ? '等待重新连接' : '可以发送'}</span>
+      </div>
       <textarea
         id="message-input"
         className="composer-input"
         value={content}
         onChange={(event) => setContent(event.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Type a message. Use @AgentName to ask an agent to respond."
+        placeholder="输入消息，或点击左侧 Agent 的 @ 按钮插入提及。"
         rows={3}
         disabled={disabled}
       />
       <div className="composer-actions">
-        <p className="helper-text muted-text">Press Enter to send. Shift+Enter adds a new line.</p>
-        <button className="primary-button" type="submit" disabled={disabled || !content.trim()}>
-          Send
+        <p className="helper-text muted-text">Enter 发送，Shift+Enter 换行。</p>
+        <button className="button button--primary" type="submit" disabled={disabled || !content.trim()}>
+          发送
         </button>
       </div>
     </form>

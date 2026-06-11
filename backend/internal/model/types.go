@@ -32,10 +32,10 @@ type RoomMeta struct {
 }
 
 type RoomState struct {
-	Room         RoomMeta       `json:"room"`
-	Participants []Participant  `json:"participants"`
-	Agents       []Agent        `json:"agents"`
-	Messages     []Message      `json:"messages,omitempty"`
+	Room         RoomMeta      `json:"room"`
+	Participants []Participant `json:"participants"`
+	Agents       []Agent       `json:"agents"`
+	Messages     []Message     `json:"messages,omitempty"`
 }
 
 type Participant struct {
@@ -50,7 +50,26 @@ type Agent struct {
 	Mention      string `json:"mention"`
 	Role         string `json:"role"`
 	Description  string `json:"description"`
+	Enabled      bool   `json:"enabled"`
 	SystemPrompt string `json:"-"`
+}
+
+type AgentConfig struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Mention      string `json:"mention"`
+	Role         string `json:"role"`
+	Description  string `json:"description"`
+	Enabled      bool   `json:"enabled"`
+	SystemPrompt string `json:"systemPrompt"`
+}
+
+type UpdateAgentRequest struct {
+	Name         string `json:"name"`
+	Role         string `json:"role"`
+	Description  string `json:"description"`
+	SystemPrompt string `json:"systemPrompt"`
+	Enabled      *bool  `json:"enabled"`
 }
 
 type Message struct {
@@ -68,7 +87,7 @@ type HealthResponse struct {
 }
 
 type AgentsResponse struct {
-	Agents []Agent `json:"agents"`
+	Agents []AgentConfig `json:"agents"`
 }
 
 type CreateRoomRequest struct {
@@ -99,18 +118,30 @@ type ClientEvent struct {
 }
 
 type ServerEvent struct {
-	Type          string       `json:"type"`
-	Room          *RoomMeta    `json:"room,omitempty"`
+	Type          string        `json:"type"`
+	Room          *RoomMeta     `json:"room,omitempty"`
 	Participants  []Participant `json:"participants,omitempty"`
-	Agents        []Agent      `json:"agents,omitempty"`
-	Messages      []Message    `json:"messages,omitempty"`
-	Message       *Message     `json:"message,omitempty"`
-	Participant   *Participant `json:"participant,omitempty"`
-	ParticipantID string       `json:"participantID,omitempty"`
-	Error         string       `json:"error,omitempty"`
+	Agents        []Agent       `json:"agents,omitempty"`
+	Messages      []Message     `json:"messages,omitempty"`
+	Message       *Message      `json:"message,omitempty"`
+	Participant   *Participant  `json:"participant,omitempty"`
+	ParticipantID string        `json:"participantID,omitempty"`
+	Error         string        `json:"error,omitempty"`
 }
 
 func (a Agent) Public() Agent {
 	a.SystemPrompt = ""
 	return a
+}
+
+func (a Agent) Config() AgentConfig {
+	return AgentConfig{
+		ID:           a.ID,
+		Name:         a.Name,
+		Mention:      a.Mention,
+		Role:         a.Role,
+		Description:  a.Description,
+		Enabled:      a.Enabled,
+		SystemPrompt: a.SystemPrompt,
+	}
 }

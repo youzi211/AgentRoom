@@ -1,16 +1,14 @@
 package llm
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
-	"time"
+
+	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
 )
 
 const (
@@ -24,8 +22,8 @@ const (
 var ErrNotConfigured = errors.New("llm api key is not configured")
 
 type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string
+	Content string
 }
 
 type Client interface {
@@ -33,33 +31,15 @@ type Client interface {
 }
 
 type OpenAIClient struct {
-	baseURL    string
-	apiKey     string
-	model      string
-	httpClient *http.Client
+	client openai.Client
+	apiKey string
+	model  string
 }
 
 type Config struct {
 	BaseURL string
 	APIKey  string
 	Model   string
-}
-
-type chatCompletionRequest struct {
-	Model    string        `json:"model"`
-	Messages []ChatMessage `json:"messages"`
-}
-
-type chatCompletionResponse struct {
-	Choices []struct {
-		Message ChatMessage `json:"message"`
-	} `json:"choices"`
-}
-
-type apiErrorResponse struct {
-	Error struct {
-		Message string `json:"message"`
-	} `json:"error"`
 }
 
 func NewClientFromEnv() *OpenAIClient {
@@ -71,23 +51,17 @@ func NewClientFromEnv() *OpenAIClient {
 }
 
 func NewClient(config Config) *OpenAIClient {
-	baseURL := strings.TrimRight(strings.TrimSpace(config.BaseURL), "/")
-	if baseURL == "" {
-		baseURL = defaultBaseURL
-	}
-
-	model := strings.TrimSpace(config.Model)
-	if model == "" {
-		model = defaultModel
-	}
+	apiKey := strings.TrimSpace(config.APIKey)
+	model := normalizeModel(config.Model)
+	baseURL := normalizeBaseURL(config.BaseURL)
 
 	return &OpenAIClient{
-		baseURL: baseURL,
-		apiKey:  strings.TrimSpace(config.APIKey),
-		model:   model,
-		httpClient: &http.Client{
-			Timeout: 60 * time.Second,
-		},
+		client: openai.NewClient(
+			option.WithAPIKey(apiKey),
+			option.WithBaseURL(baseURL),
+		),
+		apiKey: apiKey,
+		model:  model,
 	}
 }
 
@@ -96,59 +70,49 @@ func (c *OpenAIClient) Complete(ctx context.Context, messages []ChatMessage) (st
 		return "", ErrNotConfigured
 	}
 
-	payload, err := json.Marshal(chatCompletionRequest{
+	chatCompletion, err := c.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: toOpenAIMessages(messages),
 		Model:    c.model,
-		Messages: messages,
 	})
 	if err != nil {
-		return "", fmt.Errorf("marshal chat completion request: %w", err)
+		return "", fmt.Errorf("chat completion request failed: %w", err)
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/chat/completions", bytes.NewReader(payload))
-	if err != nil {
-		return "", fmt.Errorf("build chat completion request: %w", err)
-	}
-	request.Header.Set("Authorization", "Bearer "+c.apiKey)
-	request.Header.Set("Content-Type", "application/json")
-
-	response, err := c.httpClient.Do(request)
-	if err != nil {
-		return "", fmt.Errorf("send chat completion request: %w", err)
-	}
-	defer response.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
-	if err != nil {
-		return "", fmt.Errorf("read chat completion response: %w", err)
-	}
-
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return "", parseAPIError(response.StatusCode, body)
-	}
-
-	var parsed chatCompletionResponse
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return "", fmt.Errorf("decode chat completion response: %w", err)
-	}
-	if len(parsed.Choices) == 0 {
+	if len(chatCompletion.Choices) == 0 {
 		return "", errors.New("chat completion returned no choices")
 	}
 
-	return parsed.Choices[0].Message.Content, nil
+	return strings.TrimSpace(chatCompletion.Choices[0].Message.Content), nil
 }
 
-func parseAPIError(statusCode int, body []byte) error {
-	var parsed apiErrorResponse
-	if err := json.Unmarshal(body, &parsed); err == nil {
-		message := strings.TrimSpace(parsed.Error.Message)
-		if message != "" {
-			return fmt.Errorf("llm request failed with status %d: %s", statusCode, message)
+func toOpenAIMessages(messages []ChatMessage) []openai.ChatCompletionMessageParamUnion {
+	result := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
+	for _, message := range messages {
+		switch message.Role {
+		case RoleSystem:
+			result = append(result, openai.SystemMessage(message.Content))
+		default:
+			result = append(result, openai.UserMessage(message.Content))
 		}
 	}
+	return result
+}
 
-	message := strings.TrimSpace(string(body))
-	if message == "" {
-		message = http.StatusText(statusCode)
+func normalizeBaseURL(value string) string {
+	baseURL := strings.TrimRight(strings.TrimSpace(value), "/")
+	if baseURL == "" {
+		baseURL = defaultBaseURL
 	}
-	return fmt.Errorf("llm request failed with status %d: %s", statusCode, message)
+	if strings.HasSuffix(baseURL, "/v1") {
+		return baseURL
+	}
+	return baseURL + "/v1"
+}
+
+func normalizeModel(value string) string {
+	model := strings.TrimSpace(value)
+	if model == "" {
+		return defaultModel
+	}
+	return model
 }

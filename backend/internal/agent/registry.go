@@ -12,32 +12,33 @@ func PredefinedAgents() []model.Agent {
 			"pm",
 			"产品经理",
 			"Product Manager",
-			"澄清需求、控制范围、判断用户价值",
+			"澄清需求、控制范围、判断用户价值和产品取舍。",
 		),
 		newRoleAgent(
 			"frontend",
 			"前端工程师",
 			"Frontend Engineer",
-			"负责页面结构、交互设计与前端实现建议",
+			"负责页面结构、交互设计与前端实现建议。",
 		),
 		newRoleAgent(
 			"backend",
 			"后端工程师",
 			"Backend Engineer",
-			"负责接口设计、数据流与服务端实现建议",
+			"负责接口设计、数据流、服务端实现、并发和故障边界。",
 		),
 		newRoleAgent(
 			"qa",
 			"测试工程师",
 			"QA Engineer",
-			"补充测试策略、验收标准与质量风险",
+			"补充测试策略、验收标准、边界场景与质量风险。",
 		),
 		{
 			ID:           "secretary",
 			Name:         "会议秘书",
 			Mention:      "@会议秘书",
 			Role:         "Meeting Secretary",
-			Description:  "整理结论、待办、风险和未决问题",
+			Description:  "整理结论、待办、风险和未决问题。",
+			Enabled:      true,
 			SystemPrompt: meetingSecretaryPrompt(),
 		},
 	}
@@ -50,13 +51,13 @@ func newRoleAgent(id string, name string, role string, description string) model
 		Mention:      "@" + name,
 		Role:         role,
 		Description:  description,
+		Enabled:      true,
 		SystemPrompt: genericRolePrompt(role),
 	}
 }
 
 func genericRolePrompt(role string) string {
-	return fmt.Sprintf(`你是 AgentRoom 中的一个职能型 AI Agent。
-你的角色是：%s
+	return fmt.Sprintf(`你是 AgentRoom 中的一个职能型 AI Agent。你的角色是：%s
 
 行为规则：
 - 你只在被明确 @ 提及时发言。
@@ -67,9 +68,7 @@ func genericRolePrompt(role string) string {
 }
 
 func meetingSecretaryPrompt() string {
-	return `你是 AgentRoom 的会议秘书。
-请基于当前会议上下文输出结构化会议记录。
-
+	return `你是 AgentRoom 的会议秘书。请基于当前会议上下文输出结构化会议记录。
 输出格式：
 1. 已达成结论
 2. 待办事项

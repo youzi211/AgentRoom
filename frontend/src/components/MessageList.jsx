@@ -3,24 +3,23 @@ function MessageList({ messages }) {
     return (
       <section className="message-panel message-panel--empty">
         <div className="empty-state">
-          <h2>No messages yet</h2>
-          <p className="muted-text">Start the discussion or mention an agent to ask for input.</p>
+          <p className="eyebrow eyebrow--subtle">对话</p>
+          <h2 className="message-empty-title">暂无消息</h2>
+          <p className="muted-text">开始对话，或 @ 一个 Agent 来获取帮助。</p>
         </div>
       </section>
     )
   }
 
   return (
-    <section className="message-panel" aria-label="Messages">
+    <section className="message-panel" aria-label="消息列表">
       <ul className="message-list">
         {messages.map((message) => (
           <li className={`message-card message-card--${message.senderType}`} key={message.id}>
             <div className="message-meta">
               <div className="message-author-group">
                 <span className="message-author">{message.senderName}</span>
-                <span className={`message-badge message-badge--${message.senderType}`}>
-                  {labelForSenderType(message.senderType)}
-                </span>
+                <span className={`message-badge message-badge--${message.senderType}`}>{labelForSenderType(message.senderType)}</span>
               </div>
               <time className="message-time" dateTime={message.createdAt}>
                 {formatMessageTime(message.createdAt)}
@@ -39,9 +38,9 @@ function labelForSenderType(senderType) {
     case 'agent':
       return 'Agent'
     case 'system':
-      return 'System'
+      return '系统'
     default:
-      return 'Human'
+      return '用户'
   }
 }
 
@@ -51,9 +50,10 @@ function formatMessageTime(value) {
     return ''
   }
 
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat('zh-CN', {
     hour: 'numeric',
     minute: '2-digit',
+    hour12: false,
   }).format(date)
 }
 

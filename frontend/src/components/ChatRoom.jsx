@@ -25,6 +25,39 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
   useEffect(() => {
     let isCurrent = true
 
+    const handleServerEvent = (event) => {
+      switch (event.type) {
+        case ROOM_SNAPSHOT_EVENT:
+          if (event.room) {
+            setRoom(event.room)
+          }
+          setParticipants(event.participants ?? [])
+          setAgents(event.agents ?? [])
+          setMessages(event.messages ?? [])
+          return
+        case PARTICIPANT_JOINED_EVENT:
+          if (event.participant) {
+            setParticipants((current) => upsertById(current, event.participant))
+          }
+          return
+        case PARTICIPANT_LEFT_EVENT:
+          if (event.participantID) {
+            setParticipants((current) => current.filter((participant) => participant.id !== event.participantID))
+          }
+          return
+        case MESSAGE_EVENT:
+          if (event.message) {
+            setMessages((current) => upsertById(current, event.message))
+          }
+          return
+        case ERROR_EVENT:
+          setErrorMessage(event.error || '房间报告了一个错误。')
+          return
+        default:
+          return
+      }
+    }
+
     const connectToRoom = async () => {
       setConnectionState('connecting')
 
@@ -40,13 +73,13 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
         setParticipants(roomResult.value.participants ?? [])
         setAgents(roomResult.value.agents ?? [])
       } else {
-        loadErrors.push(roomResult.reason?.message || 'Failed to load room details.')
+        loadErrors.push(roomResult.reason?.message || '加载房间信息失败。')
       }
 
       if (messagesResult.status === 'fulfilled') {
         setMessages(messagesResult.value.messages ?? [])
       } else {
-        loadErrors.push(messagesResult.reason?.message || 'Failed to load messages.')
+        loadErrors.push(messagesResult.reason?.message || '加载消息失败。')
       }
 
       if (loadErrors.length > 0) {
@@ -74,7 +107,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
           const payload = JSON.parse(event.data)
           handleServerEvent(payload)
         } catch {
-          setErrorMessage('Received an unreadable server event.')
+          setErrorMessage('收到了无法解析的服务器消息。')
         }
       })
 
@@ -83,7 +116,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
           return
         }
 
-        setErrorMessage((current) => current || 'The live room connection hit an error.')
+        setErrorMessage((current) => current || '实时连接出现错误。')
       })
 
       socket.addEventListener('close', () => {
@@ -94,39 +127,6 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
         socketRef.current = null
         setConnectionState('disconnected')
       })
-    }
-
-    const handleServerEvent = (event) => {
-      switch (event.type) {
-        case ROOM_SNAPSHOT_EVENT:
-          if (event.room) {
-            setRoom(event.room)
-          }
-          setParticipants(event.participants ?? [])
-          setAgents(event.agents ?? [])
-          setMessages(event.messages ?? [])
-          return
-        case PARTICIPANT_JOINED_EVENT:
-          if (event.participant) {
-            setParticipants((current) => upsertById(current, event.participant))
-          }
-          return
-        case PARTICIPANT_LEFT_EVENT:
-          if (event.participantID) {
-            setParticipants((current) => current.filter((participant) => participant.id !== event.participantID))
-          }
-          return
-        case MESSAGE_EVENT:
-          if (event.message) {
-            setMessages((current) => upsertById(current, event.message))
-          }
-          return
-        case ERROR_EVENT:
-          setErrorMessage(event.error || 'The room reported an error.')
-          return
-        default:
-          return
-      }
     }
 
     void connectToRoom()
@@ -146,8 +146,8 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
   const handleSendMessage = async (content) => {
     const socket = socketRef.current
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-      setErrorMessage('Reconnect to the room before sending another message.')
-      return
+      setErrorMessage('请重新连接后再发送消息。')
+      return false
     }
 
     socket.send(
@@ -157,6 +157,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
       }),
     )
     setErrorMessage('')
+    return true
   }
 
   const handleInsertMention = (mention) => {
@@ -165,26 +166,35 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
 
   return (
     <main className="app-shell">
-      <header className="chat-header">
+      <header className="page-header">
         <div>
-          <p className="eyebrow">AgentRoom</p>
+          <p className="eyebrow">会议室</p>
           <h1>{room.name}</h1>
-          <p className="helper-text">You joined as {participantName}.</p>
+          <p className="section-copy">
+            你以 <span className="participant-highlight">{participantName}</span> 身份加入。正常聊天不会触发 Agent，明确 @ 后它才会发言。
+          </p>
           <div className="room-meta">
-            <span className="meta-pill">
-              <span className={`status-dot status-dot--${connectionState}`} />
-              {labelForConnectionState(connectionState)}
-            </span>
-            <span className="meta-pill">Room ID: {room.id}</span>
-            <span className="meta-pill">Messages: {messages.length}</span>
+            <div className="meta-pill">
+              <span className="meta-label">连接状态</span>
+              <div className="status-row">
+                <span className={`status-dot status-dot--${connectionState}`} />
+                <span className="meta-value">{labelForConnectionState(connectionState)}</span>
+              </div>
+            </div>
+            <div className="meta-pill">
+              <span className="meta-label">房间 ID</span>
+              <span className="meta-value room-id-value">{room.id}</span>
+            </div>
+            <div className="meta-pill">
+              <span className="meta-label">消息数</span>
+              <span className="meta-value">{messages.length}</span>
+            </div>
           </div>
         </div>
 
-        <div className="button-row chat-header-actions">
-          <button className="button button--secondary" type="button" onClick={onLeaveRoom}>
-            Leave room
-          </button>
-        </div>
+        <button className="button button--secondary" type="button" onClick={onLeaveRoom}>
+          离开房间
+        </button>
       </header>
 
       {errorMessage ? <p className="banner banner--error">{errorMessage}</p> : null}
@@ -200,23 +210,20 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
         </aside>
 
         <section className="workspace">
-          <div className="panel">
-            <div className="composer-header">
-              <h2>Conversation</h2>
+          <div className="panel panel--conversation">
+            <div className="workspace-header">
+              <div>
+                <p className="eyebrow eyebrow--subtle">对话</p>
+                <h2>实时消息</h2>
+              </div>
               <p className="helper-text conversation-summary">
-                {connectionState === 'connected'
-                  ? 'Live updates are connected.'
-                  : 'Live updates are paused until the socket reconnects.'}
+                {connectionState === 'connected' ? '实时连接已建立，新消息会自动出现。' : '实时更新已暂停，等待重新连接。'}
               </p>
             </div>
             <MessageList messages={messages} />
           </div>
 
-          <MessageComposer
-            disabled={connectionState !== 'connected'}
-            onInsertMentionRef={insertMentionRef}
-            onSend={handleSendMessage}
-          />
+          <MessageComposer disabled={connectionState !== 'connected'} onInsertMentionRef={insertMentionRef} onSend={handleSendMessage} />
         </section>
       </div>
     </main>
@@ -237,10 +244,10 @@ function upsertById(items, nextItem) {
 function labelForConnectionState(connectionState) {
   switch (connectionState) {
     case 'connected':
-      return 'Connected'
+      return '已连接'
     case 'disconnected':
-      return 'Disconnected'
+      return '已断开'
     default:
-      return 'Connecting'
+      return '连接中'
   }
 }

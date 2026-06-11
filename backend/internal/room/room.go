@@ -10,15 +10,15 @@ import (
 )
 
 type Room struct {
-	mu            sync.RWMutex
-	id            string
-	name          string
-	createdAt     time.Time
-	participants  map[string]*model.Participant
-	agents        map[string]*model.Agent
-	agentOrder    []string
-	messages      []model.Message
-	hub           *Hub
+	mu           sync.RWMutex
+	id           string
+	name         string
+	createdAt    time.Time
+	participants map[string]*model.Participant
+	agents       map[string]*model.Agent
+	agentOrder   []string
+	messages     []model.Message
+	hub          *Hub
 }
 
 func New(id string, name string, agents []model.Agent) *Room {
@@ -79,6 +79,21 @@ func (r *Room) Agents() []model.Agent {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return cloneAgents(r.agents, r.agentOrder)
+}
+
+func (r *Room) ReplaceAgents(agents []model.Agent) {
+	agentMap := make(map[string]*model.Agent, len(agents))
+	agentOrder := make([]string, 0, len(agents))
+	for _, agent := range agents {
+		copyAgent := agent
+		agentMap[agent.ID] = &copyAgent
+		agentOrder = append(agentOrder, agent.ID)
+	}
+
+	r.mu.Lock()
+	r.agents = agentMap
+	r.agentOrder = agentOrder
+	r.mu.Unlock()
 }
 
 func (r *Room) Messages() []model.Message {

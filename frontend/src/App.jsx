@@ -1,32 +1,51 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createRoom, getRoom } from './api/roomClient'
+import {
+  ROUTE_NAMES,
+  navigateAgents,
+  navigateHome,
+  navigateRoom,
+  parseCurrentRoute,
+  resolveRoomSession,
+  subscribeToNavigation,
+} from './routing'
+import AgentAdmin from './components/AgentAdmin'
 import ChatRoom from './components/ChatRoom'
 import JoinScreen from './components/JoinScreen'
+import NotFound from './components/NotFound'
+import RoomEntry from './components/RoomEntry'
 
 const DEFAULT_ROOM_NAME = 'AgentRoom Meeting'
 
 export default function App() {
-  const [session, setSession] = useState(null)
+  const [{ route, roomSession }, setNavigationState] = useState(() => getNavigationState())
   const [submitState, setSubmitState] = useState({
     isSubmitting: false,
     errorMessage: '',
   })
+
+  useEffect(() => {
+    return subscribeToNavigation(() => {
+      setNavigationState(getNavigationState())
+      setSubmitState({ isSubmitting: false, errorMessage: '' })
+    })
+  }, [])
 
   const handleCreateRoom = async ({ displayName, roomName }) => {
     setSubmitState({ isSubmitting: true, errorMessage: '' })
 
     try {
       const response = await createRoom(roomName || DEFAULT_ROOM_NAME)
-      setSession({
+      const nextRoomSession = {
         participantName: displayName,
-        roomId: response.room.id,
         initialRoom: response.room,
-      })
+      }
       setSubmitState({ isSubmitting: false, errorMessage: '' })
+      navigateRoom(response.room.id, nextRoomSession)
     } catch (error) {
       setSubmitState({
         isSubmitting: false,
-        errorMessage: error.message || 'Failed to create a room.',
+        errorMessage: error.message || '创建房间失败。',
       })
     }
   }
@@ -36,35 +55,55 @@ export default function App() {
 
     try {
       const response = await getRoom(roomId)
-      setSession({
+      const nextRoomSession = {
         participantName: displayName,
-        roomId: response.room.id,
         initialRoom: response.room,
-      })
+      }
       setSubmitState({ isSubmitting: false, errorMessage: '' })
+      navigateRoom(response.room.id, nextRoomSession)
     } catch (error) {
       setSubmitState({
         isSubmitting: false,
-        errorMessage: error.message || 'Failed to join the room.',
+        errorMessage: error.message || '加入房间失败。',
       })
     }
   }
 
   const handleLeaveRoom = () => {
-    setSession(null)
     setSubmitState({ isSubmitting: false, errorMessage: '' })
+    navigateHome()
   }
 
-  if (session) {
+  if (route.name === ROUTE_NAMES.room) {
+    if (!roomSession?.participantName) {
+      return (
+        <RoomEntry
+          errorMessage={submitState.errorMessage}
+          isSubmitting={submitState.isSubmitting}
+          roomId={route.roomId}
+          onBackHome={() => navigateHome()}
+          onJoinRoom={handleJoinRoom}
+        />
+      )
+    }
+
     return (
       <ChatRoom
-        key={`${session.roomId}:${session.participantName}`}
-        initialRoom={session.initialRoom}
-        participantName={session.participantName}
-        roomId={session.roomId}
+        key={`${route.roomId}:${roomSession.participantName}`}
+        initialRoom={roomSession.initialRoom ?? { id: route.roomId, name: '会议室' }}
+        participantName={roomSession.participantName}
+        roomId={route.roomId}
         onLeaveRoom={handleLeaveRoom}
       />
     )
+  }
+
+  if (route.name === ROUTE_NAMES.agents) {
+    return <AgentAdmin onBack={() => navigateHome()} />
+  }
+
+  if (route.name === ROUTE_NAMES.notFound) {
+    return <NotFound onBackHome={() => navigateHome({ replace: true })} />
   }
 
   return (
@@ -73,6 +112,15 @@ export default function App() {
       isSubmitting={submitState.isSubmitting}
       onCreateRoom={handleCreateRoom}
       onJoinRoom={handleJoinRoom}
+      onOpenAgentAdmin={() => navigateAgents()}
     />
   )
+}
+
+function getNavigationState() {
+  const route = parseCurrentRoute()
+  const roomSession =
+    route.name === ROUTE_NAMES.room ? resolveRoomSession(route.roomId, route.participantName) : null
+
+  return { route, roomSession }
 }
