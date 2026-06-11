@@ -84,7 +84,7 @@
 .sidebar-list-item--stacked {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;
 }
 
 .participant-identity,
@@ -148,19 +148,24 @@
 }
 
 .agent-row {
-  align-items: flex-start;
+  align-items: center;
 }
 
 .agent-description {
+  display: -webkit-box;
+  overflow: hidden;
   padding-left: 50px;
   font-size: 0.86rem;
   line-height: 1.55;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .message-panel {
   display: flex;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .message-panel--empty {
@@ -168,9 +173,29 @@
   justify-content: center;
 }
 
+.message-panel--empty .empty-state {
+  padding: 10px 0;
+}
+
+.message-panel--empty .eyebrow {
+  display: none;
+}
+
+.message-panel--empty .message-empty-title {
+  margin-bottom: 4px;
+  font-size: 1rem;
+}
+
+.message-panel--empty .muted-text {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
 .message-panel .message-list {
   min-height: 0;
-  max-height: 60vh;
+  max-height: none;
+  flex: 1;
 }
 
 .message-meta {
@@ -247,8 +272,7 @@
 }
 
 .message-badge--own {
-  background: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
+  display: none;
 }
 
 .composer-status {
@@ -267,6 +291,14 @@
 
 .composer-status--disabled::before {
   background: var(--warning);
+}
+
+.composer .helper-text {
+  opacity: 0.72;
+}
+
+.composer .button {
+  align-self: flex-end;
 }
 
 .conversation-summary {

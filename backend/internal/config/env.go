@@ -40,6 +40,22 @@ func LoadDotEnv(path string) error {
 	return scanner.Err()
 }
 
+// DBConfig holds database configuration loaded from environment variables.
+type DBConfig struct {
+	Driver      string
+	DSN         string
+	AutoMigrate bool
+}
+
+// LoadDBConfig reads database configuration from environment variables.
+func LoadDBConfig() DBConfig {
+	return DBConfig{
+		Driver:      os.Getenv("DB_DRIVER"),
+		DSN:         os.Getenv("MYSQL_DSN"),
+		AutoMigrate: os.Getenv("DB_AUTO_MIGRATE") == "true",
+	}
+}
+
 func trimEnvValue(value string) string {
 	if len(value) < 2 {
 		return value

@@ -17,6 +17,7 @@ function AgentAdmin({ onBack }) {
   const [isSaving, setIsSaving] = useState(false)
   const [notice, setNotice] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false)
 
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedAgentId) ?? null,
@@ -69,6 +70,7 @@ function AgentAdmin({ onBack }) {
       enabled: selectedAgent.enabled !== false,
     })
     setNotice('')
+    setShowSystemPrompt(false)
   }, [selectedAgent])
 
   const handleFieldChange = (field, value) => {
@@ -163,7 +165,7 @@ function AgentAdmin({ onBack }) {
 
           <div className="toggle-row">
             <div>
-              <p className="toggle-title">启用 Agent</p>
+              <p className="toggle-title">当前状态：{form.enabled ? '已启用' : '已停用'}</p>
               <p className="field-hint">关闭后，这个 Agent 不会出现在会议室侧栏，也不会被触发。</p>
             </div>
             <label className="switch">
@@ -179,7 +181,7 @@ function AgentAdmin({ onBack }) {
 
           <div className="admin-form-grid">
             <div className="field-group">
-              <label htmlFor="agent-name">展示名称</label>
+              <label htmlFor="agent-name">Agent 名称</label>
               <input
                 id="agent-name"
                 type="text"
@@ -192,7 +194,7 @@ function AgentAdmin({ onBack }) {
             </div>
 
             <div className="field-group">
-              <label htmlFor="agent-role">角色标签</label>
+              <label htmlFor="agent-role">角色英文名 / 职位标签</label>
               <input
                 id="agent-role"
                 type="text"
@@ -205,29 +207,45 @@ function AgentAdmin({ onBack }) {
           </div>
 
           <div className="field-group">
-            <label htmlFor="agent-description">职责说明</label>
+            <label htmlFor="agent-description">会议职责说明</label>
             <textarea
               id="agent-description"
               className="text-input"
               value={form.description}
               onChange={(event) => handleFieldChange('description', event.target.value)}
               disabled={!selectedAgent || isSaving}
-              rows={4}
+              rows={3}
               maxLength={240}
             />
           </div>
 
           <div className="field-group">
-            <label htmlFor="agent-system-prompt">系统提示词</label>
-            <textarea
-              id="agent-system-prompt"
-              className="text-input text-input--prompt"
-              value={form.systemPrompt}
-              onChange={(event) => handleFieldChange('systemPrompt', event.target.value)}
-              disabled={!selectedAgent || isSaving}
-              rows={10}
-              placeholder="留空则保留当前后端提示词。"
-            />
+            <button
+              className="collapse-toggle"
+              type="button"
+              aria-expanded={showSystemPrompt}
+              onClick={() => setShowSystemPrompt((current) => !current)}
+              disabled={!selectedAgent}
+            >
+              <span className="collapse-toggle-label">行为规则</span>
+              <span className="collapse-toggle-hint">
+                {form.systemPrompt ? '已自定义系统提示词' : '使用默认系统提示词'}
+              </span>
+              <span className={`collapse-chevron${showSystemPrompt ? ' collapse-chevron--open' : ''}`} aria-hidden="true">
+                ▾
+              </span>
+            </button>
+            {showSystemPrompt ? (
+              <textarea
+                id="agent-system-prompt"
+                className="text-input text-input--prompt"
+                value={form.systemPrompt}
+                onChange={(event) => handleFieldChange('systemPrompt', event.target.value)}
+                disabled={!selectedAgent || isSaving}
+                rows={8}
+                placeholder="留空则保留当前后端提示词。"
+              />
+            ) : null}
           </div>
 
           <div className="button-row">

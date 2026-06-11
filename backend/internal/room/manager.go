@@ -1,14 +1,20 @@
 package room
 
 import (
+	"context"
+	"fmt"
+	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"agentroom/backend/internal/model"
+	"agentroom/backend/internal/store"
 )
 
 type Manager struct {
 	mu     sync.RWMutex
+	store  store.Store
 	agents []model.Agent
 	rooms  map[string]*Room
 }
@@ -21,32 +27,95 @@ type UpdateAgentInput struct {
 	Enabled      *bool
 }
 
-func NewManager(agents []model.Agent) *Manager {
+func NewManager(s store.Store, agents []model.Agent) *Manager {
 	copiedAgents := make([]model.Agent, len(agents))
 	copy(copiedAgents, agents)
 
 	return &Manager{
+		store:  s,
 		agents: copiedAgents,
 		rooms:  make(map[string]*Room),
 	}
 }
 
-func (m *Manager) CreateRoom(name string) *Room {
+// CreateRoom creates a new room, persists it to the store, and caches it in memory.
+func (m *Manager) CreateRoom(ctx context.Context, name string) (*Room, error) {
 	roomID := model.NewID("room")
-	room := New(roomID, strings.TrimSpace(name), enabledAgents(m.agents))
+	trimmed := strings.TrimSpace(name)
+	roomName := normalizeRoomName(trimmed, roomID)
+	createdAt := time.Now().UTC()
+
+	enabled := enabledAgents(m.agents)
+
+	meta, _, err := m.store.CreateRoom(ctx, store.CreateRoomInput{
+		ID:        roomID,
+		Name:      roomName,
+		Agents:    enabled,
+		CreatedAt: createdAt,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("persist room: %w", err)
+	}
+
+	r := NewFromState(meta, enabled)
 
 	m.mu.Lock()
-	m.rooms[roomID] = room
+	m.rooms[roomID] = r
 	m.mu.Unlock()
 
-	return room
+	return r, nil
 }
 
-func (m *Manager) GetRoom(roomID string) (*Room, bool) {
+// GetRoom returns a room by ID. If the room is not in memory, it loads it from the store.
+func (m *Manager) GetRoom(ctx context.Context, roomID string) (*Room, bool) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	room, ok := m.rooms[roomID]
-	return room, ok
+	r, ok := m.rooms[roomID]
+	m.mu.RUnlock()
+	if ok {
+		return r, true
+	}
+
+	// Load from store
+	meta, err := m.store.GetRoom(ctx, roomID)
+	if err != nil {
+		return nil, false
+	}
+
+	agents, err := m.store.ListRoomAgents(ctx, roomID)
+	if err != nil {
+		log.Printf("load room agents for %s: %v", roomID, err)
+		agents = nil
+	}
+
+	messages, err := m.store.ListMessages(ctx, store.ListMessagesQuery{RoomID: roomID, Limit: 100})
+	if err != nil {
+		log.Printf("load room messages for %s: %v", roomID, err)
+		messages = nil
+	}
+
+	participants, err := m.store.ListActiveParticipants(ctx, roomID)
+	if err != nil {
+		log.Printf("load room participants for %s: %v", roomID, err)
+		participants = nil
+	}
+
+	r = NewFromSnapshot(meta, agents, messages, participants)
+
+	m.mu.Lock()
+	// Double-check: another goroutine may have loaded the room
+	if existing, ok := m.rooms[roomID]; ok {
+		m.mu.Unlock()
+		return existing, true
+	}
+	m.rooms[roomID] = r
+	m.mu.Unlock()
+
+	return r, true
+}
+
+// Store returns the underlying store for direct use by API handlers.
+func (m *Manager) Store() store.Store {
+	return m.store
 }
 
 func (m *Manager) Agents() []model.AgentConfig {
@@ -60,32 +129,35 @@ func (m *Manager) Agents() []model.AgentConfig {
 	return agents
 }
 
-func (m *Manager) UpdateAgent(agentID string, input UpdateAgentInput) (model.Agent, bool) {
+// UpdateAgent updates a global agent config in the store.
+// It does NOT propagate changes to existing rooms (room_agents snapshots are frozen).
+func (m *Manager) UpdateAgent(ctx context.Context, agentID string, input UpdateAgentInput) (model.Agent, bool) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
-	for index := range m.agents {
-		if m.agents[index].ID != agentID {
-			continue
+	var current *model.Agent
+	for i := range m.agents {
+		if m.agents[i].ID == agentID {
+			current = &m.agents[i]
+			break
 		}
-
-		updated := applyAgentUpdate(m.agents[index], input)
-		m.agents[index] = updated
-		enabled := enabledAgents(m.agents)
-		for _, currentRoom := range m.rooms {
-			currentRoom.ReplaceAgents(enabled)
-			currentRoom.Hub().Broadcast(model.ServerEvent{
-				Type:         model.EventTypeRoomSnapshot,
-				Room:         ptr(currentRoom.Info()),
-				Participants: currentRoom.Participants(),
-				Agents:       currentRoom.Agents(),
-				Messages:     currentRoom.Messages(),
-			})
-		}
-		return updated, true
+	}
+	if current == nil {
+		m.mu.Unlock()
+		return model.Agent{}, false
 	}
 
-	return model.Agent{}, false
+	updated := applyAgentUpdate(*current, input)
+	m.agents = replaceAgentInSlice(m.agents, updated)
+	m.mu.Unlock()
+
+	// Persist to store
+	result, err := m.store.UpdateAgent(ctx, updated)
+	if err != nil {
+		log.Printf("persist agent update %s: %v", agentID, err)
+		return model.Agent{}, false
+	}
+
+	return result, true
 }
 
 func applyAgentUpdate(current model.Agent, input UpdateAgentInput) model.Agent {
@@ -117,6 +189,18 @@ func enabledAgents(agents []model.Agent) []model.Agent {
 		enabled = append(enabled, configuredAgent)
 	}
 	return enabled
+}
+
+func replaceAgentInSlice(agents []model.Agent, updated model.Agent) []model.Agent {
+	result := make([]model.Agent, len(agents))
+	copy(result, agents)
+	for i, a := range result {
+		if a.ID == updated.ID {
+			result[i] = updated
+			break
+		}
+	}
+	return result
 }
 
 func ptr[T any](value T) *T {

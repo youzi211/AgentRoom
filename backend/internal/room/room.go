@@ -21,6 +21,7 @@ type Room struct {
 	hub          *Hub
 }
 
+// New creates a brand-new room from scratch (used for new room creation).
 func New(id string, name string, agents []model.Agent) *Room {
 	createdAt := time.Now().UTC()
 	agentMap := make(map[string]*model.Agent, len(agents))
@@ -39,6 +40,61 @@ func New(id string, name string, agents []model.Agent) *Room {
 		agents:       agentMap,
 		agentOrder:   agentOrder,
 		messages:     make([]model.Message, 0),
+		hub:          NewHub(),
+	}
+}
+
+// NewFromState creates a Room from persisted metadata and agent list.
+// Used after creating a room that was already persisted to the store.
+func NewFromState(meta model.RoomMeta, agents []model.Agent) *Room {
+	agentMap := make(map[string]*model.Agent, len(agents))
+	agentOrder := make([]string, 0, len(agents))
+	for _, a := range agents {
+		copyAgent := a
+		agentMap[a.ID] = &copyAgent
+		agentOrder = append(agentOrder, a.ID)
+	}
+
+	return &Room{
+		id:           meta.ID,
+		name:         meta.Name,
+		createdAt:    meta.CreatedAt,
+		participants: make(map[string]*model.Participant),
+		agents:       agentMap,
+		agentOrder:   agentOrder,
+		messages:     make([]model.Message, 0),
+		hub:          NewHub(),
+	}
+}
+
+// NewFromSnapshot creates a Room from a full persisted snapshot (meta, agents, messages, participants).
+// Used when loading a room from the store after a backend restart.
+func NewFromSnapshot(meta model.RoomMeta, agents []model.Agent, messages []model.Message, participants []model.Participant) *Room {
+	agentMap := make(map[string]*model.Agent, len(agents))
+	agentOrder := make([]string, 0, len(agents))
+	for _, a := range agents {
+		copyAgent := a
+		agentMap[a.ID] = &copyAgent
+		agentOrder = append(agentOrder, a.ID)
+	}
+
+	participantMap := make(map[string]*model.Participant, len(participants))
+	for _, p := range participants {
+		copyP := p
+		participantMap[p.ID] = &copyP
+	}
+
+	msgCopy := make([]model.Message, len(messages))
+	copy(msgCopy, messages)
+
+	return &Room{
+		id:           meta.ID,
+		name:         meta.Name,
+		createdAt:    meta.CreatedAt,
+		participants: participantMap,
+		agents:       agentMap,
+		agentOrder:   agentOrder,
+		messages:     msgCopy,
 		hub:          NewHub(),
 	}
 }
@@ -81,6 +137,23 @@ func (r *Room) Agents() []model.Agent {
 	return cloneAgents(r.agents, r.agentOrder)
 }
 
+// AgentsWithPrompts returns agents including their system prompts (for Agent Runner).
+func (r *Room) AgentsWithPrompts() []model.Agent {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := make([]model.Agent, 0, len(r.agentOrder))
+	for _, id := range r.agentOrder {
+		agent, ok := r.agents[id]
+		if !ok {
+			continue
+		}
+		copyAgent := *agent
+		result = append(result, copyAgent)
+	}
+	return result
+}
+
 func (r *Room) ReplaceAgents(agents []model.Agent) {
 	agentMap := make(map[string]*model.Agent, len(agents))
 	agentOrder := make([]string, 0, len(agents))
@@ -114,18 +187,22 @@ func (r *Room) RecentMessages(limit int) []model.Message {
 	return cloneMessages(r.messages[start:])
 }
 
-func (r *Room) AddParticipant(name string) model.Participant {
-	participant := model.Participant{
+// AddParticipantFromStore adds a participant that was already persisted to the store.
+func (r *Room) AddParticipantFromStore(participant model.Participant) {
+	r.mu.Lock()
+	copyP := participant
+	r.participants[participant.ID] = &copyP
+	r.mu.Unlock()
+}
+
+// NewParticipant creates a new participant model (ID is generated) but does NOT add it to the room.
+// The caller is responsible for persisting via Store and then calling AddParticipantFromStore.
+func (r *Room) NewParticipant(name string) model.Participant {
+	return model.Participant{
 		ID:       model.NewID("participant"),
 		Name:     strings.TrimSpace(name),
 		JoinedAt: time.Now().UTC(),
 	}
-
-	r.mu.Lock()
-	r.participants[participant.ID] = &participant
-	r.mu.Unlock()
-
-	return participant
 }
 
 func (r *Room) RemoveParticipant(participantID string) bool {
@@ -138,8 +215,16 @@ func (r *Room) RemoveParticipant(participantID string) bool {
 	return true
 }
 
-func (r *Room) AddHumanMessage(participant model.Participant, content string) model.Message {
-	return r.addMessage(model.Message{
+// AppendMessage adds an already-persisted message to the in-memory list.
+func (r *Room) AppendMessage(message model.Message) {
+	r.mu.Lock()
+	r.messages = append(r.messages, message)
+	r.mu.Unlock()
+}
+
+// NewHumanMessage creates a human message model without adding it to the room.
+func (r *Room) NewHumanMessage(participant model.Participant, content string) model.Message {
+	return model.Message{
 		ID:         model.NewID("msg"),
 		RoomID:     r.id,
 		SenderID:   participant.ID,
@@ -147,11 +232,12 @@ func (r *Room) AddHumanMessage(participant model.Participant, content string) mo
 		SenderType: model.SenderTypeHuman,
 		Content:    strings.TrimSpace(content),
 		CreatedAt:  time.Now().UTC(),
-	})
+	}
 }
 
-func (r *Room) AddAgentMessage(agent model.Agent, content string) model.Message {
-	return r.addMessage(model.Message{
+// NewAgentMessage creates an agent message model without adding it to the room.
+func (r *Room) NewAgentMessage(agent model.Agent, content string) model.Message {
+	return model.Message{
 		ID:         model.NewID("msg"),
 		RoomID:     r.id,
 		SenderID:   agent.ID,
@@ -159,11 +245,12 @@ func (r *Room) AddAgentMessage(agent model.Agent, content string) model.Message 
 		SenderType: model.SenderTypeAgent,
 		Content:    strings.TrimSpace(content),
 		CreatedAt:  time.Now().UTC(),
-	})
+	}
 }
 
-func (r *Room) AddSystemMessage(content string) model.Message {
-	return r.addMessage(model.Message{
+// NewSystemMessage creates a system message model without adding it to the room.
+func (r *Room) NewSystemMessage(content string) model.Message {
+	return model.Message{
 		ID:         model.NewID("msg"),
 		RoomID:     r.id,
 		SenderID:   "system",
@@ -171,9 +258,12 @@ func (r *Room) AddSystemMessage(content string) model.Message {
 		SenderType: model.SenderTypeSystem,
 		Content:    strings.TrimSpace(content),
 		CreatedAt:  time.Now().UTC(),
-	})
+	}
 }
 
+// addMessage appends a message directly to the in-memory list.
+// This should only be used internally by AppendMessage; external callers
+// should persist via Store first, then call AppendMessage.
 func (r *Room) addMessage(message model.Message) model.Message {
 	r.mu.Lock()
 	r.messages = append(r.messages, message)

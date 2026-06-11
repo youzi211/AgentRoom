@@ -64,7 +64,7 @@ export default function App() {
     } catch (error) {
       setSubmitState({
         isSubmitting: false,
-        errorMessage: error.message || '加入房间失败。',
+        errorMessage: normalizeJoinRoomError(error),
       })
     }
   }
@@ -123,4 +123,12 @@ function getNavigationState() {
     route.name === ROUTE_NAMES.room ? resolveRoomSession(route.roomId, route.participantName) : null
 
   return { route, roomSession }
+}
+
+function normalizeJoinRoomError(error) {
+  const message = error?.message || ''
+  if (message.toLowerCase().includes('room not found')) {
+    return '房间不存在或已关闭，请检查房间 ID 是否完整。'
+  }
+  return message || '加入房间失败，请稍后重试。'
 }

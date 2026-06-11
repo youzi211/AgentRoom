@@ -21,6 +21,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
   const [errorMessage, setErrorMessage] = useState('')
   const socketRef = useRef(null)
   const insertMentionRef = useRef(() => {})
+  const messageListRef = useRef(null)
 
   useEffect(() => {
     let isCurrent = true
@@ -143,6 +144,14 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
     }
   }, [participantName, roomId])
 
+  useEffect(() => {
+    const listEl = messageListRef.current
+    if (!listEl) {
+      return
+    }
+    listEl.scrollTop = listEl.scrollHeight
+  }, [messages])
+
   const handleSendMessage = async (content) => {
     const socket = socketRef.current
     if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -165,7 +174,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
   }
 
   return (
-    <main className="app-shell">
+    <main className="app-shell app-shell--chat">
       <header className="page-header">
         <div>
           <p className="eyebrow">会议室</p>
@@ -220,7 +229,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
                 {connectionState === 'connected' ? '实时连接已建立，新消息会自动出现。' : '实时更新已暂停，等待重新连接。'}
               </p>
             </div>
-            <MessageList currentParticipantName={participantName} messages={messages} />
+            <MessageList ref={messageListRef} currentParticipantName={participantName} messages={messages} />
           </div>
 
           <MessageComposer disabled={connectionState !== 'connected'} onInsertMentionRef={insertMentionRef} onSend={handleSendMessage} />

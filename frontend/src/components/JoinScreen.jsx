@@ -10,6 +10,12 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
   const trimmedJoinDisplayName = joinDisplayName.trim()
   const trimmedRoomName = roomName.trim()
   const trimmedRoomId = roomId.trim()
+  const createHint = trimmedCreateDisplayName ? '创建成功后会自动进入会议室。' : '请输入显示名称后创建房间。'
+  const joinHint = !trimmedJoinDisplayName
+    ? '请输入显示名称后加入房间。'
+    : trimmedRoomId
+      ? '加入后会加载房间已有消息。'
+      : '请粘贴房间 ID 后加入房间。'
 
   const handleCreateRoom = async (event) => {
     event.preventDefault()
@@ -41,12 +47,12 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
         <div className="topbar">
           <div>
             <p className="eyebrow">AgentRoom</p>
-            <h1>人与智能体一起开会的轻量工作台</h1>
+            <h1>人与智能体协作的轻量会议工作台</h1>
             <p className="section-copy">
               创建一个文本会议室，让团队成员和预定义角色 Agent 在同一条上下文里协作。Agent 默认保持安静，被明确 @ 时才参与讨论。
             </p>
           </div>
-          <button className="button button--secondary" type="button" onClick={onOpenAgentAdmin}>
+          <button className="button button--ghost" type="button" onClick={onOpenAgentAdmin}>
             管理 Agent
           </button>
         </div>
@@ -91,7 +97,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
             </div>
 
             <div className="button-row button-row--stack-end">
-              <span className="helper-text">创建成功后会自动进入会议室。</span>
+              <span className={`helper-text${trimmedCreateDisplayName ? '' : ' helper-text--attention'}`}>{createHint}</span>
               <button className="button button--primary" type="submit" disabled={isSubmitting || !trimmedCreateDisplayName}>
                 {isSubmitting ? '创建中...' : '创建房间'}
               </button>
@@ -136,7 +142,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
             </div>
 
             <div className="button-row button-row--stack-end">
-              <span className="helper-text">加入后会加载房间已有消息。</span>
+              <span className={`helper-text${trimmedJoinDisplayName && trimmedRoomId ? '' : ' helper-text--attention'}`}>{joinHint}</span>
               <button
                 className="button button--secondary"
                 type="submit"

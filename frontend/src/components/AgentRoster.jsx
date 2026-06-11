@@ -24,7 +24,7 @@ function AgentRoster({ agents, onInsertMention }) {
                   {agent.mention}
                 </button>
               </div>
-              <p className="agent-description">{agent.description}</p>
+              {agent.description ? <p className="agent-description">{agent.description}</p> : null}
             </li>
           ))}
         </ul>

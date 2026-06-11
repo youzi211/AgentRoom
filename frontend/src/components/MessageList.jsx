@@ -1,4 +1,6 @@
-function MessageList({ currentParticipantName, messages }) {
+import { forwardRef } from 'react'
+
+const MessageList = forwardRef(function MessageList({ currentParticipantName, messages }, ref) {
   if (messages.length === 0) {
     return (
       <section className="message-panel message-panel--empty">
@@ -13,7 +15,7 @@ function MessageList({ currentParticipantName, messages }) {
 
   return (
     <section className="message-panel" aria-label="消息列表">
-      <ul className="message-list">
+      <ul className="message-list" ref={ref}>
         {messages.map((message) => {
           const messageRole = roleForMessage(message, currentParticipantName)
 
@@ -42,7 +44,7 @@ function MessageList({ currentParticipantName, messages }) {
       </ul>
     </section>
   )
-}
+})
 
 function roleForMessage(message, currentParticipantName) {
   if (message.senderType === 'agent') {

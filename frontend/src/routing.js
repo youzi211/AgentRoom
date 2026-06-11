@@ -95,6 +95,7 @@ function navigate(path, { replace = false, state = null } = {}) {
     window.history.pushState(state, '', path)
   }
 
+  window.scrollTo(0, 0)
   window.dispatchEvent(new Event(NAVIGATION_EVENT))
 }
 

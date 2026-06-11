@@ -13,7 +13,7 @@ async function parseResponse(response) {
   }
 
   if (!response.ok) {
-    const message = payload?.error ?? 'Request failed'
+    const message = payload?.error ?? '请求失败，请检查网络或稍后重试。'
     throw new Error(message)
   }
 

@@ -43,7 +43,7 @@ function MessageComposer({ disabled, onInsertMentionRef, onSend }) {
         <label className="composer-label" htmlFor="message-input">
           发送消息
         </label>
-        <span className={`composer-status${disabled ? ' composer-status--disabled' : ''}`}>{disabled ? '等待重新连接' : '可以发送'}</span>
+        {disabled ? <span className="composer-status composer-status--disabled">连接已断开，正在重连</span> : null}
       </div>
       <textarea
         id="message-input"
