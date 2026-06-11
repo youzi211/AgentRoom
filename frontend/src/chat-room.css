@@ -1,0 +1,169 @@
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #60a5fa;
+}
+
+.workspace {
+  min-width: 0;
+}
+
+.chat-header-actions {
+  margin-top: 0;
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sidebar-header,
+.message-meta,
+.message-author-group,
+.agent-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sidebar-count,
+.message-time,
+.sidebar-secondary,
+.muted-text,
+.agent-description,
+.conversation-summary {
+  color: #94a3b8;
+}
+
+.sidebar-count,
+.message-time {
+  font-size: 0.88rem;
+}
+
+.sidebar-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-list-item {
+  padding: 12px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.sidebar-list-item:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.sidebar-list-item:last-child {
+  padding-bottom: 0;
+}
+
+.sidebar-list-item--stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-primary,
+.sidebar-secondary,
+.agent-description,
+.message-author,
+.message-time,
+.composer-label {
+  margin: 0;
+}
+
+.sidebar-primary,
+.message-author {
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.agent-row {
+  align-items: flex-start;
+}
+
+.agent-description {
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.message-panel {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.message-panel--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.message-panel .message-list {
+  min-height: 0;
+  max-height: 56vh;
+}
+
+.message-badge {
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
+  font-size: 0.78rem;
+}
+
+.message-badge--human {
+  background: rgba(96, 165, 250, 0.16);
+  color: #bfdbfe;
+}
+
+.message-badge--agent {
+  background: rgba(167, 139, 250, 0.18);
+  color: #ddd6fe;
+}
+
+.message-badge--system {
+  background: rgba(248, 113, 113, 0.16);
+  color: #fecaca;
+}
+
+.composer-label {
+  display: block;
+  margin-bottom: 10px;
+  color: #cbd5e1;
+}
+
+.composer-input {
+  display: block;
+}
+
+.primary-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 11px 18px;
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  color: white;
+  transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+}
+
+.primary-button:hover {
+  transform: translateY(-1px);
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+}
+
+@media (max-width: 900px) {
+  .message-panel .message-list {
+    max-height: none;
+  }
+}
