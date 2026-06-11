@@ -1,4 +1,4 @@
-function MessageList({ messages }) {
+function MessageList({ currentParticipantName, messages }) {
   if (messages.length === 0) {
     return (
       <section className="message-panel message-panel--empty">
@@ -14,34 +14,67 @@ function MessageList({ messages }) {
   return (
     <section className="message-panel" aria-label="消息列表">
       <ul className="message-list">
-        {messages.map((message) => (
-          <li className={`message-card message-card--${message.senderType}`} key={message.id}>
-            <div className="message-meta">
-              <div className="message-author-group">
-                <span className="message-author">{message.senderName}</span>
-                <span className={`message-badge message-badge--${message.senderType}`}>{labelForSenderType(message.senderType)}</span>
-              </div>
-              <time className="message-time" dateTime={message.createdAt}>
-                {formatMessageTime(message.createdAt)}
-              </time>
-            </div>
-            <p className="message-content">{message.content}</p>
-          </li>
-        ))}
+        {messages.map((message) => {
+          const messageRole = roleForMessage(message, currentParticipantName)
+
+          return (
+            <li className={`message-row message-row--${messageRole}`} key={message.id}>
+              {messageRole !== 'system' ? (
+                <span className={`message-avatar message-avatar--${messageRole}`} aria-hidden="true">
+                  {avatarTextForMessage(message, messageRole)}
+                </span>
+              ) : null}
+              <article className={`message-card message-card--${messageRole}`}>
+                <div className="message-meta">
+                  <div className="message-author-group">
+                    <span className="message-author">{message.senderName}</span>
+                    <span className={`message-badge message-badge--${messageRole}`}>{labelForMessageRole(messageRole)}</span>
+                  </div>
+                  <time className="message-time" dateTime={message.createdAt}>
+                    {formatMessageTime(message.createdAt)}
+                  </time>
+                </div>
+                <p className="message-content">{message.content}</p>
+              </article>
+            </li>
+          )
+        })}
       </ul>
     </section>
   )
 }
 
-function labelForSenderType(senderType) {
-  switch (senderType) {
+function roleForMessage(message, currentParticipantName) {
+  if (message.senderType === 'agent') {
+    return 'agent'
+  }
+  if (message.senderType === 'system') {
+    return 'system'
+  }
+  if (message.senderType === 'human' && message.senderName === currentParticipantName) {
+    return 'own'
+  }
+  return 'other'
+}
+
+function labelForMessageRole(messageRole) {
+  switch (messageRole) {
+    case 'own':
+      return '我'
     case 'agent':
       return 'Agent'
     case 'system':
       return '系统'
     default:
-      return '用户'
+      return '成员'
   }
+}
+
+function avatarTextForMessage(message, messageRole) {
+  if (messageRole === 'own') {
+    return '我'
+  }
+  return message.senderName?.trim().charAt(0).toUpperCase() || '?'
 }
 
 function formatMessageTime(value) {

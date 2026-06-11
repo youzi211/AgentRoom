@@ -220,7 +220,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
                 {connectionState === 'connected' ? '实时连接已建立，新消息会自动出现。' : '实时更新已暂停，等待重新连接。'}
               </p>
             </div>
-            <MessageList messages={messages} />
+            <MessageList currentParticipantName={participantName} messages={messages} />
           </div>
 
           <MessageComposer disabled={connectionState !== 'connected'} onInsertMentionRef={insertMentionRef} onSend={handleSendMessage} />
