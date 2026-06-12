@@ -11,9 +11,19 @@ import (
 	"agentroom/backend/internal/llm"
 	"agentroom/backend/internal/logging"
 	"agentroom/backend/internal/model"
-	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/store"
 )
+
+type RuntimeRoom interface {
+	Info() model.RoomMeta
+	Agents() []model.Agent
+	AgentsWithPrompts() []model.Agent
+	RecentMessages(limit int) []model.Message
+	NewSystemMessage(content string) model.Message
+	NewAgentMessage(agent model.Agent, content string) model.Message
+	AppendMessage(message model.Message)
+	Broadcast(message model.Message)
+}
 
 type Runner struct {
 	client       llm.Client
@@ -33,7 +43,7 @@ func NewRunner(client llm.Client, s store.Store) *Runner {
 	}
 }
 
-func (r *Runner) HandleHumanMessage(ctx context.Context, currentRoom *room.Room, message model.Message) {
+func (r *Runner) HandleHumanMessage(ctx context.Context, currentRoom RuntimeRoom, message model.Message) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			r.logger.Error("agent runner panic recovered", "error", recovered)
@@ -65,7 +75,7 @@ func (r *Runner) HandleHumanMessage(ctx context.Context, currentRoom *room.Room,
 	}
 }
 
-func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom *room.Room, responder model.Agent, trigger model.Message) {
+func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message) {
 	runID := model.NewID("run")
 	roomInfo := currentRoom.Info()
 
@@ -110,17 +120,17 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom *room.Room
 
 // persistAndBroadcast persists a message to the store and then broadcasts it via the room hub.
 // For agent/system messages, we still broadcast even if persistence fails, but log the error.
-func (r *Runner) persistAndBroadcast(ctx context.Context, currentRoom *room.Room, message model.Message) {
+func (r *Runner) persistAndBroadcast(ctx context.Context, currentRoom RuntimeRoom, message model.Message) {
 	savedMsg, err := r.store.AddMessage(ctx, message)
 	if err != nil {
 		r.logger.Error("persist generated message", "message_id", message.ID, "sender_type", message.SenderType, "error", err)
 		savedMsg = message
 	}
 	currentRoom.AppendMessage(savedMsg)
-	currentRoom.Hub().Broadcast(messageEvent(savedMsg))
+	currentRoom.Broadcast(savedMsg)
 }
 
-func (r *Runner) generateResponse(ctx context.Context, currentRoom *room.Room, responder model.Agent, trigger model.Message) (string, error) {
+func (r *Runner) generateResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message) (string, error) {
 	prompt := buildPrompt(currentRoom.RecentMessages(r.contextLimit), trigger)
 	requestCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
@@ -133,7 +143,7 @@ func (r *Runner) generateResponse(ctx context.Context, currentRoom *room.Room, r
 		return "", err
 	}
 
-	cleaned, err := stripThinkBlocks(response)
+	cleaned, err := StripThinkBlocks(response)
 	if err != nil {
 		return "", err
 	}
@@ -174,11 +184,4 @@ func shortReason(err error) string {
 		return "unknown error"
 	}
 	return message
-}
-
-func messageEvent(message model.Message) model.ServerEvent {
-	return model.ServerEvent{
-		Type:    model.EventTypeMessage,
-		Message: &message,
-	}
 }

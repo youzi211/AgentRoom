@@ -13,8 +13,8 @@ var (
 	unclosedThinkingRe = regexp.MustCompile("(?is)<thinking>.*")
 )
 
-// stripThinkBlocks removes private reasoning tags before an agent reply is persisted or broadcast.
-func stripThinkBlocks(response string) (string, error) {
+// StripThinkBlocks removes private reasoning tags before an agent reply is persisted or broadcast.
+func StripThinkBlocks(response string) (string, error) {
 	cleaned := thinkTagRe.ReplaceAllString(response, "")
 	cleaned = thinkingTagRe.ReplaceAllString(cleaned, "")
 	cleaned = unclosedThinkRe.ReplaceAllString(cleaned, "")

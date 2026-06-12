@@ -222,6 +222,10 @@ func (r *Room) AppendMessage(message model.Message) {
 	r.mu.Unlock()
 }
 
+func (r *Room) Broadcast(message model.Message) {
+	r.Hub().Broadcast(model.ServerEvent{Type: model.EventTypeMessage, Message: &message})
+}
+
 // NewHumanMessage creates a human message model without adding it to the room.
 func (r *Room) NewHumanMessage(participant model.Participant, content string) model.Message {
 	return model.Message{

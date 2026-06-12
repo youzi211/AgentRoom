@@ -15,6 +15,7 @@ import (
 	"agentroom/backend/internal/llm"
 	"agentroom/backend/internal/logging"
 	"agentroom/backend/internal/room"
+	"agentroom/backend/internal/service"
 	"agentroom/backend/internal/store/mysql"
 )
 
@@ -65,9 +66,11 @@ func main() {
 		fatal(logger, "load agents", err)
 	}
 
-	manager := room.NewManager(store, agents)
+	agentService := service.NewAgentService(store, agents)
+	manager := room.NewManager(store, agentService.ResolveForRoom)
 	runner := agent.NewRunner(llm.NewClientFromEnv(), store)
-	server := api.NewServer(manager, runner)
+	roomService := service.NewRoomService(manager, agentService, runner, store)
+	server := api.NewServer(roomService)
 
 	now := time.Now().UTC()
 	if err := store.MarkAllActiveParticipantsLeft(ctx, now); err != nil {

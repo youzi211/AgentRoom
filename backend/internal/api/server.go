@@ -15,27 +15,22 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
-	"agentroom/backend/internal/agent"
 	"agentroom/backend/internal/logging"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/room"
-	"agentroom/backend/internal/store"
+	"agentroom/backend/internal/service"
 )
 
 type Server struct {
-	manager  *room.Manager
-	runner   *agent.Runner
-	store    store.Store
+	rooms    *service.RoomService
 	logger   *slog.Logger
 	upgrader websocket.Upgrader
 }
 
-func NewServer(manager *room.Manager, runner *agent.Runner) *Server {
+func NewServer(rooms *service.RoomService) *Server {
 	return &Server{
-		manager: manager,
-		runner:  runner,
-		store:   manager.Store(),
-		logger:  logging.Component("api"),
+		rooms:  rooms,
+		logger: logging.Component("api"),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -74,7 +69,7 @@ func (s *Server) registerAPIRoutes(routes gin.IRoutes) {
 
 func (s *Server) handleHealth(c *gin.Context) {
 	dbOK := true
-	if err := s.store.Ping(c.Request.Context()); err != nil {
+	if err := s.rooms.Ping(c.Request.Context()); err != nil {
 		dbOK = false
 	}
 
@@ -87,7 +82,7 @@ func (s *Server) handleHealth(c *gin.Context) {
 }
 
 func (s *Server) handleAgents(c *gin.Context) {
-	c.JSON(http.StatusOK, model.AgentsResponse{Agents: s.manager.Agents()})
+	c.JSON(http.StatusOK, model.AgentsResponse{Agents: s.rooms.Agents()})
 }
 
 func (s *Server) handleUpdateAgent(c *gin.Context) {
@@ -103,7 +98,7 @@ func (s *Server) handleUpdateAgent(c *gin.Context) {
 		return
 	}
 
-	updated, err := s.manager.UpdateAgent(c.Request.Context(), agentID, room.UpdateAgentInput{
+	updated, err := s.rooms.UpdateAgent(c.Request.Context(), agentID, service.UpdateAgentInput{
 		Name:         request.Name,
 		Role:         request.Role,
 		Description:  request.Description,
@@ -111,11 +106,11 @@ func (s *Server) handleUpdateAgent(c *gin.Context) {
 		Enabled:      request.Enabled,
 	})
 	if err != nil {
-		if errors.Is(err, room.ErrAgentNotFound) {
+		if errors.Is(err, service.ErrAgentNotFound) {
 			writeError(c, http.StatusNotFound, "agent not found")
 			return
 		}
-		if errors.Is(err, room.ErrAgentMentionExists) {
+		if errors.Is(err, service.ErrAgentMentionExists) {
 			writeError(c, http.StatusConflict, "agent name already exists")
 			return
 		}
@@ -150,9 +145,9 @@ func (s *Server) handleCreateAgent(c *gin.Context) {
 		enabled = *request.Enabled
 	}
 
-	created, err := s.manager.CreateAgent(c.Request.Context(), name, request.Role, request.Description, request.SystemPrompt, enabled)
+	created, err := s.rooms.CreateAgent(c.Request.Context(), name, request.Role, request.Description, request.SystemPrompt, enabled)
 	if err != nil {
-		if errors.Is(err, room.ErrAgentMentionExists) {
+		if errors.Is(err, service.ErrAgentMentionExists) {
 			writeError(c, http.StatusConflict, "agent name already exists")
 			return
 		}
@@ -171,7 +166,7 @@ func (s *Server) handleDeleteAgent(c *gin.Context) {
 		return
 	}
 
-	if err := s.manager.DeleteAgent(c.Request.Context(), agentID); err != nil {
+	if err := s.rooms.DeleteAgent(c.Request.Context(), agentID); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			writeError(c, http.StatusNotFound, "agent not found")
 			return
@@ -191,7 +186,7 @@ func (s *Server) handleCreateRoom(c *gin.Context) {
 		return
 	}
 
-	currentRoom, err := s.manager.CreateRoom(c.Request.Context(), request.Name, request.AgentIDs)
+	currentRoom, err := s.rooms.CreateRoom(c.Request.Context(), request.Name, request.AgentIDs)
 	if err != nil {
 		s.logger.Error("create room", "room_name", request.Name, "error", err)
 		writeError(c, http.StatusInternalServerError, "failed to create room")
@@ -228,16 +223,7 @@ func (s *Server) handleGetMessages(c *gin.Context) {
 		}
 	}
 
-	// Try loading from store first for consistency
-	messages, err := s.store.ListMessages(c.Request.Context(), store.ListMessagesQuery{
-		RoomID: currentRoom.Info().ID,
-		Limit:  limit,
-	})
-	if err != nil {
-		s.logger.Warn("list messages from store failed; using room cache", "room_id", currentRoom.Info().ID, "error", err)
-		// Fallback to in-memory messages
-		messages = currentRoom.Messages()
-	}
+	messages := s.rooms.ListMessages(c.Request.Context(), currentRoom, limit)
 
 	c.JSON(http.StatusOK, model.GetMessagesResponse{Messages: messages})
 }
@@ -260,20 +246,7 @@ func (s *Server) handleRoomWebSocket(c *gin.Context) {
 		return
 	}
 
-	// Create and persist participant
-	participant := currentRoom.NewParticipant(name)
-	savedParticipant, err := s.store.AddParticipant(c.Request.Context(), store.AddParticipantInput{
-		ID:          participant.ID,
-		RoomID:      currentRoom.Info().ID,
-		DisplayName: participant.Name,
-		JoinedAt:    participant.JoinedAt,
-	})
-	if err != nil {
-		s.logger.Error("persist participant", "room_id", currentRoom.Info().ID, "participant_id", participant.ID, "error", err)
-		// Still continue; persistence failure should not block the user
-		savedParticipant = participant
-	}
-	currentRoom.AddParticipantFromStore(savedParticipant)
+	savedParticipant := s.rooms.JoinParticipant(c.Request.Context(), currentRoom, name)
 
 	client := &room.Client{
 		ID:            model.NewID("client"),
@@ -285,15 +258,11 @@ func (s *Server) handleRoomWebSocket(c *gin.Context) {
 	var cleanup sync.Once
 	cleanupFn := func() {
 		currentRoom.Hub().Unregister(client)
-		if currentRoom.RemoveParticipant(savedParticipant.ID) {
+		if s.rooms.LeaveParticipant(context.Background(), currentRoom, savedParticipant.ID) {
 			currentRoom.Hub().Broadcast(model.ServerEvent{
 				Type:          model.EventTypeParticipantLeft,
 				ParticipantID: savedParticipant.ID,
 			})
-		}
-		// Persist participant left
-		if err := s.store.MarkParticipantLeft(context.Background(), savedParticipant.ID, time.Now().UTC()); err != nil {
-			s.logger.Error("mark participant left", "participant_id", savedParticipant.ID, "error", err)
 		}
 		if err := connection.Close(); err != nil && !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 			s.logger.Warn("close websocket connection", "participant_id", savedParticipant.ID, "error", err)
@@ -335,13 +304,8 @@ func (s *Server) handleClientEvent(currentRoom *room.Room, participant model.Par
 			return
 		}
 
-		// Create message model
-		message := currentRoom.NewHumanMessage(participant, content)
-
-		// Persist to store first (design: write to DB before broadcast)
-		savedMessage, err := s.store.AddMessage(context.Background(), message)
+		savedMessage, err := s.rooms.HandleHumanMessage(context.Background(), currentRoom, participant, content)
 		if err != nil {
-			s.logger.Error("persist human message", "room_id", currentRoom.Info().ID, "participant_id", participant.ID, "error", err)
 			sendClientEvent(client, model.ServerEvent{
 				Type:  model.EventTypeError,
 				Error: "failed to send message, please try again",
@@ -349,10 +313,7 @@ func (s *Server) handleClientEvent(currentRoom *room.Room, participant model.Par
 			return
 		}
 
-		// Add to in-memory and broadcast
-		currentRoom.AppendMessage(savedMessage)
 		currentRoom.Hub().Broadcast(model.ServerEvent{Type: model.EventTypeMessage, Message: &savedMessage})
-		go s.runner.HandleHumanMessage(context.Background(), currentRoom, savedMessage)
 	default:
 		sendClientEvent(client, model.ServerEvent{Type: model.EventTypeError, Error: fmt.Sprintf("unsupported event type %q", event.Type)})
 	}
@@ -375,7 +336,7 @@ func (s *Server) writePump(connection *websocket.Conn, client *room.Client, onDo
 
 func (s *Server) getRoomFromRequest(c *gin.Context) (*room.Room, bool) {
 	roomID := c.Param("roomID")
-	currentRoom, ok := s.manager.GetRoom(c.Request.Context(), roomID)
+	currentRoom, ok := s.rooms.GetRoom(c.Request.Context(), roomID)
 	if !ok {
 		writeError(c, http.StatusNotFound, "room not found")
 		return nil, false

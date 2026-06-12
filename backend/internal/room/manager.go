@@ -2,7 +2,6 @@ package room
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -15,35 +14,19 @@ import (
 )
 
 type Manager struct {
-	mu     sync.RWMutex
-	store  store.Store
-	agents []model.Agent
-	rooms  map[string]*Room
-	logger *slog.Logger
+	mu            sync.RWMutex
+	store         store.Store
+	resolveAgents func(agentIDs []string) []model.Agent
+	rooms         map[string]*Room
+	logger        *slog.Logger
 }
 
-var (
-	ErrAgentNotFound      = errors.New("agent not found")
-	ErrAgentMentionExists = errors.New("agent mention already exists")
-)
-
-type UpdateAgentInput struct {
-	Name         string
-	Role         string
-	Description  string
-	SystemPrompt string
-	Enabled      *bool
-}
-
-func NewManager(s store.Store, agents []model.Agent) *Manager {
-	copiedAgents := make([]model.Agent, len(agents))
-	copy(copiedAgents, agents)
-
+func NewManager(s store.Store, resolveAgents func(agentIDs []string) []model.Agent) *Manager {
 	return &Manager{
-		store:  s,
-		agents: copiedAgents,
-		rooms:  make(map[string]*Room),
-		logger: logging.Component("room_manager"),
+		store:         s,
+		resolveAgents: resolveAgents,
+		rooms:         make(map[string]*Room),
+		logger:        logging.Component("room_manager"),
 	}
 }
 
@@ -56,7 +39,7 @@ func (m *Manager) CreateRoom(ctx context.Context, name string, agentIDs []string
 	roomName := normalizeRoomName(trimmed, roomID)
 	createdAt := time.Now().UTC()
 
-	agents := m.resolveAgentsForRoom(agentIDs)
+	agents := m.resolveAgents(agentIDs)
 
 	meta, _, err := m.store.CreateRoom(ctx, store.CreateRoomInput{
 		ID:        roomID,
@@ -122,208 +105,6 @@ func (m *Manager) GetRoom(ctx context.Context, roomID string) (*Room, bool) {
 	m.mu.Unlock()
 
 	return r, true
-}
-
-// Store returns the underlying store for direct use by API handlers.
-func (m *Manager) Store() store.Store {
-	return m.store
-}
-
-func (m *Manager) Agents() []model.AgentConfig {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	agents := make([]model.AgentConfig, 0, len(m.agents))
-	for _, configuredAgent := range m.agents {
-		agents = append(agents, configuredAgent.Config())
-	}
-	return agents
-}
-
-// UpdateAgent updates a global agent config in the store.
-// It does NOT propagate changes to existing rooms (room_agents snapshots are frozen).
-func (m *Manager) UpdateAgent(ctx context.Context, agentID string, input UpdateAgentInput) (model.Agent, error) {
-	m.mu.Lock()
-
-	var current *model.Agent
-	for i := range m.agents {
-		if m.agents[i].ID == agentID {
-			current = &m.agents[i]
-			break
-		}
-	}
-	if current == nil {
-		m.mu.Unlock()
-		return model.Agent{}, ErrAgentNotFound
-	}
-
-	updated := applyAgentUpdate(*current, input)
-	if hasAgentMentionConflict(m.agents, updated.ID, updated.Mention) {
-		m.mu.Unlock()
-		return model.Agent{}, ErrAgentMentionExists
-	}
-	m.agents = replaceAgentInSlice(m.agents, updated)
-	m.mu.Unlock()
-
-	// Persist to store
-	result, err := m.store.UpdateAgent(ctx, updated)
-	if err != nil {
-		m.logger.Error("persist agent update", "agent_id", agentID, "error", err)
-		return model.Agent{}, fmt.Errorf("persist agent update: %w", err)
-	}
-
-	return result, nil
-}
-
-// CreateAgent adds a new global agent config and persists it.
-func (m *Manager) CreateAgent(ctx context.Context, name, role, description, systemPrompt string, enabled bool) (model.Agent, error) {
-	trimmedName := strings.TrimSpace(name)
-	if trimmedName == "" {
-		return model.Agent{}, fmt.Errorf("agent name is required")
-	}
-	mention := "@" + trimmedName
-
-	m.mu.RLock()
-	if hasAgentMentionConflict(m.agents, "", mention) {
-		m.mu.RUnlock()
-		return model.Agent{}, ErrAgentMentionExists
-	}
-	m.mu.RUnlock()
-
-	a := model.Agent{
-		ID:           model.NewID("agent"),
-		Name:         trimmedName,
-		Mention:      mention,
-		Role:         strings.TrimSpace(role),
-		Description:  strings.TrimSpace(description),
-		SystemPrompt: strings.TrimSpace(systemPrompt),
-		Enabled:      enabled,
-	}
-
-	result, err := m.store.CreateAgent(ctx, a)
-	if err != nil {
-		return model.Agent{}, fmt.Errorf("persist new agent: %w", err)
-	}
-
-	m.mu.Lock()
-	m.agents = append(m.agents, result)
-	m.mu.Unlock()
-
-	return result, nil
-}
-
-// DeleteAgent removes a global agent config. It does NOT affect room_agents snapshots.
-func (m *Manager) DeleteAgent(ctx context.Context, agentID string) error {
-	if err := m.store.DeleteAgent(ctx, agentID); err != nil {
-		return fmt.Errorf("delete agent: %w", err)
-	}
-
-	m.mu.Lock()
-	m.agents = removeAgentFromSlice(m.agents, agentID)
-	m.mu.Unlock()
-
-	return nil
-}
-
-func applyAgentUpdate(current model.Agent, input UpdateAgentInput) model.Agent {
-	if name := strings.TrimSpace(input.Name); name != "" {
-		current.Name = name
-		current.Mention = "@" + name
-	}
-	if role := strings.TrimSpace(input.Role); role != "" {
-		current.Role = role
-	}
-	if description := strings.TrimSpace(input.Description); description != "" {
-		current.Description = description
-	}
-	if systemPrompt := strings.TrimSpace(input.SystemPrompt); systemPrompt != "" {
-		current.SystemPrompt = systemPrompt
-	}
-	if input.Enabled != nil {
-		current.Enabled = *input.Enabled
-	}
-	return current
-}
-
-func enabledAgents(agents []model.Agent) []model.Agent {
-	enabled := make([]model.Agent, 0, len(agents))
-	for _, configuredAgent := range agents {
-		if !configuredAgent.Enabled {
-			continue
-		}
-		enabled = append(enabled, configuredAgent)
-	}
-	return enabled
-}
-
-// resolveAgentsForRoom returns the agents to snapshot into a new room.
-// If agentIDs is nil, all enabled agents are returned (backward compatible).
-// If agentIDs is an empty but non-nil slice, no agents are returned.
-// Only enabled agents matching the given IDs are included; unknown IDs are ignored.
-func (m *Manager) resolveAgentsForRoom(agentIDs []string) []model.Agent {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if agentIDs == nil {
-		return enabledAgents(m.agents)
-	}
-	if len(agentIDs) == 0 {
-		return []model.Agent{}
-	}
-
-	agentSet := make(map[string]struct{}, len(agentIDs))
-	for _, id := range agentIDs {
-		trimmed := strings.TrimSpace(id)
-		if trimmed != "" {
-			agentSet[trimmed] = struct{}{}
-		}
-	}
-
-	var selected []model.Agent
-	for _, a := range m.agents {
-		if !a.Enabled {
-			continue
-		}
-		if _, ok := agentSet[a.ID]; ok {
-			selected = append(selected, a)
-		}
-	}
-
-	return selected
-}
-
-func replaceAgentInSlice(agents []model.Agent, updated model.Agent) []model.Agent {
-	result := make([]model.Agent, len(agents))
-	copy(result, agents)
-	for i, a := range result {
-		if a.ID == updated.ID {
-			result[i] = updated
-			break
-		}
-	}
-	return result
-}
-
-func removeAgentFromSlice(agents []model.Agent, agentID string) []model.Agent {
-	result := make([]model.Agent, 0, len(agents))
-	for _, a := range agents {
-		if a.ID != agentID {
-			result = append(result, a)
-		}
-	}
-	return result
-}
-
-func hasAgentMentionConflict(agents []model.Agent, currentAgentID string, mention string) bool {
-	for _, a := range agents {
-		if a.ID == currentAgentID {
-			continue
-		}
-		if a.Mention == mention {
-			return true
-		}
-	}
-	return false
 }
 
 func ptr[T any](value T) *T {
