@@ -175,38 +175,22 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
 
   return (
     <main className="app-shell app-shell--chat">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">会议室</p>
-          <h1>{room.name}</h1>
-          <p className="section-copy">
-            你以 <span className="participant-highlight">{participantName}</span> 身份加入。正常聊天不会触发 Agent，明确 @ 后它才会发言。
-          </p>
-          <div className="room-meta">
-            <div className="meta-pill">
-              <span className="meta-label">连接状态</span>
-              <div className="status-row">
-                <span className={`status-dot status-dot--${connectionState}`} />
-                <span className="meta-value">{labelForConnectionState(connectionState)}</span>
-              </div>
-            </div>
-            <div className="meta-pill">
-              <span className="meta-label">房间 ID</span>
-              <span className="meta-value room-id-value">{room.id}</span>
-            </div>
-            <div className="meta-pill">
-              <span className="meta-label">消息数</span>
-              <span className="meta-value">{messages.length}</span>
-            </div>
-          </div>
+      <header className="chat-topbar">
+        <div className="chat-topbar-info">
+          <h1 className="chat-topbar-title">{room.name}</h1>
+          <span className={`status-dot status-dot--${connectionState}`} />
+          <span className="chat-topbar-status">{labelForConnectionState(connectionState)}</span>
+          <span className="chat-topbar-divider">·</span>
+          <span className="chat-topbar-who">
+            <span className="participant-highlight">{participantName}</span> 已加入
+          </span>
         </div>
-
-        <button className="button button--secondary" type="button" onClick={onLeaveRoom}>
+        <button className="button button--secondary button--compact" type="button" onClick={onLeaveRoom}>
           离开房间
         </button>
       </header>
 
-      {errorMessage ? <p className="banner banner--error">{errorMessage}</p> : null}
+      {errorMessage ? <p className="banner banner--error banner--compact">{errorMessage}</p> : null}
 
       <div className="chat-layout">
         <aside className="sidebar">
@@ -220,15 +204,6 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
 
         <section className="workspace">
           <div className="panel panel--conversation">
-            <div className="workspace-header">
-              <div>
-                <p className="eyebrow eyebrow--subtle">对话</p>
-                <h2>实时消息</h2>
-              </div>
-              <p className="helper-text conversation-summary">
-                {connectionState === 'connected' ? '实时连接已建立，新消息会自动出现。' : '实时更新已暂停，等待重新连接。'}
-              </p>
-            </div>
             <MessageList ref={messageListRef} currentParticipantName={participantName} messages={messages} />
           </div>
 

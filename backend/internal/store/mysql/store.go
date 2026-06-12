@@ -113,6 +113,38 @@ func (s *MySQLStore) ListAgents(ctx context.Context) ([]model.Agent, error) {
 	return agents, nil
 }
 
+func (s *MySQLStore) CreateAgent(ctx context.Context, a model.Agent) (model.Agent, error) {
+	now := time.Now().UTC()
+
+	// Determine the next sort order
+	var maxOrder int
+	if err := s.db.WithContext(ctx).Model(&AgentModel{}).Select("COALESCE(MAX(sort_order), -1)").Scan(&maxOrder).Error; err != nil {
+		return model.Agent{}, fmt.Errorf("get max sort order: %w", err)
+	}
+
+	m := agentToModel(a, maxOrder+1)
+	m.CreatedAt = now
+	m.UpdatedAt = now
+
+	if err := s.db.WithContext(ctx).Create(&m).Error; err != nil {
+		return model.Agent{}, fmt.Errorf("insert agent: %w", err)
+	}
+	return m.toDomain(), nil
+}
+
+func (s *MySQLStore) DeleteAgent(ctx context.Context, agentID string) error {
+	result := s.db.WithContext(ctx).
+		Where("id = ?", agentID).
+		Delete(&AgentModel{})
+	if result.Error != nil {
+		return fmt.Errorf("delete agent: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("agent %s not found", agentID)
+	}
+	return nil
+}
+
 func (s *MySQLStore) UpdateAgent(ctx context.Context, a model.Agent) (model.Agent, error) {
 	now := time.Now().UTC()
 	var existing AgentModel

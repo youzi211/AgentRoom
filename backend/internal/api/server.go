@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,6 +16,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"agentroom/backend/internal/agent"
+	"agentroom/backend/internal/logging"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/store"
@@ -25,6 +26,7 @@ type Server struct {
 	manager  *room.Manager
 	runner   *agent.Runner
 	store    store.Store
+	logger   *slog.Logger
 	upgrader websocket.Upgrader
 }
 
@@ -33,6 +35,7 @@ func NewServer(manager *room.Manager, runner *agent.Runner) *Server {
 		manager: manager,
 		runner:  runner,
 		store:   manager.Store(),
+		logger:  logging.Component("api"),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -45,8 +48,8 @@ func NewServer(manager *room.Manager, runner *agent.Runner) *Server {
 
 func (s *Server) Routes() http.Handler {
 	router := gin.New()
-	router.Use(gin.Logger())
-	router.Use(gin.Recovery())
+	router.Use(logging.RequestLogger(s.logger))
+	router.Use(logging.Recovery(s.logger))
 
 	s.registerAPIRoutes(router.Group("/api"))
 
@@ -60,7 +63,9 @@ func (s *Server) Routes() http.Handler {
 func (s *Server) registerAPIRoutes(routes gin.IRoutes) {
 	routes.GET("/health", s.handleHealth)
 	routes.GET("/agents", s.handleAgents)
+	routes.POST("/agents", s.handleCreateAgent)
 	routes.PUT("/agents/:agentID", s.handleUpdateAgent)
+	routes.DELETE("/agents/:agentID", s.handleDeleteAgent)
 	routes.POST("/rooms", s.handleCreateRoom)
 	routes.GET("/rooms/:roomID", s.handleGetRoom)
 	routes.GET("/rooms/:roomID/messages", s.handleGetMessages)
@@ -98,19 +103,85 @@ func (s *Server) handleUpdateAgent(c *gin.Context) {
 		return
 	}
 
-	updated, ok := s.manager.UpdateAgent(c.Request.Context(), agentID, room.UpdateAgentInput{
+	updated, err := s.manager.UpdateAgent(c.Request.Context(), agentID, room.UpdateAgentInput{
 		Name:         request.Name,
 		Role:         request.Role,
 		Description:  request.Description,
 		SystemPrompt: request.SystemPrompt,
 		Enabled:      request.Enabled,
 	})
-	if !ok {
+	if err != nil {
+		if errors.Is(err, room.ErrAgentNotFound) {
+			writeError(c, http.StatusNotFound, "agent not found")
+			return
+		}
+		if errors.Is(err, room.ErrAgentMentionExists) {
+			writeError(c, http.StatusConflict, "agent name already exists")
+			return
+		}
+		s.logger.Error("update agent", "agent_id", agentID, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to update agent")
+		return
+	}
+
+	if updated.ID == "" {
 		writeError(c, http.StatusNotFound, "agent not found")
 		return
 	}
 
 	c.JSON(http.StatusOK, updated.Config())
+}
+
+func (s *Server) handleCreateAgent(c *gin.Context) {
+	var request model.CreateAgentRequest
+	if err := json.NewDecoder(c.Request.Body).Decode(&request); err != nil && !errors.Is(err, context.Canceled) {
+		writeError(c, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	name := strings.TrimSpace(request.Name)
+	if name == "" {
+		writeError(c, http.StatusBadRequest, "agent name is required")
+		return
+	}
+
+	enabled := true
+	if request.Enabled != nil {
+		enabled = *request.Enabled
+	}
+
+	created, err := s.manager.CreateAgent(c.Request.Context(), name, request.Role, request.Description, request.SystemPrompt, enabled)
+	if err != nil {
+		if errors.Is(err, room.ErrAgentMentionExists) {
+			writeError(c, http.StatusConflict, "agent name already exists")
+			return
+		}
+		s.logger.Error("create agent", "agent_name", name, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to create agent")
+		return
+	}
+
+	c.JSON(http.StatusCreated, created.Config())
+}
+
+func (s *Server) handleDeleteAgent(c *gin.Context) {
+	agentID := strings.TrimSpace(c.Param("agentID"))
+	if agentID == "" {
+		writeError(c, http.StatusBadRequest, "missing agent id")
+		return
+	}
+
+	if err := s.manager.DeleteAgent(c.Request.Context(), agentID); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			writeError(c, http.StatusNotFound, "agent not found")
+			return
+		}
+		s.logger.Error("delete agent", "agent_id", agentID, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to delete agent")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 func (s *Server) handleCreateRoom(c *gin.Context) {
@@ -120,9 +191,9 @@ func (s *Server) handleCreateRoom(c *gin.Context) {
 		return
 	}
 
-	currentRoom, err := s.manager.CreateRoom(c.Request.Context(), request.Name)
+	currentRoom, err := s.manager.CreateRoom(c.Request.Context(), request.Name, request.AgentIDs)
 	if err != nil {
-		log.Printf("create room: %v", err)
+		s.logger.Error("create room", "room_name", request.Name, "error", err)
 		writeError(c, http.StatusInternalServerError, "failed to create room")
 		return
 	}
@@ -163,7 +234,7 @@ func (s *Server) handleGetMessages(c *gin.Context) {
 		Limit:  limit,
 	})
 	if err != nil {
-		log.Printf("list messages from store: %v", err)
+		s.logger.Warn("list messages from store failed; using room cache", "room_id", currentRoom.Info().ID, "error", err)
 		// Fallback to in-memory messages
 		messages = currentRoom.Messages()
 	}
@@ -185,7 +256,7 @@ func (s *Server) handleRoomWebSocket(c *gin.Context) {
 
 	connection, err := s.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("upgrade websocket: %v", err)
+		s.logger.Warn("upgrade websocket", "room_id", currentRoom.Info().ID, "error", err)
 		return
 	}
 
@@ -198,7 +269,7 @@ func (s *Server) handleRoomWebSocket(c *gin.Context) {
 		JoinedAt:    participant.JoinedAt,
 	})
 	if err != nil {
-		log.Printf("persist participant: %v", err)
+		s.logger.Error("persist participant", "room_id", currentRoom.Info().ID, "participant_id", participant.ID, "error", err)
 		// Still continue; persistence failure should not block the user
 		savedParticipant = participant
 	}
@@ -222,10 +293,10 @@ func (s *Server) handleRoomWebSocket(c *gin.Context) {
 		}
 		// Persist participant left
 		if err := s.store.MarkParticipantLeft(context.Background(), savedParticipant.ID, time.Now().UTC()); err != nil {
-			log.Printf("mark participant left: %v", err)
+			s.logger.Error("mark participant left", "participant_id", savedParticipant.ID, "error", err)
 		}
 		if err := connection.Close(); err != nil && !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-			log.Printf("close websocket connection: %v", err)
+			s.logger.Warn("close websocket connection", "participant_id", savedParticipant.ID, "error", err)
 		}
 	}
 	defer cleanup.Do(cleanupFn)
@@ -246,7 +317,7 @@ func (s *Server) handleRoomWebSocket(c *gin.Context) {
 		var event model.ClientEvent
 		if err := connection.ReadJSON(&event); err != nil {
 			if !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) && !websocket.IsUnexpectedCloseError(err, websocket.CloseAbnormalClosure) {
-				log.Printf("websocket read error: %v", err)
+				s.logger.Warn("websocket read error", "room_id", currentRoom.Info().ID, "participant_id", savedParticipant.ID, "error", err)
 			}
 			return
 		}
@@ -270,7 +341,7 @@ func (s *Server) handleClientEvent(currentRoom *room.Room, participant model.Par
 		// Persist to store first (design: write to DB before broadcast)
 		savedMessage, err := s.store.AddMessage(context.Background(), message)
 		if err != nil {
-			log.Printf("persist message: %v", err)
+			s.logger.Error("persist human message", "room_id", currentRoom.Info().ID, "participant_id", participant.ID, "error", err)
 			sendClientEvent(client, model.ServerEvent{
 				Type:  model.EventTypeError,
 				Error: "failed to send message, please try again",
@@ -292,11 +363,11 @@ func (s *Server) writePump(connection *websocket.Conn, client *room.Client, onDo
 
 	for event := range client.Send {
 		if err := connection.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
-			log.Printf("set websocket write deadline: %v", err)
+			s.logger.Warn("set websocket write deadline", "client_id", client.ID, "error", err)
 			return
 		}
 		if err := connection.WriteJSON(event); err != nil {
-			log.Printf("websocket write error: %v", err)
+			s.logger.Warn("websocket write error", "client_id", client.ID, "error", err)
 			return
 		}
 	}

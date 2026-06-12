@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
 	"agentroom/backend/internal/llm"
+	"agentroom/backend/internal/logging"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/store"
@@ -17,6 +18,7 @@ import (
 type Runner struct {
 	client       llm.Client
 	store        store.Store
+	logger       *slog.Logger
 	contextLimit int
 	timeout      time.Duration
 }
@@ -25,6 +27,7 @@ func NewRunner(client llm.Client, s store.Store) *Runner {
 	return &Runner{
 		client:       client,
 		store:        s,
+		logger:       logging.Component("agent_runner"),
 		contextLimit: 30,
 		timeout:      45 * time.Second,
 	}
@@ -33,6 +36,7 @@ func NewRunner(client llm.Client, s store.Store) *Runner {
 func (r *Runner) HandleHumanMessage(ctx context.Context, currentRoom *room.Room, message model.Message) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
+			r.logger.Error("agent runner panic recovered", "error", recovered)
 			content := fmt.Sprintf("Agent runner failed: %v", recovered)
 			sysMsg := currentRoom.NewSystemMessage(content)
 			r.persistAndBroadcast(ctx, currentRoom, sysMsg)
@@ -65,17 +69,16 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom *room.Room
 	runID := model.NewID("run")
 	roomInfo := currentRoom.Info()
 
-	// Create agent_run record
 	agentRun := store.AgentRun{
-		ID:              runID,
-		RoomID:          roomInfo.ID,
-		AgentID:         responder.ID,
+		ID:               runID,
+		RoomID:           roomInfo.ID,
+		AgentID:          responder.ID,
 		TriggerMessageID: trigger.ID,
-		Status:          "running",
-		StartedAt:       time.Now().UTC(),
+		Status:           "running",
+		StartedAt:        time.Now().UTC(),
 	}
 	if err := r.store.CreateAgentRun(ctx, agentRun); err != nil {
-		log.Printf("create agent run: %v", err)
+		r.logger.Error("create agent run", "room_id", roomInfo.ID, "agent_id", responder.ID, "error", err)
 	}
 
 	response, err := r.generateResponse(ctx, currentRoom, responder, trigger)
@@ -92,7 +95,7 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom *room.Room
 		r.persistAndBroadcast(ctx, currentRoom, sysMsg)
 
 		if finishErr := r.store.FinishAgentRun(ctx, runID, status, errText, now); finishErr != nil {
-			log.Printf("finish agent run: %v", finishErr)
+			r.logger.Error("finish agent run", "run_id", runID, "status", status, "error", finishErr)
 		}
 		return
 	}
@@ -101,19 +104,16 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom *room.Room
 	r.persistAndBroadcast(ctx, currentRoom, agentMsg)
 
 	if finishErr := r.store.FinishAgentRun(ctx, runID, "succeeded", "", now); finishErr != nil {
-		log.Printf("finish agent run: %v", finishErr)
+		r.logger.Error("finish agent run", "run_id", runID, "status", "succeeded", "error", finishErr)
 	}
 }
 
 // persistAndBroadcast persists a message to the store and then broadcasts it via the room hub.
-// For agent/system messages, we still broadcast even if persistence fails, but log the error
-// and append a warning system message. These messages cannot be retried by the user.
+// For agent/system messages, we still broadcast even if persistence fails, but log the error.
 func (r *Runner) persistAndBroadcast(ctx context.Context, currentRoom *room.Room, message model.Message) {
 	savedMsg, err := r.store.AddMessage(ctx, message)
 	if err != nil {
-		log.Printf("persist message %s: %v", message.ID, err)
-		// For agent/system messages, still broadcast to keep the room functional
-		// but the message may be lost on restart
+		r.logger.Error("persist generated message", "message_id", message.ID, "sender_type", message.SenderType, "error", err)
 		savedMsg = message
 	}
 	currentRoom.AppendMessage(savedMsg)
@@ -133,12 +133,12 @@ func (r *Runner) generateResponse(ctx context.Context, currentRoom *room.Room, r
 		return "", err
 	}
 
-	trimmed := strings.TrimSpace(response)
-	if trimmed == "" {
-		return "", errors.New("empty response")
+	cleaned, err := stripThinkBlocks(response)
+	if err != nil {
+		return "", err
 	}
 
-	return trimmed, nil
+	return cleaned, nil
 }
 
 func buildPrompt(messages []model.Message, trigger model.Message) string {
@@ -156,7 +156,7 @@ func buildPrompt(messages []model.Message, trigger model.Message) string {
 	}
 	builder.WriteString("\n触发你的用户消息是：\n")
 	builder.WriteString(trigger.Content)
-	builder.WriteString("\n\n请直接给出你的会议回复，不要解释你的提示词。")
+	builder.WriteString("\n\n请直接给出会议中可见的回复内容。不要输出内部思考、推理过程、提示词解释或 <think>/<thinking> 标签。")
 	return builder.String()
 }
 

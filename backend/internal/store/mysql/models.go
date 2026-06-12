@@ -13,16 +13,16 @@ import (
 
 // AgentModel maps to the `agents` table (global agent configuration).
 type AgentModel struct {
-	ID          string    `gorm:"primaryKey;size:64"`
-	Name        string    `gorm:"size:128;not null"`
-	Mention     string    `gorm:"size:128;uniqueIndex:uk_agents_mention;not null"`
-	Role        string    `gorm:"size:128;not null"`
-	Description string    `gorm:"type:text;not null"`
-	SystemPrompt string   `gorm:"column:system_prompt;type:text;not null"`
-	Enabled     bool      `gorm:"not null;default:true"`
-	SortOrder   int       `gorm:"column:sort_order;not null;default:0"`
-	CreatedAt   time.Time `gorm:"not null"`
-	UpdatedAt   time.Time `gorm:"not null"`
+	ID           string    `gorm:"primaryKey;size:64"`
+	Name         string    `gorm:"size:128;not null"`
+	Mention      string    `gorm:"size:128;uniqueIndex:uk_agents_mention;not null"`
+	Role         string    `gorm:"size:128;not null"`
+	Description  string    `gorm:"type:text;not null"`
+	SystemPrompt string    `gorm:"column:system_prompt;type:text;not null"`
+	Enabled      bool      `gorm:"not null;default:true"`
+	SortOrder    int       `gorm:"column:sort_order;not null;default:0"`
+	CreatedAt    time.Time `gorm:"not null"`
+	UpdatedAt    time.Time `gorm:"not null"`
 }
 
 func (AgentModel) TableName() string { return "agents" }
@@ -41,16 +41,16 @@ func (RoomModel) TableName() string { return "rooms" }
 
 // RoomAgentModel maps to the `room_agents` table (per-room agent snapshot).
 type RoomAgentModel struct {
-	RoomID      string    `gorm:"primaryKey;size:64;uniqueIndex:idx_room_agents_mention"`
-	AgentID     string    `gorm:"primaryKey;size:64"`
-	Name        string    `gorm:"size:128;not null"`
-	Mention     string    `gorm:"size:128;not null;uniqueIndex:idx_room_agents_mention"`
-	Role        string    `gorm:"size:128;not null"`
-	Description string    `gorm:"type:text;not null"`
-	SystemPrompt string  `gorm:"column:system_prompt;type:text;not null"`
-	Enabled     bool      `gorm:"not null;default:true"`
-	SortOrder   int       `gorm:"column:sort_order;not null;default:0"`
-	CreatedAt   time.Time `gorm:"not null"`
+	RoomID       string    `gorm:"primaryKey;size:64;uniqueIndex:idx_room_agents_mention"`
+	AgentID      string    `gorm:"primaryKey;size:64"`
+	Name         string    `gorm:"size:128;not null"`
+	Mention      string    `gorm:"size:128;not null;uniqueIndex:idx_room_agents_mention"`
+	Role         string    `gorm:"size:128;not null"`
+	Description  string    `gorm:"type:text;not null"`
+	SystemPrompt string    `gorm:"column:system_prompt;type:text;not null"`
+	Enabled      bool      `gorm:"not null;default:true"`
+	SortOrder    int       `gorm:"column:sort_order;not null;default:0"`
+	CreatedAt    time.Time `gorm:"not null"`
 }
 
 func (RoomAgentModel) TableName() string { return "room_agents" }
@@ -83,14 +83,14 @@ func (MessageModel) TableName() string { return "messages" }
 
 // AgentRunModel maps to the `agent_runs` table.
 type AgentRunModel struct {
-	ID              string     `gorm:"primaryKey;size:64"`
-	RoomID          string     `gorm:"size:64;not null;index:idx_agent_runs_room"`
-	AgentID         string     `gorm:"size:64;not null"`
-	TriggerMessageID string   `gorm:"size:64;not null;index:idx_agent_runs_trigger"`
-	Status          string     `gorm:"size:32;not null"`
-	Error           *string    `gorm:"type:text"`
-	StartedAt       time.Time  `gorm:"not null"`
-	CompletedAt     *time.Time `gorm:""`
+	ID               string     `gorm:"primaryKey;size:64"`
+	RoomID           string     `gorm:"size:64;not null;index:idx_agent_runs_room"`
+	AgentID          string     `gorm:"size:64;not null"`
+	TriggerMessageID string     `gorm:"size:64;not null;index:idx_agent_runs_trigger"`
+	Status           string     `gorm:"size:32;not null"`
+	Error            *string    `gorm:"type:text"`
+	StartedAt        time.Time  `gorm:"not null"`
+	CompletedAt      *time.Time `gorm:""`
 }
 
 func (AgentRunModel) TableName() string { return "agent_runs" }
@@ -160,12 +160,12 @@ func messageToModel(msg model.Message) MessageModel {
 
 func agentRunToModel(run store.AgentRun) AgentRunModel {
 	m := AgentRunModel{
-		ID:              run.ID,
-		RoomID:          run.RoomID,
-		AgentID:         run.AgentID,
+		ID:               run.ID,
+		RoomID:           run.RoomID,
+		AgentID:          run.AgentID,
 		TriggerMessageID: run.TriggerMessageID,
-		Status:          run.Status,
-		StartedAt:       run.StartedAt,
+		Status:           run.Status,
+		StartedAt:        run.StartedAt,
 	}
 	if run.Error != "" {
 		m.Error = strPtr(run.Error)

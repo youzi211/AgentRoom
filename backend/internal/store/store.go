@@ -16,7 +16,9 @@ type Store interface {
 	// Agent configuration (global)
 	SeedAgents(ctx context.Context, agents []model.Agent) error
 	ListAgents(ctx context.Context) ([]model.Agent, error)
+	CreateAgent(ctx context.Context, agent model.Agent) (model.Agent, error)
 	UpdateAgent(ctx context.Context, agent model.Agent) (model.Agent, error)
+	DeleteAgent(ctx context.Context, agentID string) error
 
 	// Room lifecycle
 	CreateRoom(ctx context.Context, input CreateRoomInput) (model.RoomMeta, []model.Agent, error)
@@ -64,12 +66,12 @@ type ListMessagesQuery struct {
 
 // AgentRun records a single agent execution within a room.
 type AgentRun struct {
-	ID              string
-	RoomID          string
-	AgentID         string
+	ID               string
+	RoomID           string
+	AgentID          string
 	TriggerMessageID string
-	Status          string
-	Error           string
-	StartedAt       time.Time
-	CompletedAt     *time.Time
+	Status           string
+	Error            string
+	StartedAt        time.Time
+	CompletedAt      *time.Time
 }

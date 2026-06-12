@@ -72,6 +72,14 @@ type UpdateAgentRequest struct {
 	Enabled      *bool  `json:"enabled"`
 }
 
+type CreateAgentRequest struct {
+	Name         string `json:"name"`
+	Role         string `json:"role"`
+	Description  string `json:"description"`
+	SystemPrompt string `json:"systemPrompt"`
+	Enabled      *bool  `json:"enabled"`
+}
+
 type Message struct {
 	ID         string    `json:"id"`
 	RoomID     string    `json:"roomID"`
@@ -91,7 +99,8 @@ type AgentsResponse struct {
 }
 
 type CreateRoomRequest struct {
-	Name string `json:"name"`
+	Name     string   `json:"name"`
+	AgentIDs []string `json:"agentIds"`
 }
 
 type CreateRoomResponse struct {

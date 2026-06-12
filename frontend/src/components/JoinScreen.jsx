@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getAgents } from '../api/roomClient'
 
 function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOpenAgentAdmin }) {
   const [createDisplayName, setCreateDisplayName] = useState('')
   const [joinDisplayName, setJoinDisplayName] = useState('')
   const [roomName, setRoomName] = useState('')
   const [roomId, setRoomId] = useState('')
+  const [availableAgents, setAvailableAgents] = useState([])
+  const [selectedAgentIds, setSelectedAgentIds] = useState(new Set())
 
   const trimmedCreateDisplayName = createDisplayName.trim()
   const trimmedJoinDisplayName = joinDisplayName.trim()
@@ -17,6 +20,47 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
       ? '加入后会加载房间已有消息。'
       : '请粘贴房间 ID 后加入房间。'
 
+  useEffect(() => {
+    let isCurrent = true
+    const loadAgents = async () => {
+      try {
+        const response = await getAgents()
+        if (!isCurrent) {
+          return
+        }
+        const enabledAgents = (response.agents ?? []).filter((agent) => agent.enabled !== false)
+        setAvailableAgents(enabledAgents)
+        setSelectedAgentIds(new Set(enabledAgents.map((agent) => agent.id)))
+      } catch {
+        // Agent list is optional; creation still works with all agents as fallback
+      }
+    }
+    void loadAgents()
+    return () => {
+      isCurrent = false
+    }
+  }, [])
+
+  const handleAgentToggle = (agentId) => {
+    setSelectedAgentIds((current) => {
+      const next = new Set(current)
+      if (next.has(agentId)) {
+        next.delete(agentId)
+      } else {
+        next.add(agentId)
+      }
+      return next
+    })
+  }
+
+  const handleSelectAll = () => {
+    setSelectedAgentIds(new Set(availableAgents.map((agent) => agent.id)))
+  }
+
+  const handleDeselectAll = () => {
+    setSelectedAgentIds(new Set())
+  }
+
   const handleCreateRoom = async (event) => {
     event.preventDefault()
     if (!trimmedCreateDisplayName) {
@@ -26,6 +70,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
     await onCreateRoom({
       displayName: trimmedCreateDisplayName,
       roomName: trimmedRoomName,
+      agentIds: Array.from(selectedAgentIds),
     })
   }
 
@@ -95,6 +140,41 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
               />
               <p className="field-hint">可选。留空时后端会自动生成默认房间名。</p>
             </div>
+
+            {availableAgents.length > 0 ? (
+              <div className="field-group">
+                <div className="agent-select-header">
+                  <label>参会 Agent</label>
+                  <div className="agent-select-actions">
+                    <button className="button button--ghost button--compact" type="button" onClick={handleSelectAll} disabled={isSubmitting}>
+                      全选
+                    </button>
+                    <button className="button button--ghost button--compact" type="button" onClick={handleDeselectAll} disabled={isSubmitting}>
+                      清空
+                    </button>
+                  </div>
+                </div>
+                <div className="agent-checkbox-grid">
+                  {availableAgents.map((agent) => (
+                    <label key={agent.id} className="agent-checkbox-item">
+                      <input
+                        type="checkbox"
+                        checked={selectedAgentIds.has(agent.id)}
+                        onChange={() => handleAgentToggle(agent.id)}
+                        disabled={isSubmitting}
+                      />
+                      <span className="agent-checkbox-name">{agent.name}</span>
+                      <span className="agent-checkbox-role">{agent.role}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="field-hint">
+                  {selectedAgentIds.size === 0
+                    ? '未选择 Agent，本次会议将只包含人类成员。'
+                    : `已选 ${selectedAgentIds.size} 个 Agent 加入房间。`}
+                </p>
+              </div>
+            ) : null}
 
             <div className="button-row button-row--stack-end">
               <span className={`helper-text${trimmedCreateDisplayName ? '' : ' helper-text--attention'}`}>{createHint}</span>

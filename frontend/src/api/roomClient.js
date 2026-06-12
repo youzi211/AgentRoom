@@ -20,11 +20,11 @@ async function parseResponse(response) {
   return payload
 }
 
-export async function createRoom(name) {
+export async function createRoom(name, agentIds) {
   const response = await fetch(`${API_BASE_PATH}/rooms`, {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, agentIds }),
   })
 
   return parseResponse(response)
@@ -53,6 +53,25 @@ export async function updateAgent(agentId, agent) {
     method: 'PUT',
     headers: JSON_HEADERS,
     body: JSON.stringify(agent),
+  })
+
+  return parseResponse(response)
+}
+
+export async function createAgent(agent) {
+  const response = await fetch(`${API_BASE_PATH}/agents`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(agent),
+  })
+
+  return parseResponse(response)
+}
+
+export async function deleteAgent(agentId) {
+  const encodedAgentId = encodeURIComponent(agentId)
+  const response = await fetch(`${API_BASE_PATH}/agents/${encodedAgentId}`, {
+    method: 'DELETE',
   })
 
   return parseResponse(response)

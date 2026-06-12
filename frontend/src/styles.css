@@ -98,14 +98,69 @@ textarea::placeholder {
   flex-direction: column;
   height: 100vh;
   max-height: 100vh;
-  padding: 20px 24px 12px;
+  padding: 10px 16px 8px;
   overflow: hidden;
 }
 
-.app-shell--chat .page-header {
+/* ── Compact chat topbar ─────────────────────────────── */
+.chat-topbar {
+  display: flex;
   flex: none;
-  margin-bottom: 12px;
-  padding: 14px 20px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-sm);
+}
+
+.chat-topbar-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chat-topbar-title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1.05rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 20em;
+}
+
+.chat-topbar-status {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.chat-topbar-divider {
+  color: var(--border-strong);
+  font-size: 0.84rem;
+}
+
+.chat-topbar-who {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.button--compact {
+  min-height: 32px;
+  padding: 5px 14px;
+  font-size: 0.84rem;
+}
+
+.banner--compact {
+  margin: 4px 0;
+  padding: 8px 12px;
+  font-size: 0.88rem;
 }
 
 .app-shell--chat .chat-layout {
@@ -123,44 +178,22 @@ textarea::placeholder {
   overflow: hidden;
 }
 
-.app-shell--chat .section-copy {
-  margin-top: 6px;
-  line-height: 1.45;
-}
-
-.app-shell--chat .room-meta {
-  grid-template-columns: minmax(120px, 160px) minmax(240px, 300px) minmax(100px, 130px);
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.app-shell--chat .meta-pill {
-  min-height: 50px;
-  gap: 4px;
-  padding: 9px 12px;
-}
-
 .app-shell--chat .composer-input {
-  min-height: 56px;
+  min-height: 48px;
   resize: none;
 }
 
 .app-shell--chat .composer {
-  padding: 16px 18px;
+  flex: none;
+  padding: 10px 14px;
 }
 
 .app-shell--chat .composer-toolbar {
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .app-shell--chat .composer-actions {
-  margin-top: 10px;
-}
-
-.app-shell--chat .workspace-header {
-  align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
+  margin-top: 6px;
 }
 
 .join-screen {
@@ -265,6 +298,92 @@ textarea::placeholder {
 
 .admin-form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.admin-form-grid .field-group {
+  display: grid;
+  grid-template-rows: auto auto;
+}
+
+.admin-form-grid .field-group + .field-group {
+  margin-top: 0;
+}
+
+.admin-form-grid .field-group label {
+  display: flex;
+  min-height: 2.8em;
+  align-items: flex-end;
+  line-height: 1.4;
+}
+
+.admin-form-grid .field-group input {
+  width: 100%;
+  height: 44px;
+}
+
+/* ── Agent checkbox selector ─────────────────────────── */
+.agent-select-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-select-header label {
+  color: #2f3a4b;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.agent-select-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.agent-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.agent-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.agent-checkbox-item:hover {
+  border-color: var(--border-strong);
+  background: #ffffff;
+}
+
+.agent-checkbox-item input[type="checkbox"] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.agent-checkbox-name {
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.agent-checkbox-role {
+  color: var(--muted);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .room-entry-form {
@@ -275,7 +394,7 @@ textarea::placeholder {
 .sidebar-card,
 .composer {
   border-radius: var(--radius-md);
-  padding: 22px;
+  padding: 16px;
 }
 
 .panel:hover,
@@ -578,17 +697,17 @@ textarea::placeholder {
 }
 
 .chat-layout {
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
   align-items: start;
 }
 
 .sidebar {
   display: grid;
-  gap: 18px;
+  gap: 10px;
   position: sticky;
   top: 28px;
   align-content: start;
-  max-height: calc(100vh - 180px);
+  max-height: calc(100vh - 80px);
   overflow-y: auto;
 }
 
@@ -596,7 +715,7 @@ textarea::placeholder {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
   min-height: 0;
 }
 
@@ -631,7 +750,7 @@ textarea::placeholder {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
   overflow: auto;
   padding: 2px 6px 2px 0;
   scroll-behavior: smooth;
@@ -905,6 +1024,97 @@ textarea::placeholder {
   transform: rotate(180deg);
 }
 
+/* ── Agent admin: delete & add ───────────────────────── */
+.admin-agent-list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-agent-list-item .admin-agent-button {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-delete-button {
+  display: inline-flex;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.agent-delete-button:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: rgba(180, 35, 24, 0.22);
+  background: var(--danger-soft);
+}
+
+.agent-delete-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.admin-agent-add {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Delete confirmation dialog ──────────────────────── */
+.delete-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(2px);
+}
+
+.delete-confirm-card {
+  width: min(440px, 90vw);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: #ffffff;
+  box-shadow: var(--shadow);
+  padding: 28px;
+}
+
+.delete-confirm-card h2 {
+  margin: 0 0 12px;
+  color: var(--danger);
+  font-size: 1.1rem;
+}
+
+.delete-confirm-card p {
+  margin: 0 0 8px;
+  line-height: 1.6;
+}
+
+.delete-confirm-card .helper-text {
+  margin-bottom: 20px;
+}
+
+.button--danger {
+  background: var(--danger);
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(180, 35, 24, 0.14);
+}
+
+.button--danger:hover:not(:disabled) {
+  background: #9b1d14;
+}
+
 @media (max-width: 1100px) {
   .join-grid,
   .chat-layout,
@@ -923,6 +1133,10 @@ textarea::placeholder {
   .sidebar {
     position: static;
     max-height: none;
+  }
+
+  .chat-topbar-info {
+    flex-wrap: wrap;
   }
 }
 

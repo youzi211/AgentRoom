@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,13 +13,18 @@ import (
 	"agentroom/backend/internal/api"
 	"agentroom/backend/internal/config"
 	"agentroom/backend/internal/llm"
+	"agentroom/backend/internal/logging"
 	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/store/mysql"
 )
 
 func main() {
-	if err := config.LoadDotEnv(filepath.Join("..", ".env")); err != nil {
-		log.Printf("load .env: %v", err)
+	envErr := config.LoadDotEnv(filepath.Join("..", ".env"))
+	logging.Init()
+	logger := logging.Component("server")
+
+	if envErr != nil {
+		logger.Warn("load .env", "error", envErr)
 	}
 
 	port := strings.TrimSpace(os.Getenv("PORT"))
@@ -27,57 +32,60 @@ func main() {
 		port = "8080"
 	}
 
-	// ── Database setup ───────────────────────────────────────────────
 	dbConfig := config.LoadDBConfig()
 	if dbConfig.DSN == "" {
-		log.Fatalf("MYSQL_DSN is required. Set it in .env or environment variables.")
+		fatal(logger, "MYSQL_DSN is required. Set it in .env or environment variables.", nil)
 	}
 
 	store, err := mysql.Open(dbConfig.DSN)
 	if err != nil {
-		log.Fatalf("connect to mysql: %v", err)
+		fatal(logger, "connect to mysql", err)
 	}
 	defer store.Close()
 
 	ctx := context.Background()
 	if err := store.Ping(ctx); err != nil {
-		log.Fatalf("ping mysql: %v", err)
+		fatal(logger, "ping mysql", err)
 	}
-	log.Println("connected to mysql")
+	logger.Info("connected to mysql")
 
 	if dbConfig.AutoMigrate {
 		if err := store.Migrate(ctx); err != nil {
-			log.Fatalf("run migrations: %v", err)
+			fatal(logger, "run migrations", err)
 		}
-		log.Println("database migrations applied")
+		logger.Info("database migrations applied")
 	}
 
-	// Seed default agents if the table is empty
 	if err := store.SeedAgents(ctx, agent.PredefinedAgents()); err != nil {
-		log.Fatalf("seed agents: %v", err)
+		fatal(logger, "seed agents", err)
 	}
 
-	// Load current agents from store for Manager initialization
 	agents, err := store.ListAgents(ctx)
 	if err != nil {
-		log.Fatalf("load agents: %v", err)
+		fatal(logger, "load agents", err)
 	}
 
-	// ── Application setup ────────────────────────────────────────────
 	manager := room.NewManager(store, agents)
 	runner := agent.NewRunner(llm.NewClientFromEnv(), store)
 	server := api.NewServer(manager, runner)
 
-	// Mark any orphaned active participants as left (from a previous unclean shutdown)
 	now := time.Now().UTC()
 	if err := store.MarkAllActiveParticipantsLeft(ctx, now); err != nil {
-		// Non-fatal: best-effort cleanup
-		log.Printf("warn: could not mark orphaned participants as left: %v", err)
+		logger.Warn("could not mark orphaned participants as left", "error", err)
 	}
 
 	address := ":" + port
-	log.Printf("AgentRoom backend listening on %s", address)
+	logger.Info("AgentRoom backend listening", "address", address)
 	if err := http.ListenAndServe(address, server.Routes()); err != nil {
-		log.Fatalf("start server: %v", err)
+		fatal(logger, "start server", err)
 	}
+}
+
+func fatal(logger *slog.Logger, message string, err error) {
+	if err != nil {
+		logger.Error(message, "error", err)
+	} else {
+		logger.Error(message)
+	}
+	os.Exit(1)
 }
