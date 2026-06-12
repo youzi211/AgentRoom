@@ -16,6 +16,13 @@ const (
 	EventTypeError             = "error"
 )
 
+const (
+	KnowledgeScopeRoom  = "room"
+	KnowledgeScopeAgent = "agent"
+
+	KnowledgeStatusReady = "ready"
+)
+
 type Room struct {
 	ID           string                  `json:"id"`
 	Name         string                  `json:"name"`
@@ -64,6 +71,27 @@ type AgentConfig struct {
 	SystemPrompt string `json:"systemPrompt"`
 }
 
+type KnowledgeDocument struct {
+	ID          string    `json:"id"`
+	Scope       string    `json:"scope"`
+	ScopeID     string    `json:"scopeId"`
+	FileName    string    `json:"fileName"`
+	ContentType string    `json:"contentType"`
+	SizeBytes   int64     `json:"sizeBytes"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+type KnowledgeChunk struct {
+	ID         string    `json:"id"`
+	DocumentID string    `json:"documentId"`
+	Scope      string    `json:"scope"`
+	ScopeID    string    `json:"scopeId"`
+	ChunkIndex int       `json:"chunkIndex"`
+	Content    string    `json:"content"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
 type UpdateAgentRequest struct {
 	Name         string `json:"name"`
 	Role         string `json:"role"`
@@ -96,6 +124,14 @@ type HealthResponse struct {
 
 type AgentsResponse struct {
 	Agents []AgentConfig `json:"agents"`
+}
+
+type KnowledgeDocumentsResponse struct {
+	Documents []KnowledgeDocument `json:"documents"`
+}
+
+type UploadKnowledgeResponse struct {
+	Document KnowledgeDocument `json:"document"`
 }
 
 type CreateRoomRequest struct {

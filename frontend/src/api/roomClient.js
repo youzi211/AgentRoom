@@ -77,6 +77,53 @@ export async function deleteAgent(agentId) {
   return parseResponse(response)
 }
 
+export async function getRoomKnowledge(roomId) {
+  const encodedRoomId = encodeURIComponent(roomId)
+  const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/knowledge`)
+  return parseResponse(response)
+}
+
+export async function uploadRoomKnowledge(roomId, file) {
+  const encodedRoomId = encodeURIComponent(roomId)
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/knowledge`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  return parseResponse(response)
+}
+
+export async function getAgentKnowledge(agentId) {
+  const encodedAgentId = encodeURIComponent(agentId)
+  const response = await fetch(`${API_BASE_PATH}/agents/${encodedAgentId}/knowledge`)
+  return parseResponse(response)
+}
+
+export async function uploadAgentKnowledge(agentId, file) {
+  const encodedAgentId = encodeURIComponent(agentId)
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch(`${API_BASE_PATH}/agents/${encodedAgentId}/knowledge`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  return parseResponse(response)
+}
+
+export async function deleteKnowledgeDocument(documentId) {
+  const encodedDocumentId = encodeURIComponent(documentId)
+  const response = await fetch(`${API_BASE_PATH}/knowledge/${encodedDocumentId}`, {
+    method: 'DELETE',
+  })
+
+  return parseResponse(response)
+}
+
 export function createRoomSocket(roomId, participantName) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const encodedRoomId = encodeURIComponent(roomId)

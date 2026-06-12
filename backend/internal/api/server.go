@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -61,9 +62,14 @@ func (s *Server) registerAPIRoutes(routes gin.IRoutes) {
 	routes.POST("/agents", s.handleCreateAgent)
 	routes.PUT("/agents/:agentID", s.handleUpdateAgent)
 	routes.DELETE("/agents/:agentID", s.handleDeleteAgent)
+	routes.GET("/agents/:agentID/knowledge", s.handleListAgentKnowledge)
+	routes.POST("/agents/:agentID/knowledge", s.handleUploadAgentKnowledge)
 	routes.POST("/rooms", s.handleCreateRoom)
 	routes.GET("/rooms/:roomID", s.handleGetRoom)
 	routes.GET("/rooms/:roomID/messages", s.handleGetMessages)
+	routes.GET("/rooms/:roomID/knowledge", s.handleListRoomKnowledge)
+	routes.POST("/rooms/:roomID/knowledge", s.handleUploadRoomKnowledge)
+	routes.DELETE("/knowledge/:documentID", s.handleDeleteKnowledgeDocument)
 	routes.GET("/rooms/:roomID/ws", s.handleRoomWebSocket)
 }
 
@@ -179,6 +185,48 @@ func (s *Server) handleDeleteAgent(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+func (s *Server) handleListAgentKnowledge(c *gin.Context) {
+	agentID := strings.TrimSpace(c.Param("agentID"))
+	if agentID == "" {
+		writeError(c, http.StatusBadRequest, "missing agent id")
+		return
+	}
+
+	documents, err := s.rooms.ListAgentKnowledge(c.Request.Context(), agentID)
+	if err != nil {
+		if errors.Is(err, service.ErrAgentNotFound) {
+			writeError(c, http.StatusNotFound, "agent not found")
+			return
+		}
+		s.logger.Error("list agent knowledge", "agent_id", agentID, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to list agent knowledge")
+		return
+	}
+
+	c.JSON(http.StatusOK, model.KnowledgeDocumentsResponse{Documents: documents})
+}
+
+func (s *Server) handleUploadAgentKnowledge(c *gin.Context) {
+	agentID := strings.TrimSpace(c.Param("agentID"))
+	if agentID == "" {
+		writeError(c, http.StatusBadRequest, "missing agent id")
+		return
+	}
+
+	fileName, content, ok := readMarkdownUpload(c)
+	if !ok {
+		return
+	}
+
+	document, err := s.rooms.UploadAgentKnowledge(c.Request.Context(), agentID, fileName, content)
+	if err != nil {
+		s.writeKnowledgeError(c, err, "failed to upload agent knowledge")
+		return
+	}
+
+	c.JSON(http.StatusCreated, model.UploadKnowledgeResponse{Document: document})
+}
+
 func (s *Server) handleCreateRoom(c *gin.Context) {
 	var request model.CreateRoomRequest
 	if err := json.NewDecoder(c.Request.Body).Decode(&request); err != nil && !errors.Is(err, context.Canceled) {
@@ -226,6 +274,68 @@ func (s *Server) handleGetMessages(c *gin.Context) {
 	messages := s.rooms.ListMessages(c.Request.Context(), currentRoom, limit)
 
 	c.JSON(http.StatusOK, model.GetMessagesResponse{Messages: messages})
+}
+
+func (s *Server) handleListRoomKnowledge(c *gin.Context) {
+	roomID := strings.TrimSpace(c.Param("roomID"))
+	if roomID == "" {
+		writeError(c, http.StatusBadRequest, "missing room id")
+		return
+	}
+
+	documents, err := s.rooms.ListRoomKnowledge(c.Request.Context(), roomID)
+	if err != nil {
+		if strings.Contains(err.Error(), "room not found") {
+			writeError(c, http.StatusNotFound, "room not found")
+			return
+		}
+		s.logger.Error("list room knowledge", "room_id", roomID, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to list room knowledge")
+		return
+	}
+
+	c.JSON(http.StatusOK, model.KnowledgeDocumentsResponse{Documents: documents})
+}
+
+func (s *Server) handleUploadRoomKnowledge(c *gin.Context) {
+	roomID := strings.TrimSpace(c.Param("roomID"))
+	if roomID == "" {
+		writeError(c, http.StatusBadRequest, "missing room id")
+		return
+	}
+
+	fileName, content, ok := readMarkdownUpload(c)
+	if !ok {
+		return
+	}
+
+	document, err := s.rooms.UploadRoomKnowledge(c.Request.Context(), roomID, fileName, content)
+	if err != nil {
+		s.writeKnowledgeError(c, err, "failed to upload room knowledge")
+		return
+	}
+
+	c.JSON(http.StatusCreated, model.UploadKnowledgeResponse{Document: document})
+}
+
+func (s *Server) handleDeleteKnowledgeDocument(c *gin.Context) {
+	documentID := strings.TrimSpace(c.Param("documentID"))
+	if documentID == "" {
+		writeError(c, http.StatusBadRequest, "missing document id")
+		return
+	}
+
+	if err := s.rooms.DeleteKnowledgeDocument(c.Request.Context(), documentID); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			writeError(c, http.StatusNotFound, "knowledge document not found")
+			return
+		}
+		s.logger.Error("delete knowledge document", "document_id", documentID, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to delete knowledge document")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 func (s *Server) handleRoomWebSocket(c *gin.Context) {
@@ -363,4 +473,47 @@ func snapshotEvent(state model.RoomState) model.ServerEvent {
 
 func writeError(c *gin.Context, statusCode int, message string) {
 	c.JSON(statusCode, model.ErrorResponse{Error: message})
+}
+
+func readMarkdownUpload(c *gin.Context) (string, []byte, bool) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "missing markdown file")
+		return "", nil, false
+	}
+	defer file.Close()
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "failed to read markdown file")
+		return "", nil, false
+	}
+
+	return header.Filename, content, true
+}
+
+func (s *Server) writeKnowledgeError(c *gin.Context, err error, fallback string) {
+	if errors.Is(err, service.ErrAgentNotFound) {
+		writeError(c, http.StatusNotFound, "agent not found")
+		return
+	}
+	if errors.Is(err, service.ErrKnowledgeInvalidFile) {
+		writeError(c, http.StatusBadRequest, "only non-empty .md files are supported")
+		return
+	}
+	if errors.Is(err, service.ErrKnowledgeTooLarge) {
+		writeError(c, http.StatusRequestEntityTooLarge, "markdown file must be 1MB or smaller")
+		return
+	}
+	if errors.Is(err, service.ErrKnowledgeInvalidScope) {
+		writeError(c, http.StatusBadRequest, "invalid knowledge scope")
+		return
+	}
+	if strings.Contains(err.Error(), "room not found") {
+		writeError(c, http.StatusNotFound, "room not found")
+		return
+	}
+	s.logger.Error("knowledge request failed", "error", err)
+	writeError(c, http.StatusInternalServerError, fallback)
 }

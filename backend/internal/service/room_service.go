@@ -17,20 +17,22 @@ import (
 // RoomService coordinates room use cases across runtime room state, persistence, and agents.
 // HTTP/WebSocket handlers should depend on this layer instead of orchestrating store writes directly.
 type RoomService struct {
-	manager *room.Manager
-	agents  *AgentService
-	runner  *agent.Runner
-	store   store.Store
-	logger  *slog.Logger
+	manager   *room.Manager
+	agents    *AgentService
+	knowledge *KnowledgeService
+	runner    *agent.Runner
+	store     store.Store
+	logger    *slog.Logger
 }
 
-func NewRoomService(manager *room.Manager, agents *AgentService, runner *agent.Runner, s store.Store) *RoomService {
+func NewRoomService(manager *room.Manager, agents *AgentService, knowledge *KnowledgeService, runner *agent.Runner, s store.Store) *RoomService {
 	return &RoomService{
-		manager: manager,
-		agents:  agents,
-		runner:  runner,
-		store:   s,
-		logger:  logging.Component("room_service"),
+		manager:   manager,
+		agents:    agents,
+		knowledge: knowledge,
+		runner:    runner,
+		store:     s,
+		logger:    logging.Component("room_service"),
 	}
 }
 
@@ -60,6 +62,48 @@ func (s *RoomService) UpdateAgent(ctx context.Context, agentID string, input Upd
 
 func (s *RoomService) DeleteAgent(ctx context.Context, agentID string) error {
 	return s.agents.DeleteAgent(ctx, agentID)
+}
+
+func (s *RoomService) UploadRoomKnowledge(ctx context.Context, roomID string, fileName string, content []byte) (model.KnowledgeDocument, error) {
+	if _, ok := s.GetRoom(ctx, roomID); !ok {
+		return model.KnowledgeDocument{}, fmt.Errorf("room not found")
+	}
+	return s.knowledge.UploadMarkdown(ctx, UploadKnowledgeInput{
+		Scope:    model.KnowledgeScopeRoom,
+		ScopeID:  roomID,
+		FileName: fileName,
+		Content:  content,
+	})
+}
+
+func (s *RoomService) ListRoomKnowledge(ctx context.Context, roomID string) ([]model.KnowledgeDocument, error) {
+	if _, ok := s.GetRoom(ctx, roomID); !ok {
+		return nil, fmt.Errorf("room not found")
+	}
+	return s.knowledge.ListDocuments(ctx, model.KnowledgeScopeRoom, roomID)
+}
+
+func (s *RoomService) UploadAgentKnowledge(ctx context.Context, agentID string, fileName string, content []byte) (model.KnowledgeDocument, error) {
+	if _, ok := s.agentByID(agentID); !ok {
+		return model.KnowledgeDocument{}, ErrAgentNotFound
+	}
+	return s.knowledge.UploadMarkdown(ctx, UploadKnowledgeInput{
+		Scope:    model.KnowledgeScopeAgent,
+		ScopeID:  agentID,
+		FileName: fileName,
+		Content:  content,
+	})
+}
+
+func (s *RoomService) ListAgentKnowledge(ctx context.Context, agentID string) ([]model.KnowledgeDocument, error) {
+	if _, ok := s.agentByID(agentID); !ok {
+		return nil, ErrAgentNotFound
+	}
+	return s.knowledge.ListDocuments(ctx, model.KnowledgeScopeAgent, agentID)
+}
+
+func (s *RoomService) DeleteKnowledgeDocument(ctx context.Context, documentID string) error {
+	return s.knowledge.DeleteDocument(ctx, documentID)
 }
 
 func (s *RoomService) ListMessages(ctx context.Context, currentRoom *room.Room, limit int) []model.Message {
@@ -118,4 +162,13 @@ func (s *RoomService) HandleHumanMessage(ctx context.Context, currentRoom *room.
 	go s.runner.HandleHumanMessage(context.Background(), currentRoom, savedMessage)
 
 	return savedMessage, nil
+}
+
+func (s *RoomService) agentByID(agentID string) (model.AgentConfig, bool) {
+	for _, configuredAgent := range s.agents.Agents() {
+		if configuredAgent.ID == agentID {
+			return configuredAgent, true
+		}
+	}
+	return model.AgentConfig{}, false
 }

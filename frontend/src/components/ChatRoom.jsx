@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { createRoomSocket, getMessages, getRoom } from '../api/roomClient'
+import { createRoomSocket, deleteKnowledgeDocument, getMessages, getRoom, getRoomKnowledge, uploadRoomKnowledge } from '../api/roomClient'
 import AgentRoster from './AgentRoster'
+import KnowledgePanel from './KnowledgePanel'
 import MessageComposer from './MessageComposer'
 import MessageList from './MessageList'
 import ParticipantList from './ParticipantList'
@@ -199,6 +200,16 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
           </div>
           <div className="sidebar-card">
             <AgentRoster agents={agents} onInsertMention={handleInsertMention} />
+          </div>
+          <div className="sidebar-card">
+            <KnowledgePanel
+              title="会议文件"
+              description="上传 Markdown 会议资料，房间内所有 Agent 发言时都可以参考。"
+              emptyText="暂无会议文件。上传 .md 后，Agent 会在回答时参考这些内容。"
+              listDocuments={() => getRoomKnowledge(roomId)}
+              onUploadDocument={(file) => uploadRoomKnowledge(roomId, file)}
+              onDeleteDocument={deleteKnowledgeDocument}
+            />
           </div>
         </aside>
 

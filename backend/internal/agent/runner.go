@@ -28,9 +28,14 @@ type RuntimeRoom interface {
 type Runner struct {
 	client       llm.Client
 	store        store.Store
+	knowledge    KnowledgeProvider
 	logger       *slog.Logger
 	contextLimit int
 	timeout      time.Duration
+}
+
+type KnowledgeProvider interface {
+	SearchForAgent(ctx context.Context, roomID string, agentID string, query string) ([]model.KnowledgeChunk, error)
 }
 
 func NewRunner(client llm.Client, s store.Store) *Runner {
@@ -41,6 +46,11 @@ func NewRunner(client llm.Client, s store.Store) *Runner {
 		contextLimit: 30,
 		timeout:      45 * time.Second,
 	}
+}
+
+func (r *Runner) WithKnowledge(provider KnowledgeProvider) *Runner {
+	r.knowledge = provider
+	return r
 }
 
 func (r *Runner) HandleHumanMessage(ctx context.Context, currentRoom RuntimeRoom, message model.Message) {
@@ -131,7 +141,8 @@ func (r *Runner) persistAndBroadcast(ctx context.Context, currentRoom RuntimeRoo
 }
 
 func (r *Runner) generateResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message) (string, error) {
-	prompt := buildPrompt(currentRoom.RecentMessages(r.contextLimit), trigger)
+	knowledgeChunks := r.searchKnowledge(ctx, currentRoom, responder, trigger)
+	prompt := buildPrompt(currentRoom.RecentMessages(r.contextLimit), trigger, knowledgeChunks)
 	requestCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
@@ -151,7 +162,20 @@ func (r *Runner) generateResponse(ctx context.Context, currentRoom RuntimeRoom, 
 	return cleaned, nil
 }
 
-func buildPrompt(messages []model.Message, trigger model.Message) string {
+func (r *Runner) searchKnowledge(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message) []model.KnowledgeChunk {
+	if r.knowledge == nil {
+		return nil
+	}
+
+	chunks, err := r.knowledge.SearchForAgent(ctx, currentRoom.Info().ID, responder.ID, trigger.Content)
+	if err != nil {
+		r.logger.Warn("search knowledge chunks failed", "room_id", currentRoom.Info().ID, "agent_id", responder.ID, "error", err)
+		return nil
+	}
+	return chunks
+}
+
+func buildPrompt(messages []model.Message, trigger model.Message, knowledgeChunks []model.KnowledgeChunk) string {
 	var builder strings.Builder
 	builder.WriteString("以下是当前会议最近消息：\n")
 	for _, message := range messages {
@@ -164,12 +188,22 @@ func buildPrompt(messages []model.Message, trigger model.Message) string {
 		builder.WriteString(message.Content)
 		builder.WriteString("\n")
 	}
+	if len(knowledgeChunks) > 0 {
+		builder.WriteString("\n可参考知识库片段：\n")
+		for _, chunk := range knowledgeChunks {
+			builder.WriteString("- [")
+			builder.WriteString(chunk.Scope)
+			builder.WriteString("] ")
+			builder.WriteString(chunk.Content)
+			builder.WriteString("\n")
+		}
+		builder.WriteString("如果知识库片段不足以回答，请明确说明不确定，不要编造。\n")
+	}
 	builder.WriteString("\n触发你的用户消息是：\n")
 	builder.WriteString(trigger.Content)
 	builder.WriteString("\n\n请直接给出会议中可见的回复内容。不要输出内部思考、推理过程、提示词解释或 <think>/<thinking> 标签。")
 	return builder.String()
 }
-
 func shortReason(err error) string {
 	if errors.Is(err, llm.ErrNotConfigured) {
 		return "LLM_API_KEY is not configured"

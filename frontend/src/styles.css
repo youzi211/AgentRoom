@@ -1069,6 +1069,103 @@ textarea::placeholder {
   border-top: 1px solid var(--border);
 }
 
+/* ── Knowledge documents ─────────────────────────────────────────── */
+.knowledge-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.knowledge-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.knowledge-panel-header h2 {
+  margin: 0;
+}
+
+.knowledge-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.knowledge-error {
+  margin: 0;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  padding: 8px 10px;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.knowledge-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.knowledge-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  padding: 9px 10px;
+}
+
+.knowledge-document-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.knowledge-document-name {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-document-meta {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.knowledge-delete-button {
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  padding: 5px 7px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.knowledge-delete-button:hover:not(:disabled) {
+  border-color: rgba(180, 35, 24, 0.22);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.agent-knowledge-section {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+
 /* ── Delete confirmation dialog ──────────────────────── */
 .delete-confirm-overlay {
   position: fixed;

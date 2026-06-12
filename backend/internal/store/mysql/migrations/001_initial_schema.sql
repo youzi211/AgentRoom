@@ -79,3 +79,29 @@ CREATE TABLE agent_runs (
   CONSTRAINT fk_agent_runs_room FOREIGN KEY (room_id) REFERENCES rooms(id),
   CONSTRAINT fk_agent_runs_trigger FOREIGN KEY (trigger_message_id) REFERENCES messages(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE knowledge_documents (
+  id VARCHAR(64) PRIMARY KEY,
+  scope VARCHAR(32) NOT NULL,
+  scope_id VARCHAR(64) NOT NULL,
+  file_name VARCHAR(255) NOT NULL,
+  content_type VARCHAR(128) NOT NULL,
+  size_bytes BIGINT NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  created_at DATETIME(6) NOT NULL,
+  KEY idx_knowledge_documents_scope (scope, scope_id),
+  KEY idx_knowledge_documents_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE knowledge_chunks (
+  id VARCHAR(64) PRIMARY KEY,
+  document_id VARCHAR(64) NOT NULL,
+  scope VARCHAR(32) NOT NULL,
+  scope_id VARCHAR(64) NOT NULL,
+  chunk_index INT NOT NULL,
+  content MEDIUMTEXT NOT NULL,
+  created_at DATETIME(6) NOT NULL,
+  KEY idx_knowledge_chunks_document (document_id),
+  KEY idx_knowledge_chunks_scope (scope, scope_id),
+  CONSTRAINT fk_knowledge_chunks_document FOREIGN KEY (document_id) REFERENCES knowledge_documents(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

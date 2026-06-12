@@ -95,6 +95,33 @@ type AgentRunModel struct {
 
 func (AgentRunModel) TableName() string { return "agent_runs" }
 
+// KnowledgeDocumentModel maps to metadata for room-level or agent-level knowledge documents.
+type KnowledgeDocumentModel struct {
+	ID          string    `gorm:"primaryKey;size:64"`
+	Scope       string    `gorm:"size:32;not null;index:idx_knowledge_documents_scope"`
+	ScopeID     string    `gorm:"column:scope_id;size:64;not null;index:idx_knowledge_documents_scope"`
+	FileName    string    `gorm:"column:file_name;size:255;not null"`
+	ContentType string    `gorm:"column:content_type;size:128;not null"`
+	SizeBytes   int64     `gorm:"column:size_bytes;not null"`
+	Status      string    `gorm:"size:32;not null"`
+	CreatedAt   time.Time `gorm:"not null;index:idx_knowledge_documents_created"`
+}
+
+func (KnowledgeDocumentModel) TableName() string { return "knowledge_documents" }
+
+// KnowledgeChunkModel maps to parsed document chunks used for prompt grounding.
+type KnowledgeChunkModel struct {
+	ID         string    `gorm:"primaryKey;size:64"`
+	DocumentID string    `gorm:"column:document_id;size:64;not null;index:idx_knowledge_chunks_document"`
+	Scope      string    `gorm:"size:32;not null;index:idx_knowledge_chunks_scope"`
+	ScopeID    string    `gorm:"column:scope_id;size:64;not null;index:idx_knowledge_chunks_scope"`
+	ChunkIndex int       `gorm:"column:chunk_index;not null"`
+	Content    string    `gorm:"type:mediumtext;not null"`
+	CreatedAt  time.Time `gorm:"not null"`
+}
+
+func (KnowledgeChunkModel) TableName() string { return "knowledge_chunks" }
+
 // SchemaMigrationModel maps to the `schema_migrations` table.
 type SchemaMigrationModel struct {
 	Version   string    `gorm:"primaryKey;size:64"`
@@ -176,6 +203,31 @@ func agentRunToModel(run store.AgentRun) AgentRunModel {
 	return m
 }
 
+func knowledgeDocumentToModel(document model.KnowledgeDocument) KnowledgeDocumentModel {
+	return KnowledgeDocumentModel{
+		ID:          document.ID,
+		Scope:       document.Scope,
+		ScopeID:     document.ScopeID,
+		FileName:    document.FileName,
+		ContentType: document.ContentType,
+		SizeBytes:   document.SizeBytes,
+		Status:      document.Status,
+		CreatedAt:   document.CreatedAt,
+	}
+}
+
+func knowledgeChunkToModel(chunk model.KnowledgeChunk) KnowledgeChunkModel {
+	return KnowledgeChunkModel{
+		ID:         chunk.ID,
+		DocumentID: chunk.DocumentID,
+		Scope:      chunk.Scope,
+		ScopeID:    chunk.ScopeID,
+		ChunkIndex: chunk.ChunkIndex,
+		Content:    chunk.Content,
+		CreatedAt:  chunk.CreatedAt,
+	}
+}
+
 // ── GORM → Domain 转换 ───────────────────────────────────────────────
 
 func (m AgentModel) toDomain() model.Agent {
@@ -227,6 +279,31 @@ func (m RoomModel) toDomain() model.RoomMeta {
 		ID:        m.ID,
 		Name:      m.Name,
 		CreatedAt: m.CreatedAt,
+	}
+}
+
+func (m KnowledgeDocumentModel) toDomain() model.KnowledgeDocument {
+	return model.KnowledgeDocument{
+		ID:          m.ID,
+		Scope:       m.Scope,
+		ScopeID:     m.ScopeID,
+		FileName:    m.FileName,
+		ContentType: m.ContentType,
+		SizeBytes:   m.SizeBytes,
+		Status:      m.Status,
+		CreatedAt:   m.CreatedAt,
+	}
+}
+
+func (m KnowledgeChunkModel) toDomain() model.KnowledgeChunk {
+	return model.KnowledgeChunk{
+		ID:         m.ID,
+		DocumentID: m.DocumentID,
+		Scope:      m.Scope,
+		ScopeID:    m.ScopeID,
+		ChunkIndex: m.ChunkIndex,
+		Content:    m.Content,
+		CreatedAt:  m.CreatedAt,
 	}
 }
 

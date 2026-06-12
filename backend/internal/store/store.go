@@ -38,6 +38,12 @@ type Store interface {
 	// Agent runs
 	CreateAgentRun(ctx context.Context, run AgentRun) error
 	FinishAgentRun(ctx context.Context, runID string, status string, errText string, completedAt time.Time) error
+
+	// Knowledge documents
+	CreateKnowledgeDocument(ctx context.Context, document model.KnowledgeDocument, chunks []model.KnowledgeChunk) (model.KnowledgeDocument, error)
+	ListKnowledgeDocuments(ctx context.Context, query ListKnowledgeDocumentsQuery) ([]model.KnowledgeDocument, error)
+	DeleteKnowledgeDocument(ctx context.Context, documentID string) error
+	SearchKnowledgeChunks(ctx context.Context, query SearchKnowledgeChunksQuery) ([]model.KnowledgeChunk, error)
 }
 
 // CreateRoomInput holds the data needed to create a new room with agent snapshots.
@@ -74,4 +80,16 @@ type AgentRun struct {
 	Error            string
 	StartedAt        time.Time
 	CompletedAt      *time.Time
+}
+
+type ListKnowledgeDocumentsQuery struct {
+	Scope   string
+	ScopeID string
+}
+
+type SearchKnowledgeChunksQuery struct {
+	Scope   string
+	ScopeID string
+	Query   string
+	Limit   int
 }

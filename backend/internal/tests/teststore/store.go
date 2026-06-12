@@ -9,8 +9,10 @@ import (
 )
 
 type Store struct {
-	Agents []model.Agent
-	Rooms  map[string]model.RoomMeta
+	Agents    []model.Agent
+	Rooms     map[string]model.RoomMeta
+	Documents []model.KnowledgeDocument
+	Chunks    []model.KnowledgeChunk
 }
 
 func (s *Store) Ping(context.Context) error { return nil }
@@ -81,4 +83,47 @@ func (s *Store) ListMessages(context.Context, store.ListMessagesQuery) ([]model.
 func (s *Store) CreateAgentRun(context.Context, store.AgentRun) error { return nil }
 func (s *Store) FinishAgentRun(context.Context, string, string, string, time.Time) error {
 	return nil
+}
+func (s *Store) CreateKnowledgeDocument(_ context.Context, document model.KnowledgeDocument, chunks []model.KnowledgeChunk) (model.KnowledgeDocument, error) {
+	s.Documents = append(s.Documents, document)
+	s.Chunks = append(s.Chunks, chunks...)
+	return document, nil
+}
+func (s *Store) ListKnowledgeDocuments(_ context.Context, query store.ListKnowledgeDocumentsQuery) ([]model.KnowledgeDocument, error) {
+	result := make([]model.KnowledgeDocument, 0)
+	for _, document := range s.Documents {
+		if document.Scope == query.Scope && document.ScopeID == query.ScopeID {
+			result = append(result, document)
+		}
+	}
+	return result, nil
+}
+func (s *Store) DeleteKnowledgeDocument(_ context.Context, documentID string) error {
+	nextDocuments := make([]model.KnowledgeDocument, 0, len(s.Documents))
+	for _, document := range s.Documents {
+		if document.ID != documentID {
+			nextDocuments = append(nextDocuments, document)
+		}
+	}
+	nextChunks := make([]model.KnowledgeChunk, 0, len(s.Chunks))
+	for _, chunk := range s.Chunks {
+		if chunk.DocumentID != documentID {
+			nextChunks = append(nextChunks, chunk)
+		}
+	}
+	s.Documents = nextDocuments
+	s.Chunks = nextChunks
+	return nil
+}
+func (s *Store) SearchKnowledgeChunks(_ context.Context, query store.SearchKnowledgeChunksQuery) ([]model.KnowledgeChunk, error) {
+	result := make([]model.KnowledgeChunk, 0)
+	for _, chunk := range s.Chunks {
+		if chunk.Scope == query.Scope && chunk.ScopeID == query.ScopeID {
+			result = append(result, chunk)
+		}
+	}
+	if query.Limit > 0 && len(result) > query.Limit {
+		return result[:query.Limit], nil
+	}
+	return result, nil
 }

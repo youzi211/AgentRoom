@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { createAgent, deleteAgent, getAgents, updateAgent } from '../api/roomClient'
+import { createAgent, deleteAgent, deleteKnowledgeDocument, getAgentKnowledge, getAgents, updateAgent, uploadAgentKnowledge } from '../api/roomClient'
+import KnowledgePanel from './KnowledgePanel'
 
 const EMPTY_FORM = {
   name: '',
@@ -353,6 +354,19 @@ function AgentAdmin({ onBack }) {
                 placeholder="留空则保留当前后端提示词。"
               />
             ) : null}
+          </div>
+
+          <div className="agent-knowledge-section">
+            <KnowledgePanel
+              key={selectedAgent?.id || CREATE_MODE}
+              title="Agent 知识库"
+              description="上传 Markdown 文档，只有当前 Agent 在会议中发言时会参考这些知识。"
+              disabled={isCreating || !selectedAgent}
+              emptyText={isCreating ? '创建 Agent 后即可上传知识文档。' : '暂无知识文档。上传 .md 后，该 Agent 会在回答时参考。'}
+              listDocuments={selectedAgent ? () => getAgentKnowledge(selectedAgent.id) : null}
+              onUploadDocument={selectedAgent ? (file) => uploadAgentKnowledge(selectedAgent.id, file) : null}
+              onDeleteDocument={deleteKnowledgeDocument}
+            />
           </div>
 
           <div className="button-row">
