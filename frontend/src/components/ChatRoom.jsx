@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoomSocket, deleteKnowledgeDocument, getMessages, getRoom, getRoomKnowledge, uploadRoomKnowledge } from '../api/roomClient'
 import AgentRoster from './AgentRoster'
+import FocusTimeline from './FocusTimeline'
 import KnowledgePanel from './KnowledgePanel'
 import MessageComposer from './MessageComposer'
 import MessageList from './MessageList'
 import ParticipantList from './ParticipantList'
+import ResizeHandle from './ResizeHandle'
 import '../chat-room.css'
 
 const ROOM_SNAPSHOT_EVENT = 'room_snapshot'
@@ -12,6 +14,7 @@ const MESSAGE_EVENT = 'message'
 const PARTICIPANT_JOINED_EVENT = 'participant_joined'
 const PARTICIPANT_LEFT_EVENT = 'participant_left'
 const ERROR_EVENT = 'error'
+const FOCUS_UPDATE_EVENT = 'focus_update'
 
 export default function ChatRoom({ initialRoom, participantName, roomId, onLeaveRoom }) {
   const [room, setRoom] = useState(initialRoom)
@@ -20,6 +23,12 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
   const [messages, setMessages] = useState([])
   const [connectionState, setConnectionState] = useState('connecting')
   const [errorMessage, setErrorMessage] = useState('')
+  const [copyState, setCopyState] = useState('idle')
+  const [thinkingAgents, setThinkingAgents] = useState([])
+  const [focusPoints, setFocusPoints] = useState([])
+  const [leftPanelWidth, setLeftPanelWidth] = useState(270)
+  const [rightPanelWidth, setRightPanelWidth] = useState(320)
+  const [rightTopHeight, setRightTopHeight] = useState(300)
   const socketRef = useRef(null)
   const insertMentionRef = useRef(() => {})
   const messageListRef = useRef(null)
@@ -50,10 +59,19 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
         case MESSAGE_EVENT:
           if (event.message) {
             setMessages((current) => upsertById(current, event.message))
+            if (event.message.senderType === 'agent') {
+              setThinkingAgents((current) => current.filter((agent) => agent.id !== event.message.senderID))
+            }
+          }
+          return
+        case FOCUS_UPDATE_EVENT:
+          if (event.focusPoints && event.focusPoints.length > 0) {
+            setFocusPoints((current) => [...current, ...event.focusPoints])
           }
           return
         case ERROR_EVENT:
-          setErrorMessage(event.error || '房间报告了一个错误。')
+          setErrorMessage(event.error || '房间返回了一个错误。')
+          setThinkingAgents([])
           return
         default:
           return
@@ -109,7 +127,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
           const payload = JSON.parse(event.data)
           handleServerEvent(payload)
         } catch {
-          setErrorMessage('收到了无法解析的服务器消息。')
+          setErrorMessage('收到了无法解析的服务端消息。')
         }
       })
 
@@ -151,13 +169,18 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
       return
     }
     listEl.scrollTop = listEl.scrollHeight
-  }, [messages])
+  }, [messages, thinkingAgents])
 
   const handleSendMessage = async (content) => {
     const socket = socketRef.current
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       setErrorMessage('请重新连接后再发送消息。')
       return false
+    }
+
+    const mentioned = agents.filter((agent) => content.includes(agent.mention))
+    if (mentioned.length > 0) {
+      setThinkingAgents((current) => mergeAgents(current, mentioned))
     }
 
     socket.send(
@@ -174,52 +197,127 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
     insertMentionRef.current?.(mention)
   }
 
+  const handleCopyRoomID = async () => {
+    try {
+      await navigator.clipboard.writeText(roomId)
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 1600)
+    } catch {
+      setCopyState('failed')
+      window.setTimeout(() => setCopyState('idle'), 1600)
+    }
+  }
+
   return (
-    <main className="app-shell app-shell--chat">
+    <main className="chat-workbench">
       <header className="chat-topbar">
-        <div className="chat-topbar-info">
-          <h1 className="chat-topbar-title">{room.name}</h1>
-          <span className={`status-dot status-dot--${connectionState}`} />
-          <span className="chat-topbar-status">{labelForConnectionState(connectionState)}</span>
-          <span className="chat-topbar-divider">·</span>
-          <span className="chat-topbar-who">
-            <span className="participant-highlight">{participantName}</span> 已加入
-          </span>
+        <div className="chat-room-meta">
+          <div className="brand-mark brand-mark--small">AR</div>
+          <div>
+            <h1 className="chat-topbar-title">{room.name}</h1>
+            <div className="chat-topbar-subtitle">
+              <span className={`status-dot status-dot--${connectionState}`} />
+              <span>{labelForConnectionState(connectionState)}</span>
+              <span>房间 ID：{roomId}</span>
+            </div>
+          </div>
         </div>
-        <button className="button button--secondary button--compact" type="button" onClick={onLeaveRoom}>
-          离开房间
-        </button>
+        <div className="chat-topbar-actions">
+          <span className="chat-identity">以 {participantName} 加入</span>
+          <button className="button button--secondary button--compact" type="button" onClick={handleCopyRoomID}>
+            {copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制房间 ID'}
+          </button>
+          <button className="button button--ghost button--compact" type="button" onClick={onLeaveRoom}>
+            离开
+          </button>
+        </div>
       </header>
 
       {errorMessage ? <p className="banner banner--error banner--compact">{errorMessage}</p> : null}
 
       <div className="chat-layout">
-        <aside className="sidebar">
-          <div className="sidebar-card">
-            <ParticipantList participants={participants} />
-          </div>
-          <div className="sidebar-card">
-            <AgentRoster agents={agents} onInsertMention={handleInsertMention} />
-          </div>
-          <div className="sidebar-card">
-            <KnowledgePanel
-              title="会议文件"
-              description="上传 Markdown 会议资料，房间内所有 Agent 发言时都可以参考。"
-              emptyText="暂无会议文件。上传 .md 后，Agent 会在回答时参考这些内容。"
-              listDocuments={() => getRoomKnowledge(roomId)}
-              onUploadDocument={(file) => uploadRoomKnowledge(roomId, file)}
-              onDeleteDocument={deleteKnowledgeDocument}
-            />
-          </div>
+        <aside className="chat-sidebar chat-context-panel" style={{ width: leftPanelWidth, minWidth: leftPanelWidth }}>
+          <section className="sidebar-section meeting-context-summary">
+            <div className="sidebar-header">
+              <h2>会议上下文</h2>
+              <span className="sidebar-count">Live</span>
+            </div>
+            <div className="context-list">
+              <div className="context-item">
+                <span>会议室</span>
+                <strong>{room.name}</strong>
+              </div>
+              <div className="context-item">
+                <span>房间 ID</span>
+                <strong>{roomId}</strong>
+              </div>
+              <div className="context-item">
+                <span>参会角色</span>
+                <strong>{participants.length} 人 / {agents.length} 个 Agent</strong>
+              </div>
+            </div>
+          </section>
+          <ParticipantList participants={participants} />
+          <KnowledgePanel
+            title="会议文件"
+            description="所有参会 Agent 都会参考这些 Markdown 资料。"
+            emptyText="暂无会议文件。上传 .md 后，Agent 会在回答时参考。"
+            listDocuments={() => getRoomKnowledge(roomId)}
+            onUploadDocument={(file) => uploadRoomKnowledge(roomId, file)}
+            onDeleteDocument={deleteKnowledgeDocument}
+          />
         </aside>
 
-        <section className="workspace">
-          <div className="panel panel--conversation">
-            <MessageList ref={messageListRef} currentParticipantName={participantName} messages={messages} />
-          </div>
+        <ResizeHandle
+          direction="horizontal"
+          onResize={setLeftPanelWidth}
+          minWidth={200}
+          maxWidth={400}
+          size={leftPanelWidth}
+        />
 
-          <MessageComposer disabled={connectionState !== 'connected'} onInsertMentionRef={insertMentionRef} onSend={handleSendMessage} />
+        <section className="conversation-workspace">
+          <div className="conversation-heading">
+            <div>
+              <p className="eyebrow eyebrow--subtle">实时讨论</p>
+              <h2>会议记录与决策流</h2>
+            </div>
+            <div className="conversation-toolbar">
+              <span>{messages.length} 条消息</span>
+              <span>{thinkingAgents.length > 0 ? `${thinkingAgents.length} 个 Agent 正在思考` : '等待讨论'}</span>
+            </div>
+          </div>
+          <MessageList
+            ref={messageListRef}
+            currentParticipantName={participantName}
+            messages={messages}
+            thinkingAgents={thinkingAgents}
+          />
+          <MessageComposer agents={agents} disabled={connectionState !== 'connected'} onInsertMentionRef={insertMentionRef} onSend={handleSendMessage} />
         </section>
+
+        <ResizeHandle
+          direction="horizontal"
+          invertDelta
+          onResize={setRightPanelWidth}
+          minWidth={200}
+          maxWidth={450}
+          size={rightPanelWidth}
+        />
+
+        <aside className="chat-sidebar agent-workbench-panel" style={{ width: rightPanelWidth, minWidth: rightPanelWidth }}>
+          <div style={{ flex: 'none', height: rightTopHeight, overflow: 'auto' }}>
+            <AgentRoster agents={agents} thinkingAgents={thinkingAgents} onInsertMention={handleInsertMention} />
+          </div>
+          <ResizeHandle
+            direction="vertical"
+            onResize={setRightTopHeight}
+            minHeight={100}
+            maxHeight={500}
+            size={rightTopHeight}
+          />
+          <FocusTimeline focusPoints={focusPoints} />
+        </aside>
       </div>
     </main>
   )
@@ -234,6 +332,12 @@ function upsertById(items, nextItem) {
   const nextItems = [...items]
   nextItems[existingIndex] = nextItem
   return nextItems
+}
+
+function mergeAgents(current, nextAgents) {
+  const byID = new Map(current.map((agent) => [agent.id, agent]))
+  nextAgents.forEach((agent) => byID.set(agent.id, agent))
+  return Array.from(byID.values())
 }
 
 function labelForConnectionState(connectionState) {

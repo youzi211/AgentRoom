@@ -80,13 +80,13 @@ function KnowledgePanel({ description, disabled = false, emptyText, listDocument
   }
 
   return (
-    <section className="knowledge-panel">
-      <div className="knowledge-panel-header">
+    <section className="sidebar-section knowledge-panel">
+      <div className="sidebar-header">
         <div>
           <h2>{title}</h2>
-          {description ? <p className="panel-copy">{description}</p> : null}
+          {description ? <p className="sidebar-note">{description}</p> : null}
         </div>
-        <span className="panel-badge panel-badge--neutral">{documents.length}</span>
+        <span className="sidebar-count">{documents.length}</span>
       </div>
 
       <div className="knowledge-actions">
@@ -104,9 +104,9 @@ function KnowledgePanel({ description, disabled = false, emptyText, listDocument
       {errorMessage ? <p className="knowledge-error">{errorMessage}</p> : null}
 
       {isLoading ? (
-        <p className="empty-state sidebar-empty">正在加载知识文档...</p>
+        <p className="sidebar-empty">正在加载知识文档...</p>
       ) : documents.length === 0 ? (
-        <p className="empty-state sidebar-empty">{emptyText}</p>
+        <p className="sidebar-empty">{emptyText}</p>
       ) : (
         <ul className="knowledge-list">
           {documents.map((document) => (
@@ -114,7 +114,7 @@ function KnowledgePanel({ description, disabled = false, emptyText, listDocument
               <div className="knowledge-document-main">
                 <span className="knowledge-document-name">{document.fileName}</span>
                 <span className="knowledge-document-meta">
-                  {formatFileSize(document.sizeBytes)} · {formatDate(document.createdAt)}
+                  {formatFileSize(document.sizeBytes)} - {formatDate(document.createdAt)}
                 </span>
               </div>
               {onDeleteDocument ? (

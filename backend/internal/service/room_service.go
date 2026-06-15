@@ -21,16 +21,18 @@ type RoomService struct {
 	agents    *AgentService
 	knowledge *KnowledgeService
 	runner    *agent.Runner
+	focus     *FocusService
 	store     store.Store
 	logger    *slog.Logger
 }
 
-func NewRoomService(manager *room.Manager, agents *AgentService, knowledge *KnowledgeService, runner *agent.Runner, s store.Store) *RoomService {
+func NewRoomService(manager *room.Manager, agents *AgentService, knowledge *KnowledgeService, runner *agent.Runner, focus *FocusService, s store.Store) *RoomService {
 	return &RoomService{
 		manager:   manager,
 		agents:    agents,
 		knowledge: knowledge,
 		runner:    runner,
+		focus:     focus,
 		store:     s,
 		logger:    logging.Component("room_service"),
 	}
@@ -145,23 +147,28 @@ func (s *RoomService) LeaveParticipant(ctx context.Context, currentRoom *room.Ro
 	return removed
 }
 
-func (s *RoomService) HandleHumanMessage(ctx context.Context, currentRoom *room.Room, participant model.Participant, content string) (model.Message, error) {
+func (s *RoomService) HandleHumanMessage(ctx context.Context, currentRoom *room.Room, participant model.Participant, content string) (model.Message, []model.FocusPoint, error) {
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" {
-		return model.Message{}, fmt.Errorf("message content must not be empty")
+		return model.Message{}, nil, fmt.Errorf("message content must not be empty")
 	}
 
 	message := currentRoom.NewHumanMessage(participant, trimmed)
 	savedMessage, err := s.store.AddMessage(ctx, message)
 	if err != nil {
 		s.logger.Error("persist human message", "room_id", currentRoom.Info().ID, "participant_id", participant.ID, "error", err)
-		return model.Message{}, fmt.Errorf("persist human message: %w", err)
+		return model.Message{}, nil, fmt.Errorf("persist human message: %w", err)
 	}
 
 	currentRoom.AppendMessage(savedMessage)
 	go s.runner.HandleHumanMessage(context.Background(), currentRoom, savedMessage)
 
-	return savedMessage, nil
+	var focusPoints []model.FocusPoint
+	if s.focus != nil {
+		focusPoints = s.focus.AddMessage(ctx, currentRoom.Info().ID, savedMessage)
+	}
+
+	return savedMessage, focusPoints, nil
 }
 
 func (s *RoomService) agentByID(agentID string) (model.AgentConfig, bool) {

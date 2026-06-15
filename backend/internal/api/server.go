@@ -414,7 +414,7 @@ func (s *Server) handleClientEvent(currentRoom *room.Room, participant model.Par
 			return
 		}
 
-		savedMessage, err := s.rooms.HandleHumanMessage(context.Background(), currentRoom, participant, content)
+		savedMessage, focusPoints, err := s.rooms.HandleHumanMessage(context.Background(), currentRoom, participant, content)
 		if err != nil {
 			sendClientEvent(client, model.ServerEvent{
 				Type:  model.EventTypeError,
@@ -424,6 +424,13 @@ func (s *Server) handleClientEvent(currentRoom *room.Room, participant model.Par
 		}
 
 		currentRoom.Hub().Broadcast(model.ServerEvent{Type: model.EventTypeMessage, Message: &savedMessage})
+
+		if len(focusPoints) > 0 {
+			currentRoom.Hub().Broadcast(model.ServerEvent{
+				Type:        model.EventTypeFocusUpdate,
+				FocusPoints: focusPoints,
+			})
+		}
 	default:
 		sendClientEvent(client, model.ServerEvent{Type: model.EventTypeError, Error: fmt.Sprintf("unsupported event type %q", event.Type)})
 	}

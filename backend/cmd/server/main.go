@@ -69,8 +69,10 @@ func main() {
 	agentService := service.NewAgentService(store, agents)
 	knowledgeService := service.NewKnowledgeService(store)
 	manager := room.NewManager(store, agentService.ResolveForRoom)
-	runner := agent.NewRunner(llm.NewClientFromEnv(), store).WithKnowledge(knowledgeService)
-	roomService := service.NewRoomService(manager, agentService, knowledgeService, runner, store)
+	llmClient := llm.NewClientFromEnv()
+	runner := agent.NewRunner(llmClient, store).WithKnowledge(knowledgeService)
+	focusService := service.NewFocusService(llmClient)
+	roomService := service.NewRoomService(manager, agentService, knowledgeService, runner, focusService, store)
 	server := api.NewServer(roomService)
 
 	now := time.Now().UTC()

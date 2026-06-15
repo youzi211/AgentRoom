@@ -130,7 +130,7 @@ function AgentAdmin({ onBack }) {
           enabled: form.enabled,
         })
         setAgents((current) => current.map((agent) => (agent.id === updatedAgent.id ? updatedAgent : agent)))
-        setNotice('Agent 配置已保存。新建房间会使用最新配置，已存在房间的 Agent 快照不会改变。')
+        setNotice('Agent 配置已保存。新建房间会使用最新配置，已存在房间里的 Agent 快照不会自动改变。')
       }
     } catch (error) {
       setErrorMessage(error.message || (isCreating ? '创建 Agent 失败。' : '保存 Agent 配置失败。'))
@@ -173,19 +173,35 @@ function AgentAdmin({ onBack }) {
   }
 
   return (
-    <main className="app-shell app-shell--admin">
-      <header className="page-header">
+    <main className="workbench workbench--admin">
+      <header className="app-bar">
+        <div className="brand-lockup">
+          <span className="brand-mark">AR</span>
+          <div>
+            <strong>Agent 管理</strong>
+            <span>配置会议室里的预定义角色</span>
+          </div>
+        </div>
+        <nav className="app-nav" aria-label="管理导航">
+          <span className="app-nav-item app-nav-item--active">Agent 配置</span>
+          <button className="app-nav-item" type="button" onClick={onBack}>
+            会议入口
+          </button>
+        </nav>
+      </header>
+
+      <section className="admin-hero">
         <div>
-          <p className="eyebrow">Agent 管理</p>
-          <h1>配置会议室里的预定义角色</h1>
+          <p className="eyebrow">管理控制台</p>
+          <h1>管理 Agent、行为规则与专属知识库</h1>
           <p className="section-copy">
-            管理 Agent 的展示名称、职责说明、启用状态和系统提示词。停用后的 Agent 不会出现在新房间，也不会继续响应 @ 提及。
+            这里维护的是可被新会议选择的角色模板。停用后，该 Agent 不会出现在新房间的可选列表，也不会响应新的 @ 提及。
           </p>
         </div>
-        <button className="button button--secondary" type="button" onClick={onBack}>
-          返回会议入口
+        <button className="button button--primary" type="button" onClick={handleStartCreate} disabled={isSaving}>
+          新增 Agent
         </button>
-      </header>
+      </section>
 
       {errorMessage ? <p className="banner banner--error">{errorMessage}</p> : null}
       {notice ? <p className="banner banner--success">{notice}</p> : null}
@@ -219,56 +235,53 @@ function AgentAdmin({ onBack }) {
               <h2>Agent 列表</h2>
               <span className="panel-badge panel-badge--neutral">{agents.length}</span>
             </div>
-            <p className="panel-copy">选择一个 Agent 后，在右侧编辑它的会议职责和行为边界。</p>
+            <p className="panel-copy">选择一个 Agent 后，在右侧编辑它的职责、行为规则和知识库。</p>
           </div>
 
           {isLoading ? (
-            <p className="empty-state sidebar-empty">正在加载...</p>
+            <p className="sidebar-empty">正在加载...</p>
+          ) : agents.length === 0 ? (
+            <p className="sidebar-empty">暂无 Agent。点击右上角新增第一个角色。</p>
           ) : (
-            <>
-              <ul className="admin-agent-list">
-                {agents.map((agent) => (
-                  <li key={agent.id} className="admin-agent-list-item">
-                    <button
-                      className={`admin-agent-button${agent.id === selectedAgentId ? ' admin-agent-button--active' : ''}`}
-                      type="button"
-                      onClick={() => setSelectedAgentId(agent.id)}
-                    >
-                      <span className="admin-agent-name">{agent.name}</span>
-                      <span className={`agent-state ${agent.enabled === false ? 'agent-state--off' : ''}`}>
-                        {agent.enabled === false ? '停用' : '启用'}
-                      </span>
-                      <span className="admin-agent-role">{agent.role}</span>
-                    </button>
-                    <button
-                      className="agent-delete-button"
-                      type="button"
-                      title="删除此 Agent"
-                      onClick={() => handleDeleteRequest(agent)}
-                      disabled={isSaving}
-                    >
-                      ✕
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <div className="admin-agent-add">
-                <button className="button button--ghost" type="button" onClick={handleStartCreate} disabled={isSaving}>
-                  + 新增 Agent
-                </button>
-              </div>
-            </>
+            <ul className="admin-agent-list">
+              {agents.map((agent) => (
+                <li key={agent.id} className="admin-agent-list-item">
+                  <button
+                    className={`admin-agent-button${agent.id === selectedAgentId ? ' admin-agent-button--active' : ''}`}
+                    type="button"
+                    onClick={() => setSelectedAgentId(agent.id)}
+                  >
+                    <span className="admin-agent-name">{agent.name}</span>
+                    <span className={`agent-state ${agent.enabled === false ? 'agent-state--off' : ''}`}>
+                      {agent.enabled === false ? '停用' : '启用'}
+                    </span>
+                    <span className="admin-agent-role">{agent.role || '未设置角色标签'}</span>
+                  </button>
+                  <button
+                    className="agent-delete-button"
+                    type="button"
+                    title="删除此 Agent"
+                    onClick={() => handleDeleteRequest(agent)}
+                    disabled={isSaving}
+                  >
+                    删除
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </aside>
 
         <form className="panel admin-editor" onSubmit={handleSave}>
-          <div className="panel-header">
-            <div className="panel-title-row">
+          <div className="panel-header panel-header--horizontal">
+            <div>
               <h2>{isCreating ? '新增 Agent' : selectedAgent ? selectedAgent.name : '选择 Agent'}</h2>
+              <p className="panel-copy">名称会生成 @ 提及词；行为规则为空时，会保留后端当前提示词。</p>
+            </div>
+            <div className="panel-badge-group">
               {selectedAgent ? <span className="panel-badge">{selectedAgent.mention}</span> : null}
               {isCreating ? <span className="panel-badge">新建</span> : null}
             </div>
-            <p className="panel-copy">名称会自动生成新的 @ 提及词；系统提示词为空时，会保留后端当前提示词。</p>
           </div>
 
           <div className="toggle-row">

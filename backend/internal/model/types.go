@@ -14,6 +14,7 @@ const (
 	EventTypeParticipantJoined = "participant_joined"
 	EventTypeParticipantLeft   = "participant_left"
 	EventTypeError             = "error"
+	EventTypeFocusUpdate       = "focus_update"
 )
 
 const (
@@ -171,7 +172,15 @@ type ServerEvent struct {
 	Message       *Message      `json:"message,omitempty"`
 	Participant   *Participant  `json:"participant,omitempty"`
 	ParticipantID string        `json:"participantID,omitempty"`
+	FocusPoints   []FocusPoint  `json:"focusPoints,omitempty"`
 	Error         string        `json:"error,omitempty"`
+}
+
+type FocusPoint struct {
+	ID        string    `json:"id"`
+	Content   string    `json:"content"`
+	Timestamp time.Time `json:"timestamp"`
+	Category  string    `json:"category,omitempty"`
 }
 
 func (a Agent) Public() Agent {

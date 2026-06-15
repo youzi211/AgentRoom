@@ -1,8 +1,8 @@
 function NotFound({ onBackHome }) {
   return (
-    <main className="join-screen">
-      <section className="join-card join-card--narrow">
-        <div className="topbar">
+    <main className="workbench workbench--center">
+      <section className="panel direct-entry-panel">
+        <div className="panel-header panel-header--horizontal">
           <div>
             <p className="eyebrow">404</p>
             <h1>这个页面不存在</h1>

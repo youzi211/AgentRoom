@@ -17,9 +17,9 @@ function RoomEntry({ errorMessage, isSubmitting, roomId, onBackHome, onJoinRoom 
   }
 
   return (
-    <main className="join-screen">
-      <section className="join-card join-card--narrow">
-        <div className="topbar">
+    <main className="workbench workbench--center">
+      <section className="panel direct-entry-panel">
+        <div className="panel-header panel-header--horizontal">
           <div>
             <p className="eyebrow">加入会议室</p>
             <h1>输入名称后进入房间</h1>
@@ -32,7 +32,7 @@ function RoomEntry({ errorMessage, isSubmitting, roomId, onBackHome, onJoinRoom 
           </button>
         </div>
 
-        <form className="panel panel--form panel--accent room-entry-form" onSubmit={handleSubmit}>
+        <form className="form-stack room-entry-form" onSubmit={handleSubmit}>
           <div className="field-group">
             <label htmlFor="direct-room-id">房间 ID</label>
             <input id="direct-room-id" type="text" value={roomId} readOnly />
@@ -56,7 +56,7 @@ function RoomEntry({ errorMessage, isSubmitting, roomId, onBackHome, onJoinRoom 
           <div className="button-row">
             <span className="helper-text">加入后会加载房间已有消息。</span>
             <button className="button button--primary" type="submit" disabled={isSubmitting || !trimmedDisplayName}>
-              {isSubmitting ? '加入中...' : '进入会议室'}
+              {isSubmitting ? '正在加入...' : '进入会议室'}
             </button>
           </div>
         </form>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getAgents } from '../api/roomClient'
 
 function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOpenAgentAdmin }) {
@@ -13,12 +13,10 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
   const trimmedJoinDisplayName = joinDisplayName.trim()
   const trimmedRoomName = roomName.trim()
   const trimmedRoomId = roomId.trim()
-  const createHint = trimmedCreateDisplayName ? '创建成功后会自动进入会议室。' : '请输入显示名称后创建房间。'
-  const joinHint = !trimmedJoinDisplayName
-    ? '请输入显示名称后加入房间。'
-    : trimmedRoomId
-      ? '加入后会加载房间已有消息。'
-      : '请粘贴房间 ID 后加入房间。'
+  const selectedAgents = useMemo(
+    () => availableAgents.filter((agent) => selectedAgentIds.has(agent.id)),
+    [availableAgents, selectedAgentIds],
+  )
 
   useEffect(() => {
     let isCurrent = true
@@ -32,7 +30,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
         setAvailableAgents(enabledAgents)
         setSelectedAgentIds(new Set(enabledAgents.map((agent) => agent.id)))
       } catch {
-        // Agent list is optional; creation still works with all agents as fallback
+        // Agent 列表加载失败不阻塞人工会议入口。
       }
     }
     void loadAgents()
@@ -87,33 +85,54 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
   }
 
   return (
-    <main className="join-screen">
-      <section className="join-card">
-        <div className="topbar">
+    <main className="workbench workbench--entry">
+      <header className="app-bar">
+        <div className="brand-lockup">
+          <span className="brand-mark">AR</span>
           <div>
-            <p className="eyebrow">AgentRoom</p>
-            <h1>人与智能体协作的轻量会议工作台</h1>
-            <p className="section-copy">
-              创建一个文本会议室，让团队成员和预定义角色 Agent 在同一条上下文里协作。Agent 默认保持安静，被明确 @ 时才参与讨论。
-            </p>
+            <strong>AgentRoom</strong>
+            <span>人和 Agent 协作开会的工作台</span>
           </div>
-          <button className="button button--ghost" type="button" onClick={onOpenAgentAdmin}>
-            管理 Agent
-          </button>
         </div>
+        <nav className="app-nav" aria-label="主导航">
+          <span className="app-nav-item app-nav-item--active">会议入口</span>
+          <button className="app-nav-item" type="button" onClick={onOpenAgentAdmin}>
+            Agent 管理
+          </button>
+        </nav>
+      </header>
 
-        <div className="join-grid">
-          <form className="panel panel--form panel--accent" onSubmit={handleCreateRoom}>
-            <div className="panel-header">
-              <div className="panel-title-row">
-                <h2>创建房间</h2>
-                <span className="panel-badge">新会议</span>
-              </div>
-              <p className="panel-copy">输入你的显示名称即可创建房间，随后把房间 ID 发给其他参与者。</p>
+      <section className="entry-hero">
+        <div>
+          <p className="eyebrow">协作会议</p>
+          <h1>人与智能体协作的轻量会议工作台</h1>
+          <p className="section-copy">
+            创建房间、选择本次需要的 Agent，把会议文件交给它们参考。讨论时用 @ 提及角色，让每个 Agent 在合适的时刻参与。
+          </p>
+        </div>
+        <div className="entry-summary" aria-label="能力概览">
+          <span>{availableAgents.length} 个可用 Agent</span>
+          <span>Markdown 知识文件</span>
+          <span>实时会议</span>
+        </div>
+      </section>
+
+      {errorMessage ? <p className="banner banner--error">{errorMessage}</p> : null}
+
+      <div className="entry-grid">
+        <form className="panel panel--primary-flow" onSubmit={handleCreateRoom}>
+          <div className="panel-header panel-header--horizontal">
+            <div>
+              <p className="eyebrow eyebrow--subtle">推荐流程</p>
+              <h2>创建会议室</h2>
+              <p className="panel-copy">为新的讨论准备房间，并选择本次需要邀请的 Agent。</p>
             </div>
+            <span className="panel-badge">主路径</span>
+          </div>
 
+          <div className="form-stack">
             <div className="field-group">
-              <label htmlFor="create-display-name">显示名称</label>
+              <label htmlFor="create-display-name">你的显示名称</label>
               <input
                 id="create-display-name"
                 autoFocus
@@ -124,27 +143,30 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
                 disabled={isSubmitting}
                 maxLength={40}
               />
-              <p className="field-hint">这个名称会显示在会议消息和成员列表中。</p>
+              {!trimmedCreateDisplayName ? <p className="field-hint field-hint--warning">请输入名称后创建房间。</p> : null}
             </div>
 
             <div className="field-group">
-              <label htmlFor="room-name">房间名称</label>
+              <label htmlFor="room-name">会议名称</label>
               <input
                 id="room-name"
                 type="text"
                 value={roomName}
                 onChange={(event) => setRoomName(event.target.value)}
-                placeholder="例如：产品评审会"
+                placeholder="例如：需求评审会"
                 disabled={isSubmitting}
                 maxLength={60}
               />
-              <p className="field-hint">可选。留空时后端会自动生成默认房间名。</p>
+              <p className="field-hint">留空时会使用默认会议名称。</p>
             </div>
 
             {availableAgents.length > 0 ? (
-              <div className="field-group">
-                <div className="agent-select-header">
-                  <label>参会 Agent</label>
+              <div className="agent-picker">
+                <div className="agent-picker-header">
+                  <div>
+                    <label>选择本次 Agent</label>
+                    <p>{selectedAgentIds.size === 0 ? '本次会议不邀请 Agent' : `已选择 ${selectedAgentIds.size}/${availableAgents.length} 个 Agent`}</p>
+                  </div>
                   <div className="agent-select-actions">
                     <button className="button button--ghost button--compact" type="button" onClick={handleSelectAll} disabled={isSubmitting}>
                       全选
@@ -154,57 +176,69 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
                     </button>
                   </div>
                 </div>
-                <div className="agent-checkbox-grid">
-                  {availableAgents.map((agent) => (
-                    <label key={agent.id} className="agent-checkbox-item">
-                      <input
-                        type="checkbox"
-                        checked={selectedAgentIds.has(agent.id)}
-                        onChange={() => handleAgentToggle(agent.id)}
-                        disabled={isSubmitting}
-                      />
-                      <span className="agent-checkbox-name">{agent.name}</span>
-                      <span className="agent-checkbox-role">{agent.role}</span>
-                    </label>
-                  ))}
+                <div className="agent-chip-grid">
+                  {availableAgents.map((agent) => {
+                    const checked = selectedAgentIds.has(agent.id)
+                    return (
+                      <label key={agent.id} className={`agent-chip${checked ? ' agent-chip--selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => handleAgentToggle(agent.id)}
+                          disabled={isSubmitting}
+                        />
+                        <span className="agent-chip-avatar">{agent.name.charAt(0).toUpperCase()}</span>
+                        <span>
+                          <strong>{agent.name}</strong>
+                          <small>{agent.role}</small>
+                        </span>
+                      </label>
+                    )
+                  })}
                 </div>
-                <p className="field-hint">
-                  {selectedAgentIds.size === 0
-                    ? '未选择 Agent，本次会议将只包含人类成员。'
-                    : `已选 ${selectedAgentIds.size} 个 Agent 加入房间。`}
-                </p>
               </div>
             ) : null}
+          </div>
 
-            <div className="button-row button-row--stack-end">
-              <span className={`helper-text${trimmedCreateDisplayName ? '' : ' helper-text--attention'}`}>{createHint}</span>
-              <button className="button button--primary" type="submit" disabled={isSubmitting || !trimmedCreateDisplayName}>
-                {isSubmitting ? '创建中...' : '创建房间'}
-              </button>
+          <div className="selected-agent-strip" aria-label="已选择 Agent">
+            {selectedAgents.length === 0 ? (
+              <span>未选择 Agent</span>
+            ) : (
+              selectedAgents.slice(0, 4).map((agent) => <span key={agent.id}>{agent.name}</span>)
+            )}
+            {selectedAgents.length > 4 ? <span>+{selectedAgents.length - 4}</span> : null}
+          </div>
+
+          <div className="button-row button-row--stack-end">
+            <span className="helper-text">创建后会自动进入会议室。</span>
+            <button className="button button--primary" type="submit" disabled={isSubmitting || !trimmedCreateDisplayName}>
+              {isSubmitting ? '正在创建...' : '创建房间'}
+            </button>
+          </div>
+        </form>
+
+        <form className="panel panel--secondary-flow" onSubmit={handleJoinRoom}>
+          <div className="panel-header panel-header--horizontal">
+            <div>
+              <p className="eyebrow eyebrow--subtle">已有房间</p>
+              <h2>加入会议室</h2>
+              <p className="panel-copy">输入房间 ID，以参会者身份进入已有讨论。</p>
             </div>
-          </form>
+            <span className="panel-badge panel-badge--neutral">快捷加入</span>
+          </div>
 
-          <form className="panel panel--form" onSubmit={handleJoinRoom}>
-            <div className="panel-header">
-              <div className="panel-title-row">
-                <h2>加入房间</h2>
-                <span className="panel-badge panel-badge--neutral">继续讨论</span>
-              </div>
-              <p className="panel-copy">粘贴已有房间 ID，使用你的显示名称加入实时会议。</p>
-            </div>
-
+          <div className="form-stack">
             <div className="field-group">
-              <label htmlFor="join-display-name">显示名称</label>
+              <label htmlFor="join-display-name">你的显示名称</label>
               <input
                 id="join-display-name"
                 type="text"
                 value={joinDisplayName}
                 onChange={(event) => setJoinDisplayName(event.target.value)}
-                placeholder="例如：小红"
+                placeholder="例如：小明"
                 disabled={isSubmitting}
                 maxLength={40}
               />
-              <p className="field-hint">建议使用团队成员容易识别的名称。</p>
             </div>
 
             <div className="field-group">
@@ -218,24 +252,24 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
                 disabled={isSubmitting}
                 maxLength={80}
               />
-              <p className="field-hint">房间 ID 区分大小写，请完整粘贴。</p>
+              <p className="field-hint">房间 ID 可从会议室右上角复制。</p>
             </div>
+          </div>
 
-            <div className="button-row button-row--stack-end">
-              <span className={`helper-text${trimmedJoinDisplayName && trimmedRoomId ? '' : ' helper-text--attention'}`}>{joinHint}</span>
-              <button
-                className="button button--secondary"
-                type="submit"
-                disabled={isSubmitting || !trimmedJoinDisplayName || !trimmedRoomId}
-              >
-                {isSubmitting ? '加入中...' : '加入房间'}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {errorMessage ? <p className="banner banner--error">{errorMessage}</p> : null}
-      </section>
+          <div className="button-row button-row--stack-end">
+            <span className={`helper-text${trimmedJoinDisplayName && trimmedRoomId ? '' : ' helper-text--attention'}`}>
+              {!trimmedJoinDisplayName ? '请先输入显示名称。' : trimmedRoomId ? '准备加入已有房间。' : '请输入房间 ID。'}
+            </span>
+            <button
+              className="button button--secondary"
+              type="submit"
+              disabled={isSubmitting || !trimmedJoinDisplayName || !trimmedRoomId}
+            >
+              {isSubmitting ? '正在加入...' : '加入房间'}
+            </button>
+          </div>
+        </form>
+      </div>
     </main>
   )
 }

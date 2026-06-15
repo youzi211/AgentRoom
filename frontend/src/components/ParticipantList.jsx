@@ -7,7 +7,7 @@ function ParticipantList({ participants }) {
       </div>
 
       {participants.length === 0 ? (
-        <p className="empty-state sidebar-empty">暂无成员在线。</p>
+        <p className="sidebar-empty">暂无成员在线</p>
       ) : (
         <ul className="sidebar-list">
           {participants.map((participant) => (

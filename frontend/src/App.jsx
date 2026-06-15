@@ -45,7 +45,7 @@ export default function App() {
     } catch (error) {
       setSubmitState({
         isSubmitting: false,
-        errorMessage: error.message || '创建房间失败。',
+        errorMessage: error.message || '创建房间失败，请稍后重试。',
       })
     }
   }
