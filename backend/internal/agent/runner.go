@@ -63,6 +63,12 @@ func (r *Runner) HandleHumanMessage(ctx context.Context, currentRoom RuntimeRoom
 		}
 	}()
 
+	policy := currentRoom.Info().DialoguePolicy.WithDefaults()
+	if policy.IsGuided() {
+		r.handleGuidedDialogue(ctx, currentRoom, message, policy)
+		return
+	}
+
 	// Use public agents for mention detection (only need Mention field)
 	mentioned := MentionedAgents(message, currentRoom.Agents())
 	if len(mentioned) == 0 {

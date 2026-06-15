@@ -48,8 +48,8 @@ func (s *RoomService) Ping(ctx context.Context) error {
 	return s.store.Ping(ctx)
 }
 
-func (s *RoomService) CreateRoom(ctx context.Context, name string, agentIDs []string, passcode string) (*room.Room, error) {
-	return s.manager.CreateRoom(ctx, name, agentIDs, HashRoomPasscode(passcode))
+func (s *RoomService) CreateRoom(ctx context.Context, name string, agentIDs []string, passcode string, dialoguePolicy model.DialoguePolicy) (*room.Room, error) {
+	return s.manager.CreateRoom(ctx, name, agentIDs, HashRoomPasscode(passcode), dialoguePolicy)
 }
 
 func (s *RoomService) GetRoom(ctx context.Context, roomID string) (*room.Room, bool) {

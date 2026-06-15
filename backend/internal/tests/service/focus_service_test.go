@@ -1,4 +1,4 @@
-package service
+package service_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"agentroom/backend/internal/llm"
 	"agentroom/backend/internal/model"
+	"agentroom/backend/internal/service"
 )
 
 type jsonAwareLLM struct {
@@ -32,12 +33,12 @@ func TestFocusServicePrefersStructuredJSONCompletionWhenAvailable(t *testing.T) 
 		textResponse: "this should not be used",
 		jsonResponse: `[{"content":"排期风险","category":"风险"}]`,
 	}
-	service := NewFocusService(client)
+	focusService := service.NewFocusService(client)
 	now := time.Now().UTC()
 
 	var got []model.FocusPoint
 	for i := 0; i < 3; i++ {
-		got = service.AddMessage(context.Background(), "room-1", model.Message{
+		got = focusService.AddMessage(context.Background(), "room-1", model.Message{
 			ID:         "msg",
 			RoomID:     "room-1",
 			SenderID:   "human-1",

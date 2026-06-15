@@ -70,6 +70,7 @@ func (s *MySQLStore) Migrate(ctx context.Context) error {
 		&ParticipantModel{},
 		&MessageModel{},
 		&AgentRunModel{},
+		&DialogueRunModel{},
 		&KnowledgeDocumentModel{},
 		&KnowledgeChunkModel{},
 		&SchemaMigrationModel{},
@@ -180,13 +181,21 @@ func (s *MySQLStore) CreateRoom(ctx context.Context, input store.CreateRoomInput
 	}
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		policy := input.DialoguePolicy.WithDefaults()
 		roomRecord := RoomModel{
-			ID:           input.ID,
-			Name:         input.Name,
-			Status:       "active",
-			PasscodeHash: input.PasscodeHash,
-			CreatedAt:    now,
-			UpdatedAt:    now,
+			ID:                        input.ID,
+			Name:                      input.Name,
+			Status:                    "active",
+			PasscodeHash:              input.PasscodeHash,
+			DialogueMode:              policy.Mode,
+			MaxAutonomousTurns:        policy.MaxAutonomousTurns,
+			MaxTurnsPerAgent:          policy.MaxTurnsPerAgent,
+			AllowSelfFollowup:         policy.AllowSelfFollowup,
+			AllowAgentToAgentMentions: policy.AllowAgentToAgentMentions,
+			ResponseStrategy:          policy.ResponseStrategy,
+			CooldownMS:                policy.CooldownMS,
+			CreatedAt:                 now,
+			UpdatedAt:                 now,
 		}
 		if err := tx.Create(&roomRecord).Error; err != nil {
 			return fmt.Errorf("insert room: %w", err)
@@ -206,11 +215,12 @@ func (s *MySQLStore) CreateRoom(ctx context.Context, input store.CreateRoomInput
 	}
 
 	meta := model.RoomMeta{
-		ID:           input.ID,
-		Name:         input.Name,
-		CreatedAt:    now,
-		HasPasscode:  input.PasscodeHash != "",
-		PasscodeHash: input.PasscodeHash,
+		ID:             input.ID,
+		Name:           input.Name,
+		CreatedAt:      now,
+		HasPasscode:    input.PasscodeHash != "",
+		PasscodeHash:   input.PasscodeHash,
+		DialoguePolicy: input.DialoguePolicy.WithDefaults(),
 	}
 	return meta, input.Agents, nil
 }
@@ -365,6 +375,33 @@ func (s *MySQLStore) FinishAgentRun(ctx context.Context, runID string, status st
 	}
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("agent run %s not found", runID)
+	}
+	return nil
+}
+
+func (s *MySQLStore) CreateDialogueRun(ctx context.Context, run store.DialogueRun) error {
+	m := dialogueRunToModel(run)
+	if err := s.db.WithContext(ctx).Create(&m).Error; err != nil {
+		return fmt.Errorf("insert dialogue run: %w", err)
+	}
+	return nil
+}
+
+func (s *MySQLStore) FinishDialogueRun(ctx context.Context, runID string, status string, turnCount int, completedAt time.Time) error {
+	updates := map[string]interface{}{
+		"status":       status,
+		"turn_count":   turnCount,
+		"completed_at": completedAt,
+	}
+	result := s.db.WithContext(ctx).
+		Model(&DialogueRunModel{}).
+		Where("id = ?", runID).
+		Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("finish dialogue run: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("dialogue run %s not found", runID)
 	}
 	return nil
 }

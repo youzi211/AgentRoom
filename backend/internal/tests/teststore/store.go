@@ -53,11 +53,12 @@ func (s *Store) CreateRoom(_ context.Context, input store.CreateRoomInput) (mode
 		s.Rooms = make(map[string]model.RoomMeta)
 	}
 	meta := model.RoomMeta{
-		ID:           input.ID,
-		Name:         input.Name,
-		CreatedAt:    input.CreatedAt,
-		HasPasscode:  input.PasscodeHash != "",
-		PasscodeHash: input.PasscodeHash,
+		ID:             input.ID,
+		Name:           input.Name,
+		CreatedAt:      input.CreatedAt,
+		HasPasscode:    input.PasscodeHash != "",
+		PasscodeHash:   input.PasscodeHash,
+		DialoguePolicy: input.DialoguePolicy.WithDefaults(),
 	}
 	s.Rooms[input.ID] = meta
 	return meta, input.Agents, nil
@@ -88,6 +89,10 @@ func (s *Store) ListMessages(context.Context, store.ListMessagesQuery) ([]model.
 }
 func (s *Store) CreateAgentRun(context.Context, store.AgentRun) error { return nil }
 func (s *Store) FinishAgentRun(context.Context, string, string, string, time.Time) error {
+	return nil
+}
+func (s *Store) CreateDialogueRun(context.Context, store.DialogueRun) error { return nil }
+func (s *Store) FinishDialogueRun(context.Context, string, string, int, time.Time) error {
 	return nil
 }
 func (s *Store) CreateKnowledgeDocument(_ context.Context, document model.KnowledgeDocument, chunks []model.KnowledgeChunk) (model.KnowledgeDocument, error) {

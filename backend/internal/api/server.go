@@ -258,7 +258,12 @@ func (s *Server) handleCreateRoom(c *gin.Context) {
 		return
 	}
 
-	currentRoom, err := s.rooms.CreateRoom(c.Request.Context(), request.Name, request.AgentIDs, request.Passcode)
+	dialoguePolicy := model.DefaultDialoguePolicy()
+	if request.DialoguePolicy != nil {
+		dialoguePolicy = request.DialoguePolicy.WithDefaults()
+	}
+
+	currentRoom, err := s.rooms.CreateRoom(c.Request.Context(), request.Name, request.AgentIDs, request.Passcode, dialoguePolicy)
 	if err != nil {
 		s.logger.Error("create room", "room_name", request.Name, "error", err)
 		writeError(c, http.StatusInternalServerError, "failed to create room")

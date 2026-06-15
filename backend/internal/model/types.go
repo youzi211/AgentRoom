@@ -34,11 +34,12 @@ type Room struct {
 }
 
 type RoomMeta struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	CreatedAt    time.Time `json:"createdAt"`
-	HasPasscode  bool      `json:"hasPasscode"`
-	PasscodeHash string    `json:"-"`
+	ID             string         `json:"id"`
+	Name           string         `json:"name"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	HasPasscode    bool           `json:"hasPasscode"`
+	PasscodeHash   string         `json:"-"`
+	DialoguePolicy DialoguePolicy `json:"dialoguePolicy"`
 }
 
 type RoomState struct {
@@ -112,13 +113,16 @@ type CreateAgentRequest struct {
 }
 
 type Message struct {
-	ID         string    `json:"id"`
-	RoomID     string    `json:"roomID"`
-	SenderID   string    `json:"senderID"`
-	SenderName string    `json:"senderName"`
-	SenderType string    `json:"senderType"`
-	Content    string    `json:"content"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID              string    `json:"id"`
+	RoomID          string    `json:"roomID"`
+	SenderID        string    `json:"senderID"`
+	SenderName      string    `json:"senderName"`
+	SenderType      string    `json:"senderType"`
+	Content         string    `json:"content"`
+	CreatedAt       time.Time `json:"createdAt"`
+	DialogueRunID   string    `json:"dialogueRunID,omitempty"`
+	TurnIndex       int       `json:"turnIndex,omitempty"`
+	ParentMessageID string    `json:"parentMessageID,omitempty"`
 }
 
 type HealthResponse struct {
@@ -138,9 +142,10 @@ type UploadKnowledgeResponse struct {
 }
 
 type CreateRoomRequest struct {
-	Name     string   `json:"name"`
-	AgentIDs []string `json:"agentIds"`
-	Passcode string   `json:"passcode"`
+	Name           string          `json:"name"`
+	AgentIDs       []string        `json:"agentIds"`
+	Passcode       string          `json:"passcode"`
+	DialoguePolicy *DialoguePolicy `json:"dialoguePolicy,omitempty"`
 }
 
 type CreateRoomResponse struct {

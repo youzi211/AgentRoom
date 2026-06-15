@@ -29,13 +29,20 @@ func (AgentModel) TableName() string { return "agents" }
 
 // RoomModel maps to the `rooms` table.
 type RoomModel struct {
-	ID           string     `gorm:"primaryKey;size:64"`
-	Name         string     `gorm:"size:255;not null"`
-	Status       string     `gorm:"size:32;not null;default:'active'"`
-	PasscodeHash string     `gorm:"column:passcode_hash;size:128;not null;default:''"`
-	CreatedAt    time.Time  `gorm:"not null;index:idx_rooms_created_at"`
-	UpdatedAt    time.Time  `gorm:"not null"`
-	ArchivedAt   *time.Time `gorm:""`
+	ID                        string     `gorm:"primaryKey;size:64"`
+	Name                      string     `gorm:"size:255;not null"`
+	Status                    string     `gorm:"size:32;not null;default:'active'"`
+	PasscodeHash              string     `gorm:"column:passcode_hash;size:128;not null;default:''"`
+	DialogueMode              string     `gorm:"column:dialogue_mode;size:32;not null;default:'mention_fanout'"`
+	MaxAutonomousTurns        int        `gorm:"column:max_autonomous_turns;not null;default:3"`
+	MaxTurnsPerAgent          int        `gorm:"column:max_turns_per_agent;not null;default:1"`
+	AllowSelfFollowup         bool       `gorm:"column:allow_self_followup;not null;default:false"`
+	AllowAgentToAgentMentions bool       `gorm:"column:allow_agent_to_agent_mentions;not null;default:true"`
+	ResponseStrategy          string     `gorm:"column:response_strategy;size:32;not null;default:'mentioned_first'"`
+	CooldownMS                int        `gorm:"column:cooldown_ms;not null;default:0"`
+	CreatedAt                 time.Time  `gorm:"not null;index:idx_rooms_created_at"`
+	UpdatedAt                 time.Time  `gorm:"not null"`
+	ArchivedAt                *time.Time `gorm:""`
 }
 
 func (RoomModel) TableName() string { return "rooms" }
@@ -71,16 +78,32 @@ func (ParticipantModel) TableName() string { return "participants" }
 
 // MessageModel maps to the `messages` table.
 type MessageModel struct {
-	ID         string    `gorm:"primaryKey;size:64;index:idx_messages_room_created"`
-	RoomID     string    `gorm:"size:64;not null;index:idx_messages_room_created"`
-	SenderID   string    `gorm:"size:64;not null"`
-	SenderName string    `gorm:"size:128;not null"`
-	SenderType string    `gorm:"size:32;not null"`
-	Content    string    `gorm:"type:text;not null"`
-	CreatedAt  time.Time `gorm:"not null;index:idx_messages_room_created"`
+	ID              string    `gorm:"primaryKey;size:64;index:idx_messages_room_created"`
+	RoomID          string    `gorm:"size:64;not null;index:idx_messages_room_created"`
+	SenderID        string    `gorm:"size:64;not null"`
+	SenderName      string    `gorm:"size:128;not null"`
+	SenderType      string    `gorm:"size:32;not null"`
+	Content         string    `gorm:"type:text;not null"`
+	DialogueRunID   string    `gorm:"column:dialogue_run_id;size:64;index:idx_messages_dialogue_run"`
+	TurnIndex       int       `gorm:"column:turn_index;not null;default:0"`
+	ParentMessageID string    `gorm:"column:parent_message_id;size:64"`
+	CreatedAt       time.Time `gorm:"not null;index:idx_messages_room_created"`
 }
 
 func (MessageModel) TableName() string { return "messages" }
+
+type DialogueRunModel struct {
+	ID               string     `gorm:"primaryKey;size:64"`
+	RoomID           string     `gorm:"size:64;not null;index:idx_dialogue_runs_room"`
+	TriggerMessageID string     `gorm:"size:64;not null;index:idx_dialogue_runs_trigger"`
+	Mode             string     `gorm:"size:32;not null"`
+	TurnCount        int        `gorm:"column:turn_count;not null;default:0"`
+	Status           string     `gorm:"size:32;not null"`
+	StartedAt        time.Time  `gorm:"not null"`
+	CompletedAt      *time.Time `gorm:""`
+}
+
+func (DialogueRunModel) TableName() string { return "dialogue_runs" }
 
 // AgentRunModel maps to the `agent_runs` table.
 type AgentRunModel struct {
@@ -176,13 +199,16 @@ func participantToModel(input store.AddParticipantInput) ParticipantModel {
 
 func messageToModel(msg model.Message) MessageModel {
 	return MessageModel{
-		ID:         msg.ID,
-		RoomID:     msg.RoomID,
-		SenderID:   msg.SenderID,
-		SenderName: msg.SenderName,
-		SenderType: msg.SenderType,
-		Content:    msg.Content,
-		CreatedAt:  msg.CreatedAt,
+		ID:              msg.ID,
+		RoomID:          msg.RoomID,
+		SenderID:        msg.SenderID,
+		SenderName:      msg.SenderName,
+		SenderType:      msg.SenderType,
+		Content:         msg.Content,
+		DialogueRunID:   msg.DialogueRunID,
+		TurnIndex:       msg.TurnIndex,
+		ParentMessageID: msg.ParentMessageID,
+		CreatedAt:       msg.CreatedAt,
 	}
 }
 
@@ -197,6 +223,22 @@ func agentRunToModel(run store.AgentRun) AgentRunModel {
 	}
 	if run.Error != "" {
 		m.Error = strPtr(run.Error)
+	}
+	if run.CompletedAt != nil {
+		m.CompletedAt = run.CompletedAt
+	}
+	return m
+}
+
+func dialogueRunToModel(run store.DialogueRun) DialogueRunModel {
+	m := DialogueRunModel{
+		ID:               run.ID,
+		RoomID:           run.RoomID,
+		TriggerMessageID: run.TriggerMessageID,
+		Mode:             run.Mode,
+		TurnCount:        run.TurnCount,
+		Status:           run.Status,
+		StartedAt:        run.StartedAt,
 	}
 	if run.CompletedAt != nil {
 		m.CompletedAt = run.CompletedAt
@@ -265,13 +307,16 @@ func (m ParticipantModel) toDomain() model.Participant {
 
 func (m MessageModel) toDomain() model.Message {
 	return model.Message{
-		ID:         m.ID,
-		RoomID:     m.RoomID,
-		SenderID:   m.SenderID,
-		SenderName: m.SenderName,
-		SenderType: m.SenderType,
-		Content:    m.Content,
-		CreatedAt:  m.CreatedAt,
+		ID:              m.ID,
+		RoomID:          m.RoomID,
+		SenderID:        m.SenderID,
+		SenderName:      m.SenderName,
+		SenderType:      m.SenderType,
+		Content:         m.Content,
+		DialogueRunID:   m.DialogueRunID,
+		TurnIndex:       m.TurnIndex,
+		ParentMessageID: m.ParentMessageID,
+		CreatedAt:       m.CreatedAt,
 	}
 }
 
@@ -282,6 +327,15 @@ func (m RoomModel) toDomain() model.RoomMeta {
 		CreatedAt:    m.CreatedAt,
 		HasPasscode:  m.PasscodeHash != "",
 		PasscodeHash: m.PasscodeHash,
+		DialoguePolicy: model.DialoguePolicy{
+			Mode:                      m.DialogueMode,
+			MaxAutonomousTurns:        m.MaxAutonomousTurns,
+			MaxTurnsPerAgent:          m.MaxTurnsPerAgent,
+			AllowSelfFollowup:         m.AllowSelfFollowup,
+			AllowAgentToAgentMentions: m.AllowAgentToAgentMentions,
+			ResponseStrategy:          m.ResponseStrategy,
+			CooldownMS:                m.CooldownMS,
+		}.WithDefaults(),
 	}
 }
 

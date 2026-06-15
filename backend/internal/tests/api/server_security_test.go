@@ -13,6 +13,7 @@ import (
 	"agentroom/backend/internal/agent"
 	"agentroom/backend/internal/api"
 	"agentroom/backend/internal/llm"
+	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/service"
 	"agentroom/backend/internal/tests/teststore"
@@ -239,6 +240,65 @@ func TestOpenRoomAccessDoesNotRequirePasscode(t *testing.T) {
 	server.Routes().ServeHTTP(messagesResponse, messagesRequest)
 	if messagesResponse.Code != http.StatusOK {
 		t.Fatalf("expected open room messages without passcode to return 200, got %d body=%s", messagesResponse.Code, messagesResponse.Body.String())
+	}
+}
+
+func TestCreateRoomPersistsDialoguePolicy(t *testing.T) {
+	server := newTestServer(t, api.Config{})
+
+	createBody := bytes.NewBufferString(`{
+		"name":"Guided room",
+		"dialoguePolicy":{
+			"mode":"guided_dialogue",
+			"maxAutonomousTurns":4,
+			"maxTurnsPerAgent":2,
+			"allowSelfFollowup":false,
+			"allowAgentToAgentMentions":true,
+			"responseStrategy":"mentioned_first",
+			"cooldownMs":25
+		}
+	}`)
+	createRequest := httptest.NewRequest(http.MethodPost, "/api/rooms", createBody)
+	createRequest.Header.Set("Content-Type", "application/json")
+	createResponse := httptest.NewRecorder()
+	server.Routes().ServeHTTP(createResponse, createRequest)
+	if createResponse.Code != http.StatusCreated {
+		t.Fatalf("create room failed: %d body=%s", createResponse.Code, createResponse.Body.String())
+	}
+
+	var created struct {
+		Room struct {
+			ID             string               `json:"id"`
+			DialoguePolicy model.DialoguePolicy `json:"dialoguePolicy"`
+		} `json:"room"`
+	}
+	if err := json.Unmarshal(createResponse.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.Room.DialoguePolicy.Mode != model.DialogueModeGuided {
+		t.Fatalf("expected created room to return guided dialogue mode, got %#v", created.Room.DialoguePolicy)
+	}
+	if created.Room.DialoguePolicy.MaxAutonomousTurns != 4 || created.Room.DialoguePolicy.CooldownMS != 25 {
+		t.Fatalf("expected custom dialogue policy values to round-trip, got %#v", created.Room.DialoguePolicy)
+	}
+
+	getRequest := httptest.NewRequest(http.MethodGet, "/api/rooms/"+created.Room.ID, nil)
+	getResponse := httptest.NewRecorder()
+	server.Routes().ServeHTTP(getResponse, getRequest)
+	if getResponse.Code != http.StatusOK {
+		t.Fatalf("get room failed: %d body=%s", getResponse.Code, getResponse.Body.String())
+	}
+
+	var fetched struct {
+		Room struct {
+			DialoguePolicy model.DialoguePolicy `json:"dialoguePolicy"`
+		} `json:"room"`
+	}
+	if err := json.Unmarshal(getResponse.Body.Bytes(), &fetched); err != nil {
+		t.Fatalf("decode get response: %v", err)
+	}
+	if fetched.Room.DialoguePolicy.Mode != model.DialogueModeGuided {
+		t.Fatalf("expected stored room to keep guided dialogue policy, got %#v", fetched.Room.DialoguePolicy)
 	}
 }
 

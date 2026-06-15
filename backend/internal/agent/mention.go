@@ -3,6 +3,7 @@ package agent
 import (
 	"sort"
 	"strings"
+	"unicode"
 
 	"agentroom/backend/internal/model"
 )
@@ -21,14 +22,19 @@ func MentionedAgents(message model.Message, agents []model.Agent) []model.Agent 
 }
 
 func DetectMentions(content string, agents []model.Agent) []model.Agent {
-	text := strings.TrimSpace(content)
+	text := normalizeMentionSearchText(content)
 	if text == "" {
 		return nil
 	}
 
 	matches := make([]mentionMatch, 0)
 	for order, candidate := range agents {
-		idx := strings.Index(text, candidate.Mention)
+		mention := normalizeMentionSearchText(candidate.Mention)
+		if mention == "" {
+			continue
+		}
+
+		idx := strings.Index(text, mention)
 		if idx == -1 {
 			continue
 		}
@@ -57,4 +63,38 @@ func DetectMentions(content string, agents []model.Agent) []model.Agent {
 	}
 
 	return result
+}
+
+func normalizeMentionSearchText(value string) string {
+	text := strings.TrimSpace(value)
+	if text == "" {
+		return ""
+	}
+
+	var builder strings.Builder
+	builder.Grow(len(text))
+
+	previousWasSpace := false
+	justSawAt := false
+
+	for _, r := range text {
+		switch {
+		case r == '@' || r == '＠':
+			builder.WriteRune('@')
+			previousWasSpace = false
+			justSawAt = true
+		case unicode.IsSpace(r):
+			if justSawAt || previousWasSpace {
+				continue
+			}
+			builder.WriteRune(' ')
+			previousWasSpace = true
+		default:
+			builder.WriteRune(unicode.ToLower(r))
+			previousWasSpace = false
+			justSawAt = false
+		}
+	}
+
+	return strings.TrimSpace(builder.String())
 }

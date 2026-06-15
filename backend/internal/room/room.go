@@ -10,16 +10,17 @@ import (
 )
 
 type Room struct {
-	mu           sync.RWMutex
-	id           string
-	name         string
-	createdAt    time.Time
-	passcodeHash string
-	participants map[string]*model.Participant
-	agents       map[string]*model.Agent
-	agentOrder   []string
-	messages     []model.Message
-	hub          *Hub
+	mu             sync.RWMutex
+	id             string
+	name           string
+	createdAt      time.Time
+	passcodeHash   string
+	dialoguePolicy model.DialoguePolicy
+	participants   map[string]*model.Participant
+	agents         map[string]*model.Agent
+	agentOrder     []string
+	messages       []model.Message
+	hub            *Hub
 }
 
 // New creates a brand-new room from scratch (used for new room creation).
@@ -34,14 +35,15 @@ func New(id string, name string, agents []model.Agent) *Room {
 	}
 
 	return &Room{
-		id:           id,
-		name:         normalizeRoomName(name, id),
-		createdAt:    createdAt,
-		participants: make(map[string]*model.Participant),
-		agents:       agentMap,
-		agentOrder:   agentOrder,
-		messages:     make([]model.Message, 0),
-		hub:          NewHub(),
+		id:             id,
+		name:           normalizeRoomName(name, id),
+		createdAt:      createdAt,
+		dialoguePolicy: model.DefaultDialoguePolicy(),
+		participants:   make(map[string]*model.Participant),
+		agents:         agentMap,
+		agentOrder:     agentOrder,
+		messages:       make([]model.Message, 0),
+		hub:            NewHub(),
 	}
 }
 
@@ -57,15 +59,16 @@ func NewFromState(meta model.RoomMeta, agents []model.Agent) *Room {
 	}
 
 	return &Room{
-		id:           meta.ID,
-		name:         meta.Name,
-		createdAt:    meta.CreatedAt,
-		passcodeHash: meta.PasscodeHash,
-		participants: make(map[string]*model.Participant),
-		agents:       agentMap,
-		agentOrder:   agentOrder,
-		messages:     make([]model.Message, 0),
-		hub:          NewHub(),
+		id:             meta.ID,
+		name:           meta.Name,
+		createdAt:      meta.CreatedAt,
+		passcodeHash:   meta.PasscodeHash,
+		dialoguePolicy: meta.DialoguePolicy.WithDefaults(),
+		participants:   make(map[string]*model.Participant),
+		agents:         agentMap,
+		agentOrder:     agentOrder,
+		messages:       make([]model.Message, 0),
+		hub:            NewHub(),
 	}
 }
 
@@ -90,15 +93,16 @@ func NewFromSnapshot(meta model.RoomMeta, agents []model.Agent, messages []model
 	copy(msgCopy, messages)
 
 	return &Room{
-		id:           meta.ID,
-		name:         meta.Name,
-		createdAt:    meta.CreatedAt,
-		passcodeHash: meta.PasscodeHash,
-		participants: participantMap,
-		agents:       agentMap,
-		agentOrder:   agentOrder,
-		messages:     msgCopy,
-		hub:          NewHub(),
+		id:             meta.ID,
+		name:           meta.Name,
+		createdAt:      meta.CreatedAt,
+		passcodeHash:   meta.PasscodeHash,
+		dialoguePolicy: meta.DialoguePolicy.WithDefaults(),
+		participants:   participantMap,
+		agents:         agentMap,
+		agentOrder:     agentOrder,
+		messages:       msgCopy,
+		hub:            NewHub(),
 	}
 }
 
@@ -110,10 +114,11 @@ func (r *Room) Info() model.RoomMeta {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return model.RoomMeta{
-		ID:          r.id,
-		Name:        r.name,
-		CreatedAt:   r.createdAt,
-		HasPasscode: r.passcodeHash != "",
+		ID:             r.id,
+		Name:           r.name,
+		CreatedAt:      r.createdAt,
+		HasPasscode:    r.passcodeHash != "",
+		DialoguePolicy: r.dialoguePolicy.WithDefaults(),
 	}
 }
 
@@ -123,12 +128,18 @@ func (r *Room) PasscodeHash() string {
 	return r.passcodeHash
 }
 
+func (r *Room) SetDialoguePolicy(policy model.DialoguePolicy) {
+	r.mu.Lock()
+	r.dialoguePolicy = policy.WithDefaults()
+	r.mu.Unlock()
+}
+
 func (r *Room) Snapshot() model.RoomState {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	return model.RoomState{
-		Room:         model.RoomMeta{ID: r.id, Name: r.name, CreatedAt: r.createdAt, HasPasscode: r.passcodeHash != ""},
+		Room:         model.RoomMeta{ID: r.id, Name: r.name, CreatedAt: r.createdAt, HasPasscode: r.passcodeHash != "", DialoguePolicy: r.dialoguePolicy.WithDefaults()},
 		Participants: cloneParticipants(r.participants),
 		Agents:       cloneAgents(r.agents, r.agentOrder),
 		Messages:     cloneMessages(r.messages),

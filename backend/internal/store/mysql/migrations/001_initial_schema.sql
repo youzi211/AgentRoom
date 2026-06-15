@@ -19,6 +19,13 @@ CREATE TABLE rooms (
   name VARCHAR(255) NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'active',
   passcode_hash VARCHAR(128) NOT NULL DEFAULT '',
+  dialogue_mode VARCHAR(32) NOT NULL DEFAULT 'mention_fanout',
+  max_autonomous_turns INT NOT NULL DEFAULT 3,
+  max_turns_per_agent INT NOT NULL DEFAULT 1,
+  allow_self_followup BOOLEAN NOT NULL DEFAULT FALSE,
+  allow_agent_to_agent_mentions BOOLEAN NOT NULL DEFAULT TRUE,
+  response_strategy VARCHAR(32) NOT NULL DEFAULT 'mentioned_first',
+  cooldown_ms INT NOT NULL DEFAULT 0,
   created_at DATETIME(6) NOT NULL,
   updated_at DATETIME(6) NOT NULL,
   archived_at DATETIME(6) NULL,
@@ -61,8 +68,12 @@ CREATE TABLE messages (
   sender_name VARCHAR(128) NOT NULL,
   sender_type VARCHAR(32) NOT NULL,
   content TEXT NOT NULL,
+  dialogue_run_id VARCHAR(64) NULL,
+  turn_index INT NOT NULL DEFAULT 0,
+  parent_message_id VARCHAR(64) NULL,
   created_at DATETIME(6) NOT NULL,
   KEY idx_messages_room_created (room_id, created_at, id),
+  KEY idx_messages_dialogue_run (dialogue_run_id),
   CONSTRAINT fk_messages_room FOREIGN KEY (room_id) REFERENCES rooms(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -79,6 +90,21 @@ CREATE TABLE agent_runs (
   KEY idx_agent_runs_trigger (trigger_message_id),
   CONSTRAINT fk_agent_runs_room FOREIGN KEY (room_id) REFERENCES rooms(id),
   CONSTRAINT fk_agent_runs_trigger FOREIGN KEY (trigger_message_id) REFERENCES messages(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE dialogue_runs (
+  id VARCHAR(64) PRIMARY KEY,
+  room_id VARCHAR(64) NOT NULL,
+  trigger_message_id VARCHAR(64) NOT NULL,
+  mode VARCHAR(32) NOT NULL,
+  turn_count INT NOT NULL DEFAULT 0,
+  status VARCHAR(32) NOT NULL,
+  started_at DATETIME(6) NOT NULL,
+  completed_at DATETIME(6) NULL,
+  KEY idx_dialogue_runs_room (room_id),
+  KEY idx_dialogue_runs_trigger (trigger_message_id),
+  CONSTRAINT fk_dialogue_runs_room FOREIGN KEY (room_id) REFERENCES rooms(id),
+  CONSTRAINT fk_dialogue_runs_trigger FOREIGN KEY (trigger_message_id) REFERENCES messages(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE knowledge_documents (

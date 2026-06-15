@@ -2,6 +2,11 @@
 
 The backend is the Go service behind AgentRoom. It exposes the HTTP API, WebSocket room transport, MySQL persistence, Markdown knowledge upload, focus extraction, and OpenAI-compatible agent execution.
 
+Rooms support two dialogue modes:
+
+- `mention_fanout`: only directly mentioned agents reply, once each.
+- `guided_dialogue`: a bounded multi-turn exchange where mentioned agents reply first and may hand off to other agents through explicit mentions.
+
 The LLM integration layer is implemented with `langchaingo` and still uses the existing `LLM_*` environment variables, so OpenAI-compatible providers continue to work without changing the runtime configuration contract.
 
 ## Run Locally
@@ -77,6 +82,18 @@ Primary routes are exposed under `/api`:
 
 Legacy non-`/api` routes are still registered for compatibility.
 
+`POST /api/rooms` accepts an optional `dialoguePolicy` object. For example:
+
+```json
+{
+  "name": "Planning",
+  "agentIds": ["pm", "architect"],
+  "dialoguePolicy": {
+    "mode": "guided_dialogue"
+  }
+}
+```
+
 ## Persistence
 
 The backend persists:
@@ -85,6 +102,7 @@ The backend persists:
 - Room metadata and per-room agent snapshots.
 - Participants and message history.
 - Agent run records.
+- Dialogue run records plus per-message dialogue metadata (`dialogueRunID`, `turnIndex`, `parentMessageID`).
 - Markdown knowledge documents and chunks.
 
 Schema migrations live under `internal/store/mysql/migrations/` and run at startup when `DB_AUTO_MIGRATE=true`.

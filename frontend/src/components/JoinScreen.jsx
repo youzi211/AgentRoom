@@ -7,6 +7,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
   const [roomName, setRoomName] = useState('')
   const [roomId, setRoomId] = useState('')
   const [createPasscode, setCreatePasscode] = useState('')
+  const [dialogueMode, setDialogueMode] = useState('mention_fanout')
   const [joinPasscode, setJoinPasscode] = useState('')
   const [availableAgents, setAvailableAgents] = useState([])
   const [selectedAgentIds, setSelectedAgentIds] = useState(new Set())
@@ -74,6 +75,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
       roomName: trimmedRoomName,
       agentIds: Array.from(selectedAgentIds),
       passcode: trimmedCreatePasscode,
+      dialogueMode,
     })
   }
 
@@ -178,6 +180,20 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
                 maxLength={80}
               />
               <p className="field-hint">如果留空，这个房间不需要口令。</p>
+            </div>
+
+            <div className="field-group">
+              <label htmlFor="dialogue-mode">Agent 对话模式</label>
+              <select
+                id="dialogue-mode"
+                value={dialogueMode}
+                onChange={(event) => setDialogueMode(event.target.value)}
+                disabled={isSubmitting}
+              >
+                <option value="mention_fanout">点名单轮</option>
+                <option value="guided_dialogue">引导多轮</option>
+              </select>
+              <p className="field-hint">点名单轮只让被 @ 的 Agent 各回复一次；引导多轮允许受限的 Agent 接力讨论。</p>
             </div>
 
             {availableAgents.length > 0 ? (

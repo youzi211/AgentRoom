@@ -3,7 +3,7 @@ const JSON_HEADERS = {
 }
 
 const API_BASE_PATH = '/api'
-const ADMIN_API_KEY = (import.meta.env.VITE_ADMIN_API_KEY || '').trim()
+const ADMIN_API_KEY = (import.meta.env?.VITE_ADMIN_API_KEY || '').trim()
 
 async function parseResponse(response) {
   let payload = null
@@ -42,14 +42,24 @@ function withAdminKey(headers = {}) {
   }
 }
 
-export async function createRoom(name, agentIds, passcode = '') {
+export async function createRoom(name, agentIds, passcode = '', dialogueMode = 'mention_fanout') {
   const response = await fetch(`${API_BASE_PATH}/rooms`, {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ name, agentIds, passcode }),
+    body: JSON.stringify(buildCreateRoomPayload(name, agentIds, passcode, dialogueMode)),
   })
 
   return parseResponse(response)
+}
+
+export function buildCreateRoomPayload(name, agentIds, passcode = '', dialogueMode = 'mention_fanout') {
+  const payload = { name, agentIds, passcode }
+  if (dialogueMode === 'guided_dialogue') {
+    payload.dialoguePolicy = {
+      mode: dialogueMode,
+    }
+  }
+  return payload
 }
 
 export async function getRoom(roomId, passcode = '') {

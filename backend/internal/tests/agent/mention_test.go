@@ -44,3 +44,18 @@ func TestDetectMentionsReturnsTextOrderAndDeduplicates(t *testing.T) {
 		t.Fatalf("expected text order qa, pm; got %#v", got)
 	}
 }
+
+func TestDetectMentionsNormalizesGeneratedMentionVariants(t *testing.T) {
+	agents := []model.Agent{
+		{ID: "reviewer", Name: "Reviewer", Mention: "@Reviewer"},
+		{ID: "architect", Name: "Architect", Mention: "@Architect"},
+	}
+
+	got := agent.DetectMentions("请 ＠reviewer 和 @ Architect 一起补充方案。", agents)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 normalized mentions, got %#v", got)
+	}
+	if got[0].ID != "reviewer" || got[1].ID != "architect" {
+		t.Fatalf("expected reviewer then architect, got %#v", got)
+	}
+}

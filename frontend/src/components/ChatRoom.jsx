@@ -229,6 +229,9 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
               <span className={`status-dot status-dot--${connectionState}`} />
               <span>{labelForConnectionState(connectionState)}</span>
               <span>房间 ID：{roomId}</span>
+              <span title={descriptionForDialogueMode(room.dialoguePolicy?.mode)}>
+                {`Agent 模式：${labelForDialogueMode(room.dialoguePolicy?.mode)}`}
+              </span>
             </div>
           </div>
         </div>
@@ -260,6 +263,10 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
               <div className="context-item">
                 <span>房间 ID</span>
                 <strong>{roomId}</strong>
+              </div>
+              <div className="context-item">
+                <span>Agent 模式</span>
+                <strong>{labelForDialogueMode(room.dialoguePolicy?.mode)}</strong>
               </div>
               <div className="context-item">
                 <span>参会角色</span>
@@ -369,4 +376,14 @@ function labelForConnectionState(connectionState) {
     default:
       return '连接中'
   }
+}
+
+function labelForDialogueMode(mode) {
+  return mode === 'guided_dialogue' ? '引导多轮' : '点名单轮'
+}
+
+function descriptionForDialogueMode(mode) {
+  return mode === 'guided_dialogue'
+    ? '被点到的 Agent 会先回复，并允许继续 @ 其他 Agent。'
+    : '只有用户直接 @ 到的 Agent 会回复。'
 }

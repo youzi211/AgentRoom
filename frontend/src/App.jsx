@@ -31,11 +31,11 @@ export default function App() {
     })
   }, [])
 
-  const handleCreateRoom = async ({ displayName, roomName, agentIds, passcode }) => {
+  const handleCreateRoom = async ({ displayName, roomName, agentIds, passcode, dialogueMode }) => {
     setSubmitState({ isSubmitting: true, errorMessage: '' })
 
     try {
-      const response = await createRoom(roomName || DEFAULT_ROOM_NAME, agentIds, passcode)
+      const response = await createRoom(roomName || DEFAULT_ROOM_NAME, agentIds, passcode, dialogueMode)
       const nextRoomSession = {
         participantName: displayName,
         initialRoom: response.room,

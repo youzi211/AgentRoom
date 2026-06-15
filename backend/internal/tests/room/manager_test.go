@@ -20,7 +20,7 @@ func TestCreateRoomAgentSelectionModes(t *testing.T) {
 		fake := &teststore.Store{}
 		manager := room.NewManager(fake, resolveForTest(agents))
 
-		created, err := manager.CreateRoom(context.Background(), "planning", nil, "")
+		created, err := manager.CreateRoom(context.Background(), "planning", nil, "", model.DefaultDialoguePolicy())
 		if err != nil {
 			t.Fatalf("CreateRoom returned error: %v", err)
 		}
@@ -35,7 +35,7 @@ func TestCreateRoomAgentSelectionModes(t *testing.T) {
 		fake := &teststore.Store{}
 		manager := room.NewManager(fake, resolveForTest(agents))
 
-		created, err := manager.CreateRoom(context.Background(), "quiet", []string{}, "")
+		created, err := manager.CreateRoom(context.Background(), "quiet", []string{}, "", model.DefaultDialoguePolicy())
 		if err != nil {
 			t.Fatalf("CreateRoom returned error: %v", err)
 		}
@@ -49,7 +49,7 @@ func TestCreateRoomAgentSelectionModes(t *testing.T) {
 		fake := &teststore.Store{}
 		manager := room.NewManager(fake, resolveForTest(agents))
 
-		created, err := manager.CreateRoom(context.Background(), "focused", []string{"qa", "off", "missing"}, "")
+		created, err := manager.CreateRoom(context.Background(), "focused", []string{"qa", "off", "missing"}, "", model.DefaultDialoguePolicy())
 		if err != nil {
 			t.Fatalf("CreateRoom returned error: %v", err)
 		}

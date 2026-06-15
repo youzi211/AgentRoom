@@ -1,4 +1,4 @@
-package service
+package service_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"agentroom/backend/internal/llm"
 	"agentroom/backend/internal/model"
+	"agentroom/backend/internal/service"
 )
 
 type stubMinutesLLM struct {
@@ -23,9 +24,9 @@ func (s *stubMinutesLLM) Complete(_ context.Context, messages []llm.ChatMessage)
 }
 
 func TestMinutesServiceFallsBackWhenLLMReturnsError(t *testing.T) {
-	service := NewMinutesService(&stubMinutesLLM{err: errors.New("boom")})
+	minutesService := service.NewMinutesService(&stubMinutesLLM{err: errors.New("boom")})
 
-	markdown, err := service.Generate(context.Background(), model.RoomMeta{Name: "规划会"}, []model.Message{
+	markdown, err := minutesService.Generate(context.Background(), model.RoomMeta{Name: "规划会"}, []model.Message{
 		{
 			ID:         "msg-1",
 			RoomID:     "room-1",
@@ -42,29 +43,29 @@ func TestMinutesServiceFallsBackWhenLLMReturnsError(t *testing.T) {
 	if markdown == "" {
 		t.Fatal("expected fallback markdown when LLM errors")
 	}
-	if markdown[:2] != "##" {
+	if !strings.HasPrefix(markdown, "##") {
 		t.Fatalf("expected fallback markdown heading, got %q", markdown)
 	}
 }
 
 func TestMinutesServiceNormalizesMarkdownHeadings(t *testing.T) {
-	service := NewMinutesService(&stubMinutesLLM{response: "Summary only"})
+	minutesService := service.NewMinutesService(&stubMinutesLLM{response: "Summary only"})
 
-	markdown, err := service.Generate(context.Background(), model.RoomMeta{Name: "规划会"}, nil)
+	markdown, err := minutesService.Generate(context.Background(), model.RoomMeta{Name: "规划会"}, nil)
 	if err != nil {
 		t.Fatalf("Generate returned error: %v", err)
 	}
 	expectedPrefix := "## Meeting Minutes\n\n"
-	if len(markdown) < len(expectedPrefix) || markdown[:len(expectedPrefix)] != expectedPrefix {
+	if !strings.HasPrefix(markdown, expectedPrefix) {
 		t.Fatalf("expected normalized markdown prefix %q, got %q", expectedPrefix, markdown)
 	}
 }
 
 func TestMinutesServiceIncludesRoomAndTranscriptInPrompt(t *testing.T) {
 	client := &stubMinutesLLM{response: "# Minutes"}
-	service := NewMinutesService(client)
+	minutesService := service.NewMinutesService(client)
 
-	_, err := service.Generate(context.Background(), model.RoomMeta{Name: "规划会"}, []model.Message{
+	_, err := minutesService.Generate(context.Background(), model.RoomMeta{Name: "规划会"}, []model.Message{
 		{
 			ID:         "msg-1",
 			RoomID:     "room-1",

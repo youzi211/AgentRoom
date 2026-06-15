@@ -38,6 +38,8 @@ type Store interface {
 	// Agent runs
 	CreateAgentRun(ctx context.Context, run AgentRun) error
 	FinishAgentRun(ctx context.Context, runID string, status string, errText string, completedAt time.Time) error
+	CreateDialogueRun(ctx context.Context, run DialogueRun) error
+	FinishDialogueRun(ctx context.Context, runID string, status string, turnCount int, completedAt time.Time) error
 
 	// Knowledge documents
 	CreateKnowledgeDocument(ctx context.Context, document model.KnowledgeDocument, chunks []model.KnowledgeChunk) (model.KnowledgeDocument, error)
@@ -48,11 +50,12 @@ type Store interface {
 
 // CreateRoomInput holds the data needed to create a new room with agent snapshots.
 type CreateRoomInput struct {
-	ID           string
-	Name         string
-	Agents       []model.Agent
-	PasscodeHash string
-	CreatedAt    time.Time
+	ID             string
+	Name           string
+	Agents         []model.Agent
+	PasscodeHash   string
+	CreatedAt      time.Time
+	DialoguePolicy model.DialoguePolicy
 }
 
 // AddParticipantInput holds the data needed to add a participant to a room.
@@ -79,6 +82,17 @@ type AgentRun struct {
 	TriggerMessageID string
 	Status           string
 	Error            string
+	StartedAt        time.Time
+	CompletedAt      *time.Time
+}
+
+type DialogueRun struct {
+	ID               string
+	RoomID           string
+	TriggerMessageID string
+	Mode             string
+	TurnCount        int
+	Status           string
 	StartedAt        time.Time
 	CompletedAt      *time.Time
 }

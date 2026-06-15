@@ -1,4 +1,4 @@
-package service
+package service_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"agentroom/backend/internal/llm"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/room"
+	"agentroom/backend/internal/service"
 	"agentroom/backend/internal/tests/teststore"
 )
 
@@ -16,10 +17,7 @@ func TestHandleHumanMessageDoesNotStartAgentResponsesBeforeCallerBroadcasts(t *t
 	store := &teststore.Store{}
 	llmClient := &blockingLLM{called: make(chan struct{}, 1)}
 	runner := agent.NewRunner(llmClient, store)
-	service := &RoomService{
-		runner: runner,
-		store:  store,
-	}
+	roomService := service.NewRoomService(nil, nil, nil, runner, nil, store)
 
 	currentRoom := room.New("room_1", "Planning", []model.Agent{
 		{
@@ -32,7 +30,7 @@ func TestHandleHumanMessageDoesNotStartAgentResponsesBeforeCallerBroadcasts(t *t
 	})
 	participant := currentRoom.NewParticipant("Alice")
 
-	if _, _, err := service.HandleHumanMessage(context.Background(), currentRoom, participant, "@Product please review this"); err != nil {
+	if _, _, err := roomService.HandleHumanMessage(context.Background(), currentRoom, participant, "@Product please review this"); err != nil {
 		t.Fatalf("HandleHumanMessage returned error: %v", err)
 	}
 
@@ -47,10 +45,7 @@ func TestTriggerAgentResponsesStartsAgentWorkAfterCallerBroadcasts(t *testing.T)
 	store := &teststore.Store{}
 	llmClient := &blockingLLM{called: make(chan struct{}, 1)}
 	runner := agent.NewRunner(llmClient, store)
-	service := &RoomService{
-		runner: runner,
-		store:  store,
-	}
+	roomService := service.NewRoomService(nil, nil, nil, runner, nil, store)
 
 	currentRoom := room.New("room_1", "Planning", []model.Agent{
 		{
@@ -63,12 +58,12 @@ func TestTriggerAgentResponsesStartsAgentWorkAfterCallerBroadcasts(t *testing.T)
 	})
 	participant := currentRoom.NewParticipant("Alice")
 
-	savedMessage, _, err := service.HandleHumanMessage(context.Background(), currentRoom, participant, "@Product please review this")
+	savedMessage, _, err := roomService.HandleHumanMessage(context.Background(), currentRoom, participant, "@Product please review this")
 	if err != nil {
 		t.Fatalf("HandleHumanMessage returned error: %v", err)
 	}
 
-	service.TriggerAgentResponses(context.Background(), currentRoom, savedMessage)
+	roomService.TriggerAgentResponses(context.Background(), currentRoom, savedMessage)
 
 	select {
 	case <-llmClient.called:
