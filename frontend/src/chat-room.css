@@ -321,11 +321,17 @@
 .agent-activity-panel {
   flex: none;
   gap: 10px;
+  max-height: min(34vh, 260px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .agent-activity-list {
   display: grid;
   gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .agent-activity-item {

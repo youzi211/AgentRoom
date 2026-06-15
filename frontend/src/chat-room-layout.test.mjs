@@ -30,3 +30,16 @@ test('chat room renders the agent activity panel', () => {
   assert.match(chatRoomSource, /const AGENT_ACTIVITY_EVENT = 'agent_activity'/)
   assert.match(chatRoomSource, /<AgentActivityPanel activities=\{activityItems\}/)
 })
+
+test('agent activity timeline scrolls inside its own bounded panel', () => {
+  const activityPanel = ruleBlock('.agent-activity-panel')
+  const activityList = ruleBlock('.agent-activity-list')
+  const focusPanel = ruleBlock('.agent-workbench-panel .focus-panel')
+
+  assert.match(activityPanel, /max-height:\s*min\(34vh,\s*260px\);/)
+  assert.match(activityPanel, /overflow:\s*hidden;/)
+  assert.match(activityList, /overflow-y:\s*auto;/)
+  assert.match(activityList, /min-height:\s*0;/)
+  assert.match(focusPanel, /flex:\s*1;/)
+  assert.match(focusPanel, /min-height:\s*0;/)
+})
