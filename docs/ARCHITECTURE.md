@@ -135,6 +135,7 @@ Room 元数据还持有房间级 `DialoguePolicy`，用于区分默认的 `menti
 - 持久化并广播 Agent 或系统消息。
 - 记录 `agent_runs` 执行状态。
 - 记录 `dialogue_runs`，并把 `dialogue_run_id` / `turn_index` / `parent_message_id` 写入生成消息。
+- 在 Agent run 与 dialogue run 开始/结束时广播 `agent_activity` 事件，供前端实时展示运行状态。
 
 Runner 依赖 `RuntimeRoom` 接口，而不是具体 `*room.Room`：
 
@@ -148,6 +149,7 @@ type RuntimeRoom interface {
     NewAgentMessage(agent model.Agent, content string) model.Message
     AppendMessage(message model.Message)
     Broadcast(message model.Message)
+    BroadcastEvent(event model.ServerEvent)
 }
 ```
 
@@ -163,8 +165,8 @@ type RuntimeRoom interface {
 - 房间：create/get/list room agents。
 - 参与者：join/leave/list active。
 - 消息：add/list。
-- Agent 执行记录：create/finish run。
-- Dialogue 执行记录：create/finish run。
+- Agent 执行记录：create/finish/list run。
+- Dialogue 执行记录：create/finish/list run。
 
 MySQL 实现在 `internal/store/mysql` 中，GORM model 和 domain model 分离，通过转换函数连接。
 
@@ -214,11 +216,13 @@ client message
   -> Runner 检测房间 DialoguePolicy
   -> mention_fanout: 被 @ 的 Agent 各回复一次
   -> guided_dialogue: 创建 dialogue_run，按策略选择首个与后续发言者
+  -> RuntimeRoom.BroadcastEvent 广播 agent_activity started 事件
   -> llm.Client 调用模型
   -> agent.StripThinkBlocks 清洗响应
   -> store.AddMessage 持久化 Agent 消息
   -> RuntimeRoom.Broadcast 广播 Agent 消息
   -> 达到轮次上限 / 无可选发言者 / 重复内容 / provider error 时停止 dialogue_run
+  -> RuntimeRoom.BroadcastEvent 广播 agent_activity finished 事件
 ```
 
 ## 6. HTTP API
@@ -237,6 +241,7 @@ client message
 | POST | `/rooms` | 创建房间 |
 | GET | `/rooms/:roomID` | 获取房间快照 |
 | GET | `/rooms/:roomID/messages` | 获取消息列表 |
+| GET | `/rooms/:roomID/activity` | 获取最近 Agent run 与 dialogue run 活动 |
 | GET | `/rooms/:roomID/knowledge` | 获取会议室文件 |
 | POST | `/rooms/:roomID/knowledge` | 上传会议室 Markdown 文件 |
 | DELETE | `/knowledge/:documentID` | 删除知识文档 |
@@ -245,6 +250,8 @@ client message
 当前仍保留无 `/api` 前缀的 legacy routes，用于迁移期兼容。前端应优先使用 `/api/*`。
 
 `POST /api/rooms` 支持可选的 `dialoguePolicy` 字段，至少可以通过 `mode = guided_dialogue` 开启受控多轮对话。
+
+WebSocket 连接除消息、房间快照和焦点更新外，也会收到 `type = "agent_activity"` 的事件。事件体包含 `activity.kind`（`agent_run` 或 `dialogue_run`）、`activity.phase`（`started` 或 `finished`）、运行状态、创建/完成时间，以及可用的 Agent 名称或 dialogue 轮次。
 
 ## 7. 前端结构
 
@@ -258,6 +265,7 @@ frontend/src/
 │   ├── JoinScreen.jsx
 │   ├── RoomEntry.jsx
 │   ├── ChatRoom.jsx
+│   ├── AgentActivityPanel.jsx
 │   ├── MessageList.jsx
 │   ├── MessageComposer.jsx
 │   ├── ParticipantList.jsx

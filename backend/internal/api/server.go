@@ -89,6 +89,7 @@ func (s *Server) registerAPIRoutes(routes gin.IRoutes) {
 	routes.POST("/rooms", s.handleCreateRoom)
 	routes.GET("/rooms/:roomID", s.handleGetRoom)
 	routes.GET("/rooms/:roomID/messages", s.handleGetMessages)
+	routes.GET("/rooms/:roomID/activity", s.handleGetRoomActivity)
 	routes.GET("/rooms/:roomID/knowledge", s.handleListRoomKnowledge)
 	routes.POST("/rooms/:roomID/knowledge", s.requireAdmin, s.handleUploadRoomKnowledge)
 	routes.DELETE("/knowledge/:documentID", s.requireAdmin, s.handleDeleteKnowledgeDocument)
@@ -300,6 +301,32 @@ func (s *Server) handleGetMessages(c *gin.Context) {
 	messages := s.rooms.ListMessages(c.Request.Context(), currentRoom, limit)
 
 	c.JSON(http.StatusOK, model.GetMessagesResponse{Messages: messages})
+}
+
+func (s *Server) handleGetRoomActivity(c *gin.Context) {
+	currentRoom, ok := s.getRoomFromRequest(c)
+	if !ok {
+		return
+	}
+
+	limit := 50
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	activity, err := s.rooms.ListRoomActivity(c.Request.Context(), currentRoom, limit)
+	if err != nil {
+		s.logger.Error("list room activity", "room_id", currentRoom.Info().ID, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to list room activity")
+		return
+	}
+
+	c.JSON(http.StatusOK, activity)
 }
 
 func (s *Server) handleGenerateMinutes(c *gin.Context) {

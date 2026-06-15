@@ -134,6 +134,56 @@ func (s *RoomService) ListMessages(ctx context.Context, currentRoom *room.Room, 
 	return messages
 }
 
+func (s *RoomService) ListRoomActivity(ctx context.Context, currentRoom *room.Room, limit int) (model.RoomActivityResponse, error) {
+	roomInfo := currentRoom.Info()
+	query := store.ListRunsQuery{RoomID: roomInfo.ID, Limit: limit}
+
+	agentRuns, err := s.store.ListAgentRuns(ctx, query)
+	if err != nil {
+		return model.RoomActivityResponse{}, err
+	}
+	dialogueRuns, err := s.store.ListDialogueRuns(ctx, query)
+	if err != nil {
+		return model.RoomActivityResponse{}, err
+	}
+
+	agentNameByID := make(map[string]string)
+	for _, roomAgent := range currentRoom.Agents() {
+		agentNameByID[roomAgent.ID] = roomAgent.Name
+	}
+
+	activity := model.RoomActivityResponse{
+		AgentRuns:    make([]model.AgentRunActivity, 0, len(agentRuns)),
+		DialogueRuns: make([]model.DialogueRunActivity, 0, len(dialogueRuns)),
+	}
+	for _, run := range agentRuns {
+		activity.AgentRuns = append(activity.AgentRuns, model.AgentRunActivity{
+			ID:               run.ID,
+			RoomID:           run.RoomID,
+			AgentID:          run.AgentID,
+			AgentName:        agentNameByID[run.AgentID],
+			TriggerMessageID: run.TriggerMessageID,
+			Status:           run.Status,
+			ErrorText:        run.Error,
+			CreatedAt:        run.StartedAt,
+			CompletedAt:      run.CompletedAt,
+		})
+	}
+	for _, run := range dialogueRuns {
+		activity.DialogueRuns = append(activity.DialogueRuns, model.DialogueRunActivity{
+			ID:               run.ID,
+			RoomID:           run.RoomID,
+			TriggerMessageID: run.TriggerMessageID,
+			Mode:             run.Mode,
+			TurnCount:        run.TurnCount,
+			Status:           run.Status,
+			CreatedAt:        run.StartedAt,
+			CompletedAt:      run.CompletedAt,
+		})
+	}
+	return activity, nil
+}
+
 func (s *RoomService) GenerateMinutes(ctx context.Context, currentRoom *room.Room) (string, error) {
 	messages := s.ListMessages(ctx, currentRoom, 500)
 	if s.minutes != nil {

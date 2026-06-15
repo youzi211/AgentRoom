@@ -4,11 +4,13 @@ import {
   deleteKnowledgeDocument,
   exportRoomMinutesMarkdown,
   generateRoomMinutes,
+  getRoomActivity,
   getMessages,
   getRoom,
   getRoomKnowledge,
   uploadRoomKnowledge,
 } from '../api/roomClient'
+import AgentActivityPanel from './AgentActivityPanel'
 import AgentRoster from './AgentRoster'
 import FocusTimeline from './FocusTimeline'
 import KnowledgePanel from './KnowledgePanel'
@@ -17,6 +19,7 @@ import MessageComposer from './MessageComposer'
 import MessageList from './MessageList'
 import ParticipantList from './ParticipantList'
 import ResizeHandle from './ResizeHandle'
+import { mergeActivityEvent, normalizeActivityPayload } from './agentActivity'
 import '../chat-room.css'
 
 const ROOM_SNAPSHOT_EVENT = 'room_snapshot'
@@ -25,6 +28,7 @@ const PARTICIPANT_JOINED_EVENT = 'participant_joined'
 const PARTICIPANT_LEFT_EVENT = 'participant_left'
 const ERROR_EVENT = 'error'
 const FOCUS_UPDATE_EVENT = 'focus_update'
+const AGENT_ACTIVITY_EVENT = 'agent_activity'
 
 export default function ChatRoom({ initialRoom, participantName, roomId, roomPasscode, onLeaveRoom }) {
   const [room, setRoom] = useState(initialRoom)
@@ -35,6 +39,9 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
   const [errorMessage, setErrorMessage] = useState('')
   const [copyState, setCopyState] = useState('idle')
   const [thinkingAgents, setThinkingAgents] = useState([])
+  const [activityItems, setActivityItems] = useState([])
+  const [activityLoading, setActivityLoading] = useState(true)
+  const [activityError, setActivityError] = useState('')
   const [focusPoints, setFocusPoints] = useState([])
   const [leftPanelWidth, setLeftPanelWidth] = useState(270)
   const [rightPanelWidth, setRightPanelWidth] = useState(320)
@@ -79,6 +86,19 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
             setFocusPoints((current) => [...current, ...event.focusPoints])
           }
           return
+        case AGENT_ACTIVITY_EVENT:
+          if (event.activity) {
+            setActivityItems((current) => mergeActivityEvent(current, event.activity))
+            if (event.activity.kind === 'agent_run' && event.activity.agentID) {
+              if (event.activity.phase === 'started') {
+                setThinkingAgents((current) => mergeAgents(current, [agentFromActivity(event.activity)]))
+              }
+              if (event.activity.phase === 'finished') {
+                setThinkingAgents((current) => current.filter((agent) => agent.id !== event.activity.agentID))
+              }
+            }
+          }
+          return
         case ERROR_EVENT:
           setErrorMessage(event.error || '房间返回了一条错误消息。')
           setThinkingAgents([])
@@ -90,8 +110,14 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
 
     const connectToRoom = async () => {
       setConnectionState('connecting')
+      setActivityLoading(true)
+      setActivityError('')
 
-      const [roomResult, messagesResult] = await Promise.allSettled([getRoom(roomId, roomPasscode), getMessages(roomId, roomPasscode)])
+      const [roomResult, messagesResult, activityResult] = await Promise.allSettled([
+        getRoom(roomId, roomPasscode),
+        getMessages(roomId, roomPasscode),
+        getRoomActivity(roomId, roomPasscode),
+      ])
       if (!isCurrent) {
         return
       }
@@ -111,6 +137,13 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
       } else {
         loadErrors.push(messagesResult.reason?.message || '加载消息失败。')
       }
+
+      if (activityResult.status === 'fulfilled') {
+        setActivityItems(normalizeActivityPayload(activityResult.value))
+      } else {
+        setActivityError(activityResult.reason?.message || '加载 Agent 活动失败。')
+      }
+      setActivityLoading(false)
 
       if (loadErrors.length > 0) {
         setErrorMessage(loadErrors.join(' '))
@@ -336,6 +369,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
           <div style={{ flex: 'none', height: rightTopHeight, overflow: 'auto' }}>
             <AgentRoster agents={agents} thinkingAgents={thinkingAgents} onInsertMention={handleInsertMention} />
           </div>
+          <AgentActivityPanel activities={activityItems} errorMessage={activityError} isLoading={activityLoading} />
           <ResizeHandle
             direction="vertical"
             onResize={setRightTopHeight}
@@ -365,6 +399,16 @@ function mergeAgents(current, nextAgents) {
   const byID = new Map(current.map((agent) => [agent.id, agent]))
   nextAgents.forEach((agent) => byID.set(agent.id, agent))
   return Array.from(byID.values())
+}
+
+function agentFromActivity(activity) {
+  const name = activity.agentName || activity.agentID || 'Agent'
+  return {
+    id: activity.agentID,
+    name,
+    mention: `@${name}`,
+    role: '',
+  }
 }
 
 function labelForConnectionState(connectionState) {

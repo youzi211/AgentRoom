@@ -320,6 +320,32 @@ func (m MessageModel) toDomain() model.Message {
 	}
 }
 
+func (m AgentRunModel) toStore() store.AgentRun {
+	return store.AgentRun{
+		ID:               m.ID,
+		RoomID:           m.RoomID,
+		AgentID:          m.AgentID,
+		TriggerMessageID: m.TriggerMessageID,
+		Status:           m.Status,
+		Error:            strPtrDeref(m.Error),
+		StartedAt:        m.StartedAt,
+		CompletedAt:      m.CompletedAt,
+	}
+}
+
+func (m DialogueRunModel) toStore() store.DialogueRun {
+	return store.DialogueRun{
+		ID:               m.ID,
+		RoomID:           m.RoomID,
+		TriggerMessageID: m.TriggerMessageID,
+		Mode:             m.Mode,
+		TurnCount:        m.TurnCount,
+		Status:           m.Status,
+		StartedAt:        m.StartedAt,
+		CompletedAt:      m.CompletedAt,
+	}
+}
+
 func (m RoomModel) toDomain() model.RoomMeta {
 	return model.RoomMeta{
 		ID:           m.ID,

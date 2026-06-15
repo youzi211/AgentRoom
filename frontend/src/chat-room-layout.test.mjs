@@ -24,3 +24,9 @@ test('chat room surfaces the current dialogue mode in visible room chrome', () =
   assert.match(chatRoomSource, /'引导多轮'/)
   assert.match(chatRoomSource, /'点名单轮'/)
 })
+
+test('chat room renders the agent activity panel', () => {
+  assert.match(chatRoomSource, /import AgentActivityPanel from '\.\/AgentActivityPanel'/)
+  assert.match(chatRoomSource, /const AGENT_ACTIVITY_EVENT = 'agent_activity'/)
+  assert.match(chatRoomSource, /<AgentActivityPanel activities=\{activityItems\}/)
+})

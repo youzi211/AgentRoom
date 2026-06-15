@@ -24,6 +24,7 @@ type RuntimeRoom interface {
 	NewAgentMessage(agent model.Agent, content string) model.Message
 	AppendMessage(message model.Message)
 	Broadcast(message model.Message)
+	BroadcastEvent(event model.ServerEvent)
 }
 
 type Runner struct {
@@ -182,6 +183,7 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoo
 	if err := r.store.CreateAgentRun(ctx, agentRun); err != nil {
 		r.logger.Error("create agent run", "room_id", roomInfo.ID, "agent_id", responder.ID, "error", err)
 	}
+	r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "started", "", "", nil)
 
 	response, err := r.generateResponse(ctx, currentRoom, responder, trigger)
 	now := time.Now().UTC()
@@ -199,6 +201,7 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoo
 		if finishErr := r.store.FinishAgentRun(ctx, runID, status, errText, now); finishErr != nil {
 			r.logger.Error("finish agent run", "run_id", runID, "status", status, "error", finishErr)
 		}
+		r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", status, errText, &now)
 		return model.Message{}, false
 	}
 
@@ -208,7 +211,44 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoo
 	if finishErr := r.store.FinishAgentRun(ctx, runID, "succeeded", "", now); finishErr != nil {
 		r.logger.Error("finish agent run", "run_id", runID, "status", "succeeded", "error", finishErr)
 	}
+	r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", "succeeded", "", &now)
 	return savedAgentMsg, true
+}
+
+func (r *Runner) broadcastAgentRunActivity(currentRoom RuntimeRoom, run store.AgentRun, responder model.Agent, phase string, status string, errText string, completedAt *time.Time) {
+	currentRoom.BroadcastEvent(model.ServerEvent{
+		Type: model.EventTypeAgentActivity,
+		Activity: &model.AgentActivityEvent{
+			Kind:             "agent_run",
+			Phase:            phase,
+			ID:               run.ID,
+			RoomID:           run.RoomID,
+			AgentID:          responder.ID,
+			AgentName:        responder.Name,
+			TriggerMessageID: run.TriggerMessageID,
+			Status:           status,
+			ErrorText:        errText,
+			CreatedAt:        run.StartedAt,
+			CompletedAt:      completedAt,
+		},
+	})
+}
+
+func (r *Runner) broadcastDialogueRunActivity(currentRoom RuntimeRoom, run store.DialogueRun, phase string, status string, turnCount int, completedAt *time.Time) {
+	currentRoom.BroadcastEvent(model.ServerEvent{
+		Type: model.EventTypeAgentActivity,
+		Activity: &model.AgentActivityEvent{
+			Kind:             "dialogue_run",
+			Phase:            phase,
+			ID:               run.ID,
+			RoomID:           run.RoomID,
+			TriggerMessageID: run.TriggerMessageID,
+			Status:           status,
+			TurnCount:        turnCount,
+			CreatedAt:        run.StartedAt,
+			CompletedAt:      completedAt,
+		},
+	})
 }
 
 func (r *Runner) persistAndBroadcast(ctx context.Context, currentRoom RuntimeRoom, message model.Message) model.Message {

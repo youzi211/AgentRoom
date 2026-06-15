@@ -73,6 +73,7 @@ Primary routes are exposed under `/api`:
 - `POST /api/rooms`
 - `GET /api/rooms/:roomID`
 - `GET /api/rooms/:roomID/messages`
+- `GET /api/rooms/:roomID/activity`
 - `POST /api/rooms/:roomID/minutes`
 - `GET /api/rooms/:roomID/minutes.md`
 - `GET /api/rooms/:roomID/knowledge`
@@ -81,6 +82,8 @@ Primary routes are exposed under `/api`:
 - `GET /api/rooms/:roomID/ws?name=Alice`
 
 Legacy non-`/api` routes are still registered for compatibility.
+
+`GET /api/rooms/:roomID/activity` returns recent `agentRuns` and `dialogueRuns` for the room. The endpoint uses the same room passcode checks as metadata and history reads, and accepts an optional `limit` query parameter capped by the API layer.
 
 `POST /api/rooms` accepts an optional `dialoguePolicy` object. For example:
 
