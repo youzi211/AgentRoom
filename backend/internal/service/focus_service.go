@@ -12,6 +12,8 @@ import (
 	"agentroom/backend/internal/llm"
 	"agentroom/backend/internal/logging"
 	"agentroom/backend/internal/model"
+	langllms "github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/prompts"
 )
 
 type FocusService struct {
@@ -22,10 +24,27 @@ type FocusService struct {
 }
 
 type roomFocusState struct {
-	messages    []model.Message
-	focusPoints []model.FocusPoint
+	messages     []model.Message
+	focusPoints  []model.FocusPoint
 	lastAnalyzed int
 }
+
+var focusPromptTemplate = prompts.NewChatPromptTemplate([]prompts.MessageFormatter{
+	prompts.NewSystemMessagePromptTemplate(
+		"你是一个会议分析助手，负责提取会议对话的关键焦点话题。只返回 JSON 数组。",
+		nil,
+	),
+	prompts.NewHumanMessagePromptTemplate(
+		`分析以下会议对话，提取关键焦点话题。返回 JSON 数组，每个焦点包含：
+- content: 焦点描述（简洁，20字以内）
+- category: 类别（如"需求"、"技术"、"决策"、"问题"、"计划"）
+只返回 JSON，不要其他文字。示例：[{"content":"讨论用户登录功能","category":"需求"},{"content":"决定使用React框架","category":"决策"}]
+
+对话内容：
+{{.conversation}}`,
+		[]string{"conversation"},
+	),
+})
 
 func NewFocusService(llmClient llm.Client) *FocusService {
 	return &FocusService{
@@ -100,19 +119,15 @@ func (s *FocusService) analyzeMessages(ctx context.Context, roomID string, messa
 			msg.Content))
 	}
 
-	prompt := fmt.Sprintf(`分析以下会议对话，提取关键焦点话题。返回JSON数组，每个焦点包含：
-- content: 焦点描述（简洁，20字以内）
-- category: 类别（如"需求"、"技术"、"决策"、"问题"、"计划"）
-
-只返回JSON，不要其他文字。示例：[{"content":"讨论用户登录功能","category":"需求"},{"content":"决定使用React框架","category":"决策"}]
-
-对话内容：
-%s`, conversationBuilder.String())
-
-	response, err := s.llmClient.Complete(ctx, []llm.ChatMessage{
-		{Role: "system", Content: "你是一个会议分析助手，负责提取会议对话的关键焦点话题。"},
-		{Role: "user", Content: prompt},
+	promptMessages, err := renderChatMessages(focusPromptTemplate, map[string]any{
+		"conversation": conversationBuilder.String(),
 	})
+	if err != nil {
+		s.logger.Error("render focus prompt", "room_id", roomID, "error", err)
+		return nil
+	}
+
+	response, err := completeJSONIfSupported(ctx, s.llmClient, promptMessages)
 	if err != nil {
 		s.logger.Error("LLM focus analysis failed", "room_id", roomID, "error", err)
 		return nil
@@ -126,32 +141,6 @@ func (s *FocusService) analyzeMessages(ctx context.Context, roomID string, messa
 	}
 
 	cleaned := strings.TrimSpace(response)
-
-	// Strip thinking tags (<think>...</think>)
-	if thinkStart := strings.Index(cleaned, "<think>"); thinkStart != -1 {
-		if thinkEnd := strings.Index(cleaned, "</think>"); thinkEnd != -1 {
-			cleaned = strings.TrimSpace(cleaned[thinkEnd+len("</think>"):])
-		}
-	}
-
-	// Strip markdown code blocks
-	if strings.HasPrefix(cleaned, "```json") {
-		cleaned = strings.TrimPrefix(cleaned, "```json")
-		cleaned = strings.TrimSuffix(cleaned, "```")
-		cleaned = strings.TrimSpace(cleaned)
-	} else if strings.HasPrefix(cleaned, "```") {
-		cleaned = strings.TrimPrefix(cleaned, "```")
-		cleaned = strings.TrimSuffix(cleaned, "```")
-		cleaned = strings.TrimSpace(cleaned)
-	}
-
-	// Extract JSON array if surrounded by other text
-	if start := strings.Index(cleaned, "["); start != -1 {
-		if end := strings.LastIndex(cleaned, "]"); end != -1 && end > start {
-			cleaned = cleaned[start : end+1]
-		}
-	}
-
 	if err := json.Unmarshal([]byte(cleaned), &focusItems); err != nil {
 		s.logger.Warn("failed to parse focus analysis", "room_id", roomID, "error", err, "cleaned", cleaned)
 		return nil
@@ -174,4 +163,36 @@ func (s *FocusService) analyzeMessages(ctx context.Context, roomID string, messa
 	}
 
 	return focusPoints
+}
+
+func completeJSONIfSupported(ctx context.Context, client llm.Client, messages []llm.ChatMessage) (string, error) {
+	if jsonClient, ok := client.(llm.JSONClient); ok {
+		return jsonClient.CompleteJSON(ctx, messages)
+	}
+	return client.Complete(ctx, messages)
+}
+
+func renderChatMessages(template prompts.ChatPromptTemplate, values map[string]any) ([]llm.ChatMessage, error) {
+	formatted, err := template.FormatMessages(values)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]llm.ChatMessage, 0, len(formatted))
+	for _, message := range formatted {
+		role := llm.RoleUser
+		switch message.GetType() {
+		case langllms.ChatMessageTypeSystem:
+			role = llm.RoleSystem
+		case langllms.ChatMessageTypeAI:
+			role = llm.RoleAssistant
+		}
+
+		result = append(result, llm.ChatMessage{
+			Role:    role,
+			Content: message.GetContent(),
+		})
+	}
+
+	return result, nil
 }

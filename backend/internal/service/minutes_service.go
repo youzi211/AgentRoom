@@ -8,11 +8,29 @@ import (
 
 	"agentroom/backend/internal/llm"
 	"agentroom/backend/internal/model"
+	"github.com/tmc/langchaingo/prompts"
 )
 
 type MinutesService struct {
 	llmClient llm.Client
 }
+
+var minutesPromptTemplate = prompts.NewChatPromptTemplate([]prompts.MessageFormatter{
+	prompts.NewSystemMessagePromptTemplate(
+		"You generate concise Chinese meeting minutes in Markdown. Do not invent facts.",
+		nil,
+	),
+	prompts.NewHumanMessagePromptTemplate(
+		`Generate Markdown meeting minutes for this AgentRoom meeting.
+Include: summary, decisions, action items, risks, open questions.
+Only use facts present in the transcript.
+
+Room: {{.roomName}}
+Transcript:
+{{.transcript}}`,
+		[]string{"roomName", "transcript"},
+	),
+})
 
 func NewMinutesService(llmClient llm.Client) *MinutesService {
 	return &MinutesService{llmClient: llmClient}
@@ -23,25 +41,23 @@ func (s *MinutesService) Generate(ctx context.Context, room model.RoomMeta, mess
 		return fallbackMinutes(room, messages), nil
 	}
 
-	prompt := buildMinutesPrompt(room, messages)
-	response, err := s.llmClient.Complete(ctx, []llm.ChatMessage{
-		{Role: llm.RoleSystem, Content: "You generate concise Chinese meeting minutes in Markdown. Do not invent facts."},
-		{Role: llm.RoleUser, Content: prompt},
+	promptMessages, err := renderChatMessages(minutesPromptTemplate, map[string]any{
+		"roomName":   room.Name,
+		"transcript": buildMinutesTranscript(messages),
 	})
+	if err != nil {
+		return fallbackMinutes(room, messages), nil
+	}
+
+	response, err := s.llmClient.Complete(ctx, promptMessages)
 	if err != nil || strings.TrimSpace(response) == "" {
 		return fallbackMinutes(room, messages), nil
 	}
 	return normalizeMinutesMarkdown(response), nil
 }
 
-func buildMinutesPrompt(room model.RoomMeta, messages []model.Message) string {
+func buildMinutesTranscript(messages []model.Message) string {
 	var builder strings.Builder
-	builder.WriteString("Generate Markdown meeting minutes for this AgentRoom meeting.\n")
-	builder.WriteString("Include: summary, decisions, action items, risks, open questions.\n")
-	builder.WriteString("Only use facts present in the transcript.\n\n")
-	builder.WriteString("Room: ")
-	builder.WriteString(room.Name)
-	builder.WriteString("\nTranscript:\n")
 	for _, message := range messages {
 		builder.WriteString("- ")
 		builder.WriteString(message.CreatedAt.Format(time.RFC3339))
