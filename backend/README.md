@@ -1,157 +1,94 @@
 # AgentRoom Backend
 
-This service provides the AgentRoom MVP backend: room management, participant tracking, WebSocket chat, explicit agent mention triggering, in-memory agent configuration, and OpenAI-compatible LLM integration.
+The backend is the Go service behind AgentRoom. It exposes the HTTP API, WebSocket room transport, MySQL persistence, Markdown knowledge upload, focus extraction, and OpenAI-compatible agent execution.
 
-## Prerequisites
+## Run Locally
 
-- Go 1.22+
+From the repository root, create `.env` first:
 
-## Configuration
-
-The server loads the project-root `.env` file first, then reads environment variables. Existing shell environment variables take precedence over `.env` values.
-
-From the repository root:
-
-```bash
-copy .env.example .env
+```powershell
+Copy-Item .env.example .env
 ```
 
-Then fill in:
+Set `MYSQL_DSN` to a reachable MySQL 8 database:
 
-| Name | Required | Default | Description |
-| --- | --- | --- | --- |
-| `PORT` | No | `8080` | HTTP listen port |
-| `LLM_BASE_URL` | No | `https://api.openai.com` | Base URL for the chat completion API |
-| `LLM_API_KEY` | No | _empty_ | API key used for agent responses |
-| `LLM_MODEL` | No | `gpt-4o-mini` | Model name sent to `/v1/chat/completions` |
+```text
+MYSQL_DSN=agentroom:agentroom_password@tcp(127.0.0.1:3306)/agentroom?parseTime=true&charset=utf8mb4&loc=UTC
+DB_AUTO_MIGRATE=true
+```
 
-If `LLM_API_KEY` is missing, the service still starts. Human chat continues to work, and agent invocations produce system messages describing the failure.
+Then start the service:
 
-Do not commit `.env`; it is ignored by git.
-
-## Run the server
-
-From the repository root:
-
-```bash
+```powershell
 go -C backend run ./cmd/server
 ```
 
-Or from inside `backend/`:
+The default listen address is `http://localhost:8080`.
 
-```bash
-go run ./cmd/server
+## Configuration
+
+The server loads `../.env` when started from `backend/`, then reads environment variables. Existing process environment values take precedence over `.env`.
+
+| Name | Required | Default | Description |
+| --- | --- | --- | --- |
+| `PORT` | No | `8080` | HTTP listen port. |
+| `DB_DRIVER` | No | `mysql` | Database driver label. |
+| `MYSQL_DSN` | Yes | _none_ | MySQL DSN. Include `parseTime=true`; use `utf8mb4` for multilingual room content. |
+| `DB_AUTO_MIGRATE` | No | `false` | Runs embedded migrations on startup when `true`. |
+| `LLM_BASE_URL` | No | `https://api.openai.com` | Base URL for the chat-completions compatible API. |
+| `LLM_API_KEY` | No | _empty_ | API key for agent responses. If empty, human chat still works and agent calls return room-visible system messages. |
+| `LLM_MODEL` | No | `gpt-4o-mini` | Chat-completions model name. |
+| `LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, or `error`. |
+| `LOG_FORMAT` | No | `text` | Use `json` for container logs. |
+| `LOG_ADD_SOURCE` | No | `false` | Include source file information in logs when `true`. |
+| `ADMIN_API_KEY` | No | _empty_ | When set, protects agent and knowledge write APIs. |
+| `ALLOWED_ORIGINS` | No | _empty_ | Comma-separated origins allowed to open WebSocket connections. Empty means allow all. |
+
+## Docker
+
+The root `docker-compose.yml` builds `backend/Dockerfile`, starts MySQL, waits for database health, injects a container-network `MYSQL_DSN`, and forwards the v0.2 security env vars (`ADMIN_API_KEY` and `ALLOWED_ORIGINS`) into the backend container.
+
+```powershell
+docker compose up --build
 ```
 
-## Test and dependency maintenance
+## API Surface
 
-```bash
-go -C backend test ./...
-go -C backend mod tidy
-```
+Primary routes are exposed under `/api`:
 
-## API endpoints
+- `GET /api/health`
+- `GET /api/agents`
+- `POST /api/agents`
+- `PUT /api/agents/:agentID`
+- `DELETE /api/agents/:agentID`
+- `GET /api/agents/:agentID/knowledge`
+- `POST /api/agents/:agentID/knowledge`
+- `POST /api/rooms`
+- `GET /api/rooms/:roomID`
+- `GET /api/rooms/:roomID/messages`
+- `POST /api/rooms/:roomID/minutes`
+- `GET /api/rooms/:roomID/minutes.md`
+- `GET /api/rooms/:roomID/knowledge`
+- `POST /api/rooms/:roomID/knowledge`
+- `DELETE /api/knowledge/:documentID`
+- `GET /api/rooms/:roomID/ws?name=Alice`
 
-API routes are exposed under `/api` for frontend and production deployments.
 Legacy non-`/api` routes are still registered for compatibility.
 
-### `GET /api/health`
+## Persistence
 
-Returns:
+The backend persists:
 
-```json
-{
-  "ok": true
-}
+- Agent definitions and prompts.
+- Room metadata and per-room agent snapshots.
+- Participants and message history.
+- Agent run records.
+- Markdown knowledge documents and chunks.
+
+Schema migrations live under `internal/store/mysql/migrations/` and run at startup when `DB_AUTO_MIGRATE=true`.
+
+## Verification
+
+```powershell
+go -C backend test ./...
 ```
-
-### `GET /api/agents`
-
-Returns the configured agent roster, including editable system prompts for the management page.
-
-### `PUT /api/agents/:agentID`
-
-Updates one predefined agent in memory.
-
-Request:
-
-```json
-{
-  "name": "产品负责人",
-  "role": "Product Lead",
-  "description": "负责收敛范围和确认优先级。",
-  "systemPrompt": "你是产品负责人。",
-  "enabled": true
-}
-```
-
-When the display name changes, the mention string changes with it, for example `产品负责人` becomes `@产品负责人`.
-
-### `POST /api/rooms`
-
-Creates a room using the currently enabled agents.
-
-Request:
-
-```json
-{
-  "name": "Demo Room"
-}
-```
-
-### `GET /api/rooms/:roomID`
-
-Returns room metadata, participants, and enabled agents. Room responses hide system prompts.
-
-### `GET /api/rooms/:roomID/messages`
-
-Returns recent room messages.
-
-### `GET /api/rooms/:roomID/ws?name=Alice`
-
-Upgrades to WebSocket, joins the participant to the room, sends a room snapshot, and then streams room events.
-
-## WebSocket events
-
-Client to server:
-
-```json
-{
-  "type": "message",
-  "content": "@前端工程师 这个页面怎么布局？"
-}
-```
-
-Server to client event types:
-
-- `room_snapshot`
-- `message`
-- `participant_joined`
-- `participant_left`
-- `error`
-
-## Agent behavior
-
-- Agents only respond when their exact mention string appears in a human message.
-- Normal human messages do not trigger agents.
-- One message can trigger multiple agents.
-- Agent and system messages do not trigger follow-up agents.
-- Disabled agents are excluded from room agent rosters and mention detection.
-- LLM failures are surfaced as room-visible system messages.
-
-Default predefined agents:
-
-- `@产品经理`
-- `@前端工程师`
-- `@后端工程师`
-- `@测试工程师`
-- `@会议秘书`
-
-## Package overview
-
-- `cmd/server`: process entrypoint
-- `internal/api`: Gin routes, HTTP handlers, and WebSocket handling
-- `internal/agent`: predefined agents, mention detection, and response generation
-- `internal/llm`: minimal OpenAI-compatible client
-- `internal/model`: shared API and room event types
-- `internal/room`: in-memory room state, clients, agent configuration, and broadcast hub

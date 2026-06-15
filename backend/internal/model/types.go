@@ -34,9 +34,11 @@ type Room struct {
 }
 
 type RoomMeta struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	CreatedAt    time.Time `json:"createdAt"`
+	HasPasscode  bool      `json:"hasPasscode"`
+	PasscodeHash string    `json:"-"`
 }
 
 type RoomState struct {
@@ -138,6 +140,7 @@ type UploadKnowledgeResponse struct {
 type CreateRoomRequest struct {
 	Name     string   `json:"name"`
 	AgentIDs []string `json:"agentIds"`
+	Passcode string   `json:"passcode"`
 }
 
 type CreateRoomResponse struct {
@@ -152,6 +155,10 @@ type GetRoomResponse struct {
 
 type GetMessagesResponse struct {
 	Messages []Message `json:"messages"`
+}
+
+type GenerateMinutesResponse struct {
+	Markdown string `json:"markdown"`
 }
 
 type ErrorResponse struct {

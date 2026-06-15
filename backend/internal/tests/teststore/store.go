@@ -52,7 +52,13 @@ func (s *Store) CreateRoom(_ context.Context, input store.CreateRoomInput) (mode
 	if s.Rooms == nil {
 		s.Rooms = make(map[string]model.RoomMeta)
 	}
-	meta := model.RoomMeta{ID: input.ID, Name: input.Name, CreatedAt: input.CreatedAt}
+	meta := model.RoomMeta{
+		ID:           input.ID,
+		Name:         input.Name,
+		CreatedAt:    input.CreatedAt,
+		HasPasscode:  input.PasscodeHash != "",
+		PasscodeHash: input.PasscodeHash,
+	}
 	s.Rooms[input.ID] = meta
 	return meta, input.Agents, nil
 }

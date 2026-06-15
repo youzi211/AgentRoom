@@ -6,7 +6,7 @@ function FocusTimeline({ focusPoints = [] }) {
           <h2>会议焦点</h2>
           <span className="sidebar-count">0</span>
         </div>
-        <p className="sidebar-empty">发送消息后，AI 将自动分析会议焦点。</p>
+        <p className="sidebar-empty">发送消息后，AI 会自动提取会议焦点。</p>
       </section>
     )
   }
@@ -53,16 +53,16 @@ function groupByTime(points) {
     if (diffMinutes < 1) {
       timeLabel = '刚刚'
     } else if (diffMinutes < 5) {
-      timeLabel = '近5分钟'
+      timeLabel = '近 5 分钟'
     } else if (diffMinutes < 15) {
-      timeLabel = '近15分钟'
+      timeLabel = '近 15 分钟'
     } else if (diffMinutes < 30) {
-      timeLabel = '近30分钟'
+      timeLabel = '近 30 分钟'
     } else {
       timeLabel = '更早'
     }
 
-    const existingGroup = groups.find((g) => g.timeLabel === timeLabel)
+    const existingGroup = groups.find((group) => group.timeLabel === timeLabel)
     if (existingGroup) {
       existingGroup.points.push(point)
     } else {

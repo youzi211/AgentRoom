@@ -181,11 +181,12 @@ func (s *MySQLStore) CreateRoom(ctx context.Context, input store.CreateRoomInput
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		roomRecord := RoomModel{
-			ID:        input.ID,
-			Name:      input.Name,
-			Status:    "active",
-			CreatedAt: now,
-			UpdatedAt: now,
+			ID:           input.ID,
+			Name:         input.Name,
+			Status:       "active",
+			PasscodeHash: input.PasscodeHash,
+			CreatedAt:    now,
+			UpdatedAt:    now,
 		}
 		if err := tx.Create(&roomRecord).Error; err != nil {
 			return fmt.Errorf("insert room: %w", err)
@@ -205,9 +206,11 @@ func (s *MySQLStore) CreateRoom(ctx context.Context, input store.CreateRoomInput
 	}
 
 	meta := model.RoomMeta{
-		ID:        input.ID,
-		Name:      input.Name,
-		CreatedAt: now,
+		ID:           input.ID,
+		Name:         input.Name,
+		CreatedAt:    now,
+		HasPasscode:  input.PasscodeHash != "",
+		PasscodeHash: input.PasscodeHash,
 	}
 	return meta, input.Agents, nil
 }

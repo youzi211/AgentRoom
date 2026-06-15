@@ -1,8 +1,10 @@
 import { useState } from 'react'
 
-function RoomEntry({ errorMessage, isSubmitting, roomId, onBackHome, onJoinRoom }) {
+function RoomEntry({ errorMessage, initialPasscode = '', isSubmitting, roomId, onBackHome, onJoinRoom }) {
   const [displayName, setDisplayName] = useState('')
+  const [passcode, setPasscode] = useState(initialPasscode)
   const trimmedDisplayName = displayName.trim()
+  const trimmedPasscode = passcode.trim()
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -13,6 +15,7 @@ function RoomEntry({ errorMessage, isSubmitting, roomId, onBackHome, onJoinRoom 
     await onJoinRoom({
       displayName: trimmedDisplayName,
       roomId,
+      passcode: trimmedPasscode,
     })
   }
 
@@ -22,7 +25,7 @@ function RoomEntry({ errorMessage, isSubmitting, roomId, onBackHome, onJoinRoom 
         <div className="panel-header panel-header--horizontal">
           <div>
             <p className="eyebrow">加入会议室</p>
-            <h1>输入名称后进入房间</h1>
+            <h1>输入昵称后进入房间</h1>
             <p className="section-copy">
               这是一个可分享的会议链接。为了让成员和 Agent 正确识别你的发言，请先填写本次会议里的显示名称。
             </p>
@@ -51,6 +54,20 @@ function RoomEntry({ errorMessage, isSubmitting, roomId, onBackHome, onJoinRoom 
               maxLength={40}
             />
             <p className="field-hint">这个名称会显示在会议消息和成员列表中。</p>
+          </div>
+
+          <div className="field-group">
+            <label htmlFor="direct-passcode">房间口令</label>
+            <input
+              id="direct-passcode"
+              type="password"
+              value={passcode}
+              onChange={(event) => setPasscode(event.target.value)}
+              placeholder="如果房间设置了口令，请在这里输入"
+              disabled={isSubmitting}
+              maxLength={80}
+            />
+            <p className="field-hint">没有口令的房间可以留空。</p>
           </div>
 
           <div className="button-row">

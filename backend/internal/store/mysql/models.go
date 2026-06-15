@@ -29,12 +29,13 @@ func (AgentModel) TableName() string { return "agents" }
 
 // RoomModel maps to the `rooms` table.
 type RoomModel struct {
-	ID         string     `gorm:"primaryKey;size:64"`
-	Name       string     `gorm:"size:255;not null"`
-	Status     string     `gorm:"size:32;not null;default:'active'"`
-	CreatedAt  time.Time  `gorm:"not null;index:idx_rooms_created_at"`
-	UpdatedAt  time.Time  `gorm:"not null"`
-	ArchivedAt *time.Time `gorm:""`
+	ID           string     `gorm:"primaryKey;size:64"`
+	Name         string     `gorm:"size:255;not null"`
+	Status       string     `gorm:"size:32;not null;default:'active'"`
+	PasscodeHash string     `gorm:"column:passcode_hash;size:128;not null;default:''"`
+	CreatedAt    time.Time  `gorm:"not null;index:idx_rooms_created_at"`
+	UpdatedAt    time.Time  `gorm:"not null"`
+	ArchivedAt   *time.Time `gorm:""`
 }
 
 func (RoomModel) TableName() string { return "rooms" }
@@ -276,9 +277,11 @@ func (m MessageModel) toDomain() model.Message {
 
 func (m RoomModel) toDomain() model.RoomMeta {
 	return model.RoomMeta{
-		ID:        m.ID,
-		Name:      m.Name,
-		CreatedAt: m.CreatedAt,
+		ID:           m.ID,
+		Name:         m.Name,
+		CreatedAt:    m.CreatedAt,
+		HasPasscode:  m.PasscodeHash != "",
+		PasscodeHash: m.PasscodeHash,
 	}
 }
 

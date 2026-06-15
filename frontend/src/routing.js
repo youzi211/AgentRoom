@@ -24,7 +24,8 @@ export function parseCurrentRoute() {
     try {
       const roomId = decodeURIComponent(segments[1])
       const participantName = new URLSearchParams(window.location.search).get('name')?.trim() || ''
-      return { name: ROUTE_NAMES.room, roomId, participantName }
+      const passcode = new URLSearchParams(window.location.search).get('passcode')?.trim() || ''
+      return { name: ROUTE_NAMES.room, roomId, participantName, passcode }
     } catch {
       return { name: ROUTE_NAMES.notFound }
     }
@@ -46,9 +47,14 @@ export function navigateRoom(roomId, roomSession, { replace = false } = {}) {
     roomId,
     participantName: roomSession.participantName,
     initialRoom: roomSession.initialRoom,
+    passcode: roomSession.passcode || '',
   }
   persistRoomSession(roomId, nextSession)
-  navigate(`/rooms/${encodeURIComponent(roomId)}`, {
+  const searchParams = new URLSearchParams()
+  if (nextSession.passcode) {
+    searchParams.set('passcode', nextSession.passcode)
+  }
+  navigate(`/rooms/${encodeURIComponent(roomId)}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`, {
     replace,
     state: { agentRoom: nextSession },
   })
@@ -64,24 +70,29 @@ export function subscribeToNavigation(listener) {
   }
 }
 
-export function resolveRoomSession(roomId, routeParticipantName = '') {
+export function resolveRoomSession(roomId, routeParticipantName = '', routePasscode = '') {
   const stateSession = window.history.state?.agentRoom
   if (stateSession?.roomId === roomId && stateSession?.participantName) {
     return {
       participantName: stateSession.participantName,
       initialRoom: stateSession.initialRoom,
+      passcode: stateSession.passcode || routePasscode,
     }
   }
 
   const storedSession = readStoredRoomSession(roomId)
   if (storedSession?.participantName) {
-    return storedSession
+    return {
+      ...storedSession,
+      passcode: storedSession.passcode || routePasscode,
+    }
   }
 
-  if (routeParticipantName) {
+  if (routeParticipantName || routePasscode) {
     return {
       participantName: routeParticipantName,
       initialRoom: null,
+      passcode: routePasscode,
     }
   }
 
@@ -119,6 +130,7 @@ function persistRoomSession(roomId, roomSession) {
         participantName: roomSession.participantName,
         roomId,
         initialRoom: roomSession.initialRoom,
+        passcode: roomSession.passcode || '',
       }),
     )
   } catch {

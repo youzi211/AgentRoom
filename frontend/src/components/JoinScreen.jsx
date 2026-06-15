@@ -6,6 +6,8 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
   const [joinDisplayName, setJoinDisplayName] = useState('')
   const [roomName, setRoomName] = useState('')
   const [roomId, setRoomId] = useState('')
+  const [createPasscode, setCreatePasscode] = useState('')
+  const [joinPasscode, setJoinPasscode] = useState('')
   const [availableAgents, setAvailableAgents] = useState([])
   const [selectedAgentIds, setSelectedAgentIds] = useState(new Set())
 
@@ -13,6 +15,8 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
   const trimmedJoinDisplayName = joinDisplayName.trim()
   const trimmedRoomName = roomName.trim()
   const trimmedRoomId = roomId.trim()
+  const trimmedCreatePasscode = createPasscode.trim()
+  const trimmedJoinPasscode = joinPasscode.trim()
   const selectedAgents = useMemo(
     () => availableAgents.filter((agent) => selectedAgentIds.has(agent.id)),
     [availableAgents, selectedAgentIds],
@@ -30,7 +34,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
         setAvailableAgents(enabledAgents)
         setSelectedAgentIds(new Set(enabledAgents.map((agent) => agent.id)))
       } catch {
-        // Agent 列表加载失败不阻塞人工会议入口。
+        // Keep the room entry flow available even when the roster cannot be loaded.
       }
     }
     void loadAgents()
@@ -69,6 +73,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
       displayName: trimmedCreateDisplayName,
       roomName: trimmedRoomName,
       agentIds: Array.from(selectedAgentIds),
+      passcode: trimmedCreatePasscode,
     })
   }
 
@@ -81,6 +86,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
     await onJoinRoom({
       displayName: trimmedJoinDisplayName,
       roomId: trimmedRoomId,
+      passcode: trimmedJoinPasscode,
     })
   }
 
@@ -105,9 +111,9 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
       <section className="entry-hero">
         <div>
           <p className="eyebrow">协作会议</p>
-          <h1>人与智能体协作的轻量会议工作台</h1>
+          <h1>把角色 Agent 带进你的实时文本会议</h1>
           <p className="section-copy">
-            创建房间、选择本次需要的 Agent，把会议文件交给它们参考。讨论时用 @ 提及角色，让每个 Agent 在合适的时刻参与。
+            创建房间、选择本次需要的 Agent，并把会议资料交给它们参考。讨论时用 `@角色名` 明确点名，让每个 Agent 在合适的时候参与。
           </p>
         </div>
         <div className="entry-summary" aria-label="能力概览">
@@ -158,6 +164,20 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
                 maxLength={60}
               />
               <p className="field-hint">留空时会使用默认会议名称。</p>
+            </div>
+
+            <div className="field-group">
+              <label htmlFor="create-passcode">房间口令</label>
+              <input
+                id="create-passcode"
+                type="password"
+                value={createPasscode}
+                onChange={(event) => setCreatePasscode(event.target.value)}
+                placeholder="可选，用于限制加入房间"
+                disabled={isSubmitting}
+                maxLength={80}
+              />
+              <p className="field-hint">如果留空，这个房间不需要口令。</p>
             </div>
 
             {availableAgents.length > 0 ? (
@@ -253,6 +273,19 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
                 maxLength={80}
               />
               <p className="field-hint">房间 ID 可从会议室右上角复制。</p>
+            </div>
+
+            <div className="field-group">
+              <label htmlFor="join-passcode">房间口令</label>
+              <input
+                id="join-passcode"
+                type="password"
+                value={joinPasscode}
+                onChange={(event) => setJoinPasscode(event.target.value)}
+                placeholder="如果房间设置了口令，请输入"
+                disabled={isSubmitting}
+                maxLength={80}
+              />
             </div>
           </div>
 

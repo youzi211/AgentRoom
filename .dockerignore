@@ -1,0 +1,9 @@
+.git
+.omx
+.claude
+.env
+backend/server.exe
+frontend/node_modules
+frontend/dist
+.gocache
+.gomodcache

@@ -34,6 +34,7 @@ func main() {
 	}
 
 	dbConfig := config.LoadDBConfig()
+	securityConfig := config.LoadSecurityConfig()
 	if dbConfig.DSN == "" {
 		fatal(logger, "MYSQL_DSN is required. Set it in .env or environment variables.", nil)
 	}
@@ -72,8 +73,12 @@ func main() {
 	llmClient := llm.NewClientFromEnv()
 	runner := agent.NewRunner(llmClient, store).WithKnowledge(knowledgeService)
 	focusService := service.NewFocusService(llmClient)
-	roomService := service.NewRoomService(manager, agentService, knowledgeService, runner, focusService, store)
-	server := api.NewServer(roomService)
+	minutesService := service.NewMinutesService(llmClient)
+	roomService := service.NewRoomService(manager, agentService, knowledgeService, runner, focusService, store).WithMinutes(minutesService)
+	server := api.NewServerWithConfig(roomService, api.Config{
+		AdminAPIKey:    securityConfig.AdminAPIKey,
+		AllowedOrigins: securityConfig.AllowedOrigins,
+	})
 
 	now := time.Now().UTC()
 	if err := store.MarkAllActiveParticipantsLeft(ctx, now); err != nil {

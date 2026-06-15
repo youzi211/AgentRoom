@@ -1,0 +1,68 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-agentroom}
+      MYSQL_USER: ${MYSQL_USER:-agentroom}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-agentroom_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change_me_root_password}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PORT: "8080"
+      DB_DRIVER: "mysql"
+      MYSQL_DSN: "${MYSQL_USER:-agentroom}:${MYSQL_PASSWORD:-agentroom_password}@tcp(mysql:3306)/${MYSQL_DATABASE:-agentroom}?parseTime=true&charset=utf8mb4&loc=UTC"
+      DB_AUTO_MIGRATE: "${DB_AUTO_MIGRATE:-true}"
+      ADMIN_API_KEY: "${ADMIN_API_KEY:-change_me_admin_key}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-https://api.openai.com}"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+      LLM_MODEL: "${LLM_MODEL:-gpt-4o-mini}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      LOG_FORMAT: "${LOG_FORMAT:-json}"
+      LOG_ADD_SOURCE: "${LOG_ADD_SOURCE:-false}"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/health | grep -q '\"ok\":true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_ADMIN_API_KEY: "${VITE_ADMIN_API_KEY:-change_me_admin_key}"
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+
+volumes:
+  mysql-data:

@@ -31,14 +31,15 @@ export default function App() {
     })
   }, [])
 
-  const handleCreateRoom = async ({ displayName, roomName, agentIds }) => {
+  const handleCreateRoom = async ({ displayName, roomName, agentIds, passcode }) => {
     setSubmitState({ isSubmitting: true, errorMessage: '' })
 
     try {
-      const response = await createRoom(roomName || DEFAULT_ROOM_NAME, agentIds)
+      const response = await createRoom(roomName || DEFAULT_ROOM_NAME, agentIds, passcode)
       const nextRoomSession = {
         participantName: displayName,
         initialRoom: response.room,
+        passcode,
       }
       setSubmitState({ isSubmitting: false, errorMessage: '' })
       navigateRoom(response.room.id, nextRoomSession)
@@ -50,14 +51,15 @@ export default function App() {
     }
   }
 
-  const handleJoinRoom = async ({ displayName, roomId }) => {
+  const handleJoinRoom = async ({ displayName, roomId, passcode }) => {
     setSubmitState({ isSubmitting: true, errorMessage: '' })
 
     try {
-      const response = await getRoom(roomId)
+      const response = await getRoom(roomId, passcode)
       const nextRoomSession = {
         participantName: displayName,
         initialRoom: response.room,
+        passcode,
       }
       setSubmitState({ isSubmitting: false, errorMessage: '' })
       navigateRoom(response.room.id, nextRoomSession)
@@ -79,6 +81,7 @@ export default function App() {
       return (
         <RoomEntry
           errorMessage={submitState.errorMessage}
+          initialPasscode={roomSession?.passcode || route.passcode || ''}
           isSubmitting={submitState.isSubmitting}
           roomId={route.roomId}
           onBackHome={() => navigateHome()}
@@ -93,6 +96,7 @@ export default function App() {
         initialRoom={roomSession.initialRoom ?? { id: route.roomId, name: '会议室' }}
         participantName={roomSession.participantName}
         roomId={route.roomId}
+        roomPasscode={roomSession.passcode || ''}
         onLeaveRoom={handleLeaveRoom}
       />
     )
@@ -120,7 +124,7 @@ export default function App() {
 function getNavigationState() {
   const route = parseCurrentRoute()
   const roomSession =
-    route.name === ROUTE_NAMES.room ? resolveRoomSession(route.roomId, route.participantName) : null
+    route.name === ROUTE_NAMES.room ? resolveRoomSession(route.roomId, route.participantName, route.passcode) : null
 
   return { route, roomSession }
 }
@@ -129,6 +133,9 @@ function normalizeJoinRoomError(error) {
   const message = error?.message || ''
   if (message.toLowerCase().includes('room not found')) {
     return '房间不存在或已关闭，请检查房间 ID 是否完整。'
+  }
+  if (message.toLowerCase().includes('passcode')) {
+    return '房间口令不正确，或该房间需要口令才能进入。'
   }
   return message || '加入房间失败，请稍后重试。'
 }

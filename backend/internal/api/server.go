@@ -23,23 +23,45 @@ import (
 )
 
 type Server struct {
-	rooms    *service.RoomService
-	logger   *slog.Logger
-	upgrader websocket.Upgrader
+	rooms          *service.RoomService
+	logger         *slog.Logger
+	config         Config
+	allowedOrigins map[string]struct{}
+	upgrader       websocket.Upgrader
+}
+
+type Config struct {
+	AdminAPIKey    string
+	AllowedOrigins []string
 }
 
 func NewServer(rooms *service.RoomService) *Server {
-	return &Server{
-		rooms:  rooms,
-		logger: logging.Component("api"),
-		upgrader: websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-			CheckOrigin: func(r *http.Request) bool {
-				return true
-			},
+	return NewServerWithConfig(rooms, Config{})
+}
+
+func NewServerWithConfig(rooms *service.RoomService, config Config) *Server {
+	server := &Server{
+		rooms:          rooms,
+		logger:         logging.Component("api"),
+		config:         config,
+		allowedOrigins: originSet(config.AllowedOrigins),
+	}
+	server.upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return server.allowsOrigin(r.Header.Get("Origin"))
 		},
 	}
+	return server
+}
+
+func (s *Server) RoomsForTest() *service.RoomService {
+	return s.rooms
+}
+
+func (s *Server) AllowsOriginForTest(origin string) bool {
+	return s.allowsOrigin(origin)
 }
 
 func (s *Server) Routes() http.Handler {
@@ -59,17 +81,19 @@ func (s *Server) Routes() http.Handler {
 func (s *Server) registerAPIRoutes(routes gin.IRoutes) {
 	routes.GET("/health", s.handleHealth)
 	routes.GET("/agents", s.handleAgents)
-	routes.POST("/agents", s.handleCreateAgent)
-	routes.PUT("/agents/:agentID", s.handleUpdateAgent)
-	routes.DELETE("/agents/:agentID", s.handleDeleteAgent)
+	routes.POST("/agents", s.requireAdmin, s.handleCreateAgent)
+	routes.PUT("/agents/:agentID", s.requireAdmin, s.handleUpdateAgent)
+	routes.DELETE("/agents/:agentID", s.requireAdmin, s.handleDeleteAgent)
 	routes.GET("/agents/:agentID/knowledge", s.handleListAgentKnowledge)
-	routes.POST("/agents/:agentID/knowledge", s.handleUploadAgentKnowledge)
+	routes.POST("/agents/:agentID/knowledge", s.requireAdmin, s.handleUploadAgentKnowledge)
 	routes.POST("/rooms", s.handleCreateRoom)
 	routes.GET("/rooms/:roomID", s.handleGetRoom)
 	routes.GET("/rooms/:roomID/messages", s.handleGetMessages)
 	routes.GET("/rooms/:roomID/knowledge", s.handleListRoomKnowledge)
-	routes.POST("/rooms/:roomID/knowledge", s.handleUploadRoomKnowledge)
-	routes.DELETE("/knowledge/:documentID", s.handleDeleteKnowledgeDocument)
+	routes.POST("/rooms/:roomID/knowledge", s.requireAdmin, s.handleUploadRoomKnowledge)
+	routes.DELETE("/knowledge/:documentID", s.requireAdmin, s.handleDeleteKnowledgeDocument)
+	routes.POST("/rooms/:roomID/minutes", s.handleGenerateMinutes)
+	routes.GET("/rooms/:roomID/minutes.md", s.handleDownloadMinutes)
 	routes.GET("/rooms/:roomID/ws", s.handleRoomWebSocket)
 }
 
@@ -234,7 +258,7 @@ func (s *Server) handleCreateRoom(c *gin.Context) {
 		return
 	}
 
-	currentRoom, err := s.rooms.CreateRoom(c.Request.Context(), request.Name, request.AgentIDs)
+	currentRoom, err := s.rooms.CreateRoom(c.Request.Context(), request.Name, request.AgentIDs, request.Passcode)
 	if err != nil {
 		s.logger.Error("create room", "room_name", request.Name, "error", err)
 		writeError(c, http.StatusInternalServerError, "failed to create room")
@@ -274,6 +298,41 @@ func (s *Server) handleGetMessages(c *gin.Context) {
 	messages := s.rooms.ListMessages(c.Request.Context(), currentRoom, limit)
 
 	c.JSON(http.StatusOK, model.GetMessagesResponse{Messages: messages})
+}
+
+func (s *Server) handleGenerateMinutes(c *gin.Context) {
+	currentRoom, ok := s.getRoomFromRequest(c)
+	if !ok {
+		return
+	}
+
+	markdown, err := s.rooms.GenerateMinutes(c.Request.Context(), currentRoom)
+	if err != nil {
+		s.logger.Error("generate minutes", "room_id", currentRoom.Info().ID, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to generate meeting minutes")
+		return
+	}
+
+	c.JSON(http.StatusOK, model.GenerateMinutesResponse{Markdown: markdown})
+}
+
+func (s *Server) handleDownloadMinutes(c *gin.Context) {
+	currentRoom, ok := s.getRoomFromRequest(c)
+	if !ok {
+		return
+	}
+
+	markdown, err := s.rooms.GenerateMinutes(c.Request.Context(), currentRoom)
+	if err != nil {
+		s.logger.Error("download minutes", "room_id", currentRoom.Info().ID, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to export meeting minutes")
+		return
+	}
+
+	fileName := minutesFilename(currentRoom.Info())
+	c.Header("Content-Type", "text/markdown; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
+	c.String(http.StatusOK, markdown)
 }
 
 func (s *Server) handleListRoomKnowledge(c *gin.Context) {
@@ -431,6 +490,8 @@ func (s *Server) handleClientEvent(currentRoom *room.Room, participant model.Par
 				FocusPoints: focusPoints,
 			})
 		}
+
+		s.rooms.TriggerAgentResponses(context.Background(), currentRoom, savedMessage)
 	default:
 		sendClientEvent(client, model.ServerEvent{Type: model.EventTypeError, Error: fmt.Sprintf("unsupported event type %q", event.Type)})
 	}
@@ -456,6 +517,10 @@ func (s *Server) getRoomFromRequest(c *gin.Context) (*room.Room, bool) {
 	currentRoom, ok := s.rooms.GetRoom(c.Request.Context(), roomID)
 	if !ok {
 		writeError(c, http.StatusNotFound, "room not found")
+		return nil, false
+	}
+	if !s.rooms.CanAccessRoom(currentRoom, roomPasscodeFromRequest(c.Request)) {
+		writeError(c, http.StatusForbidden, "room passcode is required or invalid")
 		return nil, false
 	}
 	return currentRoom, true
@@ -523,4 +588,76 @@ func (s *Server) writeKnowledgeError(c *gin.Context, err error, fallback string)
 	}
 	s.logger.Error("knowledge request failed", "error", err)
 	writeError(c, http.StatusInternalServerError, fallback)
+}
+
+func (s *Server) requireAdmin(c *gin.Context) {
+	if strings.TrimSpace(s.config.AdminAPIKey) == "" {
+		return
+	}
+	if c.GetHeader("X-Admin-Key") != s.config.AdminAPIKey {
+		writeError(c, http.StatusUnauthorized, "admin api key is required")
+		c.Abort()
+		return
+	}
+}
+
+func (s *Server) allowsOrigin(origin string) bool {
+	origin = strings.TrimSpace(origin)
+	if origin == "" || len(s.allowedOrigins) == 0 {
+		return true
+	}
+	_, ok := s.allowedOrigins[origin]
+	return ok
+}
+
+func originSet(origins []string) map[string]struct{} {
+	if len(origins) == 0 {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(origins))
+	for _, origin := range origins {
+		trimmed := strings.TrimSpace(origin)
+		if trimmed != "" {
+			allowed[trimmed] = struct{}{}
+		}
+	}
+	return allowed
+}
+
+func roomPasscodeFromRequest(request *http.Request) string {
+	if request == nil {
+		return ""
+	}
+	if headerValue := strings.TrimSpace(request.Header.Get("X-Room-Passcode")); headerValue != "" {
+		return headerValue
+	}
+	return strings.TrimSpace(request.URL.Query().Get("passcode"))
+}
+
+func minutesFilename(room model.RoomMeta) string {
+	base := strings.TrimSpace(room.Name)
+	if base == "" {
+		base = room.ID
+	}
+	base = strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r
+		case r >= '0' && r <= '9':
+			return r
+		case r == '-' || r == '_':
+			return r
+		case r == ' ':
+			return '-'
+		default:
+			return '-'
+		}
+	}, base)
+	base = strings.Trim(base, "-")
+	if base == "" {
+		base = room.ID
+	}
+	return base + "-minutes.md"
 }

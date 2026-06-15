@@ -18,6 +18,7 @@ CREATE TABLE rooms (
   id VARCHAR(64) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'active',
+  passcode_hash VARCHAR(128) NOT NULL DEFAULT '',
   created_at DATETIME(6) NOT NULL,
   updated_at DATETIME(6) NOT NULL,
   archived_at DATETIME(6) NULL,

@@ -48,10 +48,11 @@ type Store interface {
 
 // CreateRoomInput holds the data needed to create a new room with agent snapshots.
 type CreateRoomInput struct {
-	ID        string
-	Name      string
-	Agents    []model.Agent
-	CreatedAt time.Time
+	ID           string
+	Name         string
+	Agents       []model.Agent
+	PasscodeHash string
+	CreatedAt    time.Time
 }
 
 // AddParticipantInput holds the data needed to add a participant to a room.

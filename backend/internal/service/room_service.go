@@ -22,6 +22,7 @@ type RoomService struct {
 	knowledge *KnowledgeService
 	runner    *agent.Runner
 	focus     *FocusService
+	minutes   *MinutesService
 	store     store.Store
 	logger    *slog.Logger
 }
@@ -38,16 +39,28 @@ func NewRoomService(manager *room.Manager, agents *AgentService, knowledge *Know
 	}
 }
 
+func (s *RoomService) WithMinutes(minutes *MinutesService) *RoomService {
+	s.minutes = minutes
+	return s
+}
+
 func (s *RoomService) Ping(ctx context.Context) error {
 	return s.store.Ping(ctx)
 }
 
-func (s *RoomService) CreateRoom(ctx context.Context, name string, agentIDs []string) (*room.Room, error) {
-	return s.manager.CreateRoom(ctx, name, agentIDs)
+func (s *RoomService) CreateRoom(ctx context.Context, name string, agentIDs []string, passcode string) (*room.Room, error) {
+	return s.manager.CreateRoom(ctx, name, agentIDs, HashRoomPasscode(passcode))
 }
 
 func (s *RoomService) GetRoom(ctx context.Context, roomID string) (*room.Room, bool) {
 	return s.manager.GetRoom(ctx, roomID)
+}
+
+func (s *RoomService) CanAccessRoom(currentRoom *room.Room, passcode string) bool {
+	if currentRoom == nil {
+		return false
+	}
+	return RoomPasscodeMatches(currentRoom.PasscodeHash(), passcode)
 }
 
 func (s *RoomService) Agents() []model.AgentConfig {
@@ -121,6 +134,14 @@ func (s *RoomService) ListMessages(ctx context.Context, currentRoom *room.Room, 
 	return messages
 }
 
+func (s *RoomService) GenerateMinutes(ctx context.Context, currentRoom *room.Room) (string, error) {
+	messages := s.ListMessages(ctx, currentRoom, 500)
+	if s.minutes != nil {
+		return s.minutes.Generate(ctx, currentRoom.Info(), messages)
+	}
+	return fallbackMinutes(currentRoom.Info(), messages), nil
+}
+
 func (s *RoomService) JoinParticipant(ctx context.Context, currentRoom *room.Room, name string) model.Participant {
 	participant := currentRoom.NewParticipant(name)
 	roomInfo := currentRoom.Info()
@@ -161,7 +182,6 @@ func (s *RoomService) HandleHumanMessage(ctx context.Context, currentRoom *room.
 	}
 
 	currentRoom.AppendMessage(savedMessage)
-	go s.runner.HandleHumanMessage(context.Background(), currentRoom, savedMessage)
 
 	var focusPoints []model.FocusPoint
 	if s.focus != nil {
@@ -169,6 +189,13 @@ func (s *RoomService) HandleHumanMessage(ctx context.Context, currentRoom *room.
 	}
 
 	return savedMessage, focusPoints, nil
+}
+
+func (s *RoomService) TriggerAgentResponses(ctx context.Context, currentRoom *room.Room, message model.Message) {
+	if s == nil || s.runner == nil || currentRoom == nil {
+		return
+	}
+	go s.runner.HandleHumanMessage(ctx, currentRoom, message)
 }
 
 func (s *RoomService) agentByID(agentID string) (model.AgentConfig, bool) {

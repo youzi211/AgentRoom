@@ -14,6 +14,7 @@ type Room struct {
 	id           string
 	name         string
 	createdAt    time.Time
+	passcodeHash string
 	participants map[string]*model.Participant
 	agents       map[string]*model.Agent
 	agentOrder   []string
@@ -59,6 +60,7 @@ func NewFromState(meta model.RoomMeta, agents []model.Agent) *Room {
 		id:           meta.ID,
 		name:         meta.Name,
 		createdAt:    meta.CreatedAt,
+		passcodeHash: meta.PasscodeHash,
 		participants: make(map[string]*model.Participant),
 		agents:       agentMap,
 		agentOrder:   agentOrder,
@@ -91,6 +93,7 @@ func NewFromSnapshot(meta model.RoomMeta, agents []model.Agent, messages []model
 		id:           meta.ID,
 		name:         meta.Name,
 		createdAt:    meta.CreatedAt,
+		passcodeHash: meta.PasscodeHash,
 		participants: participantMap,
 		agents:       agentMap,
 		agentOrder:   agentOrder,
@@ -107,10 +110,17 @@ func (r *Room) Info() model.RoomMeta {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return model.RoomMeta{
-		ID:        r.id,
-		Name:      r.name,
-		CreatedAt: r.createdAt,
+		ID:          r.id,
+		Name:        r.name,
+		CreatedAt:   r.createdAt,
+		HasPasscode: r.passcodeHash != "",
 	}
+}
+
+func (r *Room) PasscodeHash() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.passcodeHash
 }
 
 func (r *Room) Snapshot() model.RoomState {
@@ -118,7 +128,7 @@ func (r *Room) Snapshot() model.RoomState {
 	defer r.mu.RUnlock()
 
 	return model.RoomState{
-		Room:         model.RoomMeta{ID: r.id, Name: r.name, CreatedAt: r.createdAt},
+		Room:         model.RoomMeta{ID: r.id, Name: r.name, CreatedAt: r.createdAt, HasPasscode: r.passcodeHash != ""},
 		Participants: cloneParticipants(r.participants),
 		Agents:       cloneAgents(r.agents, r.agentOrder),
 		Messages:     cloneMessages(r.messages),

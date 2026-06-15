@@ -314,6 +314,59 @@
   overflow-y: auto;
 }
 
+.minutes-panel {
+  gap: 10px;
+}
+
+.minutes-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.minutes-actions .button {
+  flex: 1 1 120px;
+}
+
+.minutes-notice {
+  margin: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--muted);
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.minutes-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.minutes-preview summary {
+  cursor: pointer;
+  color: var(--text-strong);
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.minutes-preview pre {
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text);
+  padding: 10px;
+  font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  font-size: 0.74rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 .focus-timeline {
   display: flex;
   flex-direction: column;

@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createRoomSocket, deleteKnowledgeDocument, getMessages, getRoom, getRoomKnowledge, uploadRoomKnowledge } from '../api/roomClient'
+import {
+  createRoomSocket,
+  deleteKnowledgeDocument,
+  exportRoomMinutesMarkdown,
+  generateRoomMinutes,
+  getMessages,
+  getRoom,
+  getRoomKnowledge,
+  uploadRoomKnowledge,
+} from '../api/roomClient'
 import AgentRoster from './AgentRoster'
 import FocusTimeline from './FocusTimeline'
 import KnowledgePanel from './KnowledgePanel'
+import MeetingMinutesPanel from './MeetingMinutesPanel'
 import MessageComposer from './MessageComposer'
 import MessageList from './MessageList'
 import ParticipantList from './ParticipantList'
@@ -16,7 +26,7 @@ const PARTICIPANT_LEFT_EVENT = 'participant_left'
 const ERROR_EVENT = 'error'
 const FOCUS_UPDATE_EVENT = 'focus_update'
 
-export default function ChatRoom({ initialRoom, participantName, roomId, onLeaveRoom }) {
+export default function ChatRoom({ initialRoom, participantName, roomId, roomPasscode, onLeaveRoom }) {
   const [room, setRoom] = useState(initialRoom)
   const [participants, setParticipants] = useState([])
   const [agents, setAgents] = useState([])
@@ -70,7 +80,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
           }
           return
         case ERROR_EVENT:
-          setErrorMessage(event.error || '房间返回了一个错误。')
+          setErrorMessage(event.error || '房间返回了一条错误消息。')
           setThinkingAgents([])
           return
         default:
@@ -81,7 +91,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
     const connectToRoom = async () => {
       setConnectionState('connecting')
 
-      const [roomResult, messagesResult] = await Promise.allSettled([getRoom(roomId), getMessages(roomId)])
+      const [roomResult, messagesResult] = await Promise.allSettled([getRoom(roomId, roomPasscode), getMessages(roomId, roomPasscode)])
       if (!isCurrent) {
         return
       }
@@ -106,7 +116,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
         setErrorMessage(loadErrors.join(' '))
       }
 
-      const socket = createRoomSocket(roomId, participantName)
+      const socket = createRoomSocket(roomId, participantName, roomPasscode)
       socketRef.current = socket
 
       socket.addEventListener('open', () => {
@@ -161,7 +171,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
         socket.close()
       }
     }
-  }, [participantName, roomId])
+  }, [participantName, roomId, roomPasscode])
 
   useEffect(() => {
     const listEl = messageListRef.current
@@ -174,7 +184,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
   const handleSendMessage = async (content) => {
     const socket = socketRef.current
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-      setErrorMessage('请重新连接后再发送消息。')
+      setErrorMessage('请在连接恢复后再发送消息。')
       return false
     }
 
@@ -258,11 +268,21 @@ export default function ChatRoom({ initialRoom, participantName, roomId, onLeave
             </div>
           </section>
           <ParticipantList participants={participants} />
+          <MeetingMinutesPanel
+            agents={agents}
+            exportMinutesMarkdown={() => exportRoomMinutesMarkdown(roomId, roomPasscode)}
+            focusPoints={focusPoints}
+            generateMinutes={() => generateRoomMinutes(roomId, roomPasscode)}
+            messages={messages}
+            participants={participants}
+            room={room}
+            roomId={roomId}
+          />
           <KnowledgePanel
             title="会议文件"
-            description="所有参会 Agent 都会参考这些 Markdown 资料。"
-            emptyText="暂无会议文件。上传 .md 后，Agent 会在回答时参考。"
-            listDocuments={() => getRoomKnowledge(roomId)}
+            description="所有参会 Agent 都会参考这里的 Markdown 资料。"
+            emptyText="暂时还没有会议文件。上传 .md 后，Agent 回答时会自动参考。"
+            listDocuments={() => getRoomKnowledge(roomId, roomPasscode)}
             onUploadDocument={(file) => uploadRoomKnowledge(roomId, file)}
             onDeleteDocument={deleteKnowledgeDocument}
           />
