@@ -2,6 +2,8 @@
 
 The backend is the Go service behind AgentRoom. It exposes the HTTP API, WebSocket room transport, MySQL persistence, Markdown knowledge upload, focus extraction, and OpenAI-compatible agent execution.
 
+The LLM integration layer is implemented with `langchaingo` and still uses the existing `LLM_*` environment variables, so OpenAI-compatible providers continue to work without changing the runtime configuration contract.
+
 ## Run Locally
 
 From the repository root, create `.env` first:
@@ -35,7 +37,7 @@ The server loads `../.env` when started from `backend/`, then reads environment 
 | `DB_DRIVER` | No | `mysql` | Database driver label. |
 | `MYSQL_DSN` | Yes | _none_ | MySQL DSN. Include `parseTime=true`; use `utf8mb4` for multilingual room content. |
 | `DB_AUTO_MIGRATE` | No | `false` | Runs embedded migrations on startup when `true`. |
-| `LLM_BASE_URL` | No | `https://api.openai.com` | Base URL for the chat-completions compatible API. |
+| `LLM_BASE_URL` | No | `https://api.openai.com` | Base URL for the `langchaingo` OpenAI-compatible chat API client. |
 | `LLM_API_KEY` | No | _empty_ | API key for agent responses. If empty, human chat still works and agent calls return room-visible system messages. |
 | `LLM_MODEL` | No | `gpt-4o-mini` | Chat-completions model name. |
 | `LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, or `error`. |
