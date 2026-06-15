@@ -167,25 +167,29 @@
   padding: 12px;
 }
 
-.chat-context-panel,
-.agent-workbench-panel {
+.chat-context-panel {
   background: rgba(255, 255, 255, 0.9);
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
-}
-
-.chat-context-panel {
   overflow-y: auto;
 }
 
-.agent-workbench-panel .resize-handle--vertical {
-  flex: none;
+.agent-workbench-panel {
+  display: grid;
+  grid-template-rows: minmax(180px, 0.9fr) minmax(180px, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.agent-roster-region {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .agent-workbench-panel .focus-panel {
-  flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
@@ -321,7 +325,7 @@
 .agent-activity-panel {
   flex: none;
   gap: 10px;
-  max-height: min(34vh, 260px);
+  max-height: min(22vh, 180px);
   min-height: 0;
   overflow: hidden;
 }

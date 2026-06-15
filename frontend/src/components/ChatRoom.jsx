@@ -45,7 +45,6 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
   const [focusPoints, setFocusPoints] = useState([])
   const [leftPanelWidth, setLeftPanelWidth] = useState(270)
   const [rightPanelWidth, setRightPanelWidth] = useState(320)
-  const [rightTopHeight, setRightTopHeight] = useState(300)
   const socketRef = useRef(null)
   const insertMentionRef = useRef(() => {})
   const messageListRef = useRef(null)
@@ -366,18 +365,11 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
         />
 
         <aside className="chat-sidebar agent-workbench-panel" style={{ width: rightPanelWidth, minWidth: rightPanelWidth }}>
-          <div style={{ flex: 'none', height: rightTopHeight, overflow: 'auto' }}>
+          <div className="agent-roster-region">
             <AgentRoster agents={agents} thinkingAgents={thinkingAgents} onInsertMention={handleInsertMention} />
           </div>
-          <AgentActivityPanel activities={activityItems} errorMessage={activityError} isLoading={activityLoading} />
-          <ResizeHandle
-            direction="vertical"
-            onResize={setRightTopHeight}
-            minHeight={100}
-            maxHeight={500}
-            size={rightTopHeight}
-          />
           <FocusTimeline focusPoints={focusPoints} />
+          <AgentActivityPanel activities={activityItems} errorMessage={activityError} isLoading={activityLoading} />
         </aside>
       </div>
     </main>

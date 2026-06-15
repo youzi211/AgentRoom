@@ -32,14 +32,29 @@ test('chat room renders the agent activity panel', () => {
 })
 
 test('agent activity timeline scrolls inside its own bounded panel', () => {
+  const workbenchPanel = ruleBlock('.agent-workbench-panel')
+  const rosterRegion = ruleBlock('.agent-roster-region')
   const activityPanel = ruleBlock('.agent-activity-panel')
   const activityList = ruleBlock('.agent-activity-list')
   const focusPanel = ruleBlock('.agent-workbench-panel .focus-panel')
 
-  assert.match(activityPanel, /max-height:\s*min\(34vh,\s*260px\);/)
+  assert.match(workbenchPanel, /display:\s*grid;/)
+  assert.match(workbenchPanel, /grid-template-rows:\s*minmax\(180px,\s*0\.9fr\)\s+minmax\(180px,\s*1fr\)\s+auto;/)
+  assert.match(rosterRegion, /min-height:\s*0;/)
+  assert.match(rosterRegion, /overflow-y:\s*auto;/)
+  assert.match(activityPanel, /max-height:\s*min\(22vh,\s*180px\);/)
   assert.match(activityPanel, /overflow:\s*hidden;/)
   assert.match(activityList, /overflow-y:\s*auto;/)
   assert.match(activityList, /min-height:\s*0;/)
-  assert.match(focusPanel, /flex:\s*1;/)
   assert.match(focusPanel, /min-height:\s*0;/)
+})
+
+test('meeting focus owns the primary right-panel space before activity logs', () => {
+  const focusIndex = chatRoomSource.indexOf('<FocusTimeline focusPoints={focusPoints} />')
+  const activityIndex = chatRoomSource.indexOf('<AgentActivityPanel activities={activityItems}')
+
+  assert.ok(focusIndex > -1)
+  assert.ok(activityIndex > -1)
+  assert.ok(focusIndex < activityIndex)
+  assert.doesNotMatch(chatRoomSource, /rightTopHeight/)
 })
