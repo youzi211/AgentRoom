@@ -379,6 +379,24 @@ func (s *MySQLStore) FinishAgentRun(ctx context.Context, runID string, status st
 	return nil
 }
 
+func (s *MySQLStore) ListAgentRuns(ctx context.Context, query store.ListRunsQuery) ([]store.AgentRun, error) {
+	limit := normalizedRunLimit(query.Limit)
+	var models []AgentRunModel
+	if err := s.db.WithContext(ctx).
+		Where("room_id = ?", query.RoomID).
+		Order("started_at DESC, id DESC").
+		Limit(limit).
+		Find(&models).Error; err != nil {
+		return nil, fmt.Errorf("list agent runs: %w", err)
+	}
+
+	runs := make([]store.AgentRun, len(models))
+	for i, m := range models {
+		runs[i] = m.toStore()
+	}
+	return runs, nil
+}
+
 func (s *MySQLStore) CreateDialogueRun(ctx context.Context, run store.DialogueRun) error {
 	m := dialogueRunToModel(run)
 	if err := s.db.WithContext(ctx).Create(&m).Error; err != nil {
@@ -404,6 +422,24 @@ func (s *MySQLStore) FinishDialogueRun(ctx context.Context, runID string, status
 		return fmt.Errorf("dialogue run %s not found", runID)
 	}
 	return nil
+}
+
+func (s *MySQLStore) ListDialogueRuns(ctx context.Context, query store.ListRunsQuery) ([]store.DialogueRun, error) {
+	limit := normalizedRunLimit(query.Limit)
+	var models []DialogueRunModel
+	if err := s.db.WithContext(ctx).
+		Where("room_id = ?", query.RoomID).
+		Order("started_at DESC, id DESC").
+		Limit(limit).
+		Find(&models).Error; err != nil {
+		return nil, fmt.Errorf("list dialogue runs: %w", err)
+	}
+
+	runs := make([]store.DialogueRun, len(models))
+	for i, m := range models {
+		runs[i] = m.toStore()
+	}
+	return runs, nil
 }
 
 // Knowledge documents
@@ -490,4 +526,14 @@ func nilIfEmpty(s string) interface{} {
 		return nil
 	}
 	return s
+}
+
+func normalizedRunLimit(limit int) int {
+	if limit <= 0 {
+		return 50
+	}
+	if limit > 100 {
+		return 100
+	}
+	return limit
 }

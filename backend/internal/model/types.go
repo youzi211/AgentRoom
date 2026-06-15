@@ -15,6 +15,7 @@ const (
 	EventTypeParticipantLeft   = "participant_left"
 	EventTypeError             = "error"
 	EventTypeFocusUpdate       = "focus_update"
+	EventTypeAgentActivity     = "agent_activity"
 )
 
 const (
@@ -142,9 +143,9 @@ type UploadKnowledgeResponse struct {
 }
 
 type CreateRoomRequest struct {
-	Name           string          `json:"name"`
-	AgentIDs       []string        `json:"agentIds"`
-	Passcode       string          `json:"passcode"`
+	Name           string               `json:"name"`
+	AgentIDs       []string             `json:"agentIds"`
+	Passcode       string               `json:"passcode"`
 	DialoguePolicy *DialoguePolicyInput `json:"dialoguePolicy,omitempty"`
 }
 
@@ -162,6 +163,49 @@ type GetMessagesResponse struct {
 	Messages []Message `json:"messages"`
 }
 
+type RoomActivityResponse struct {
+	AgentRuns    []AgentRunActivity    `json:"agentRuns"`
+	DialogueRuns []DialogueRunActivity `json:"dialogueRuns"`
+}
+
+type AgentRunActivity struct {
+	ID               string     `json:"id"`
+	RoomID           string     `json:"roomID"`
+	AgentID          string     `json:"agentID"`
+	AgentName        string     `json:"agentName"`
+	TriggerMessageID string     `json:"triggerMessageID"`
+	Status           string     `json:"status"`
+	ErrorText        string     `json:"errorText,omitempty"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	CompletedAt      *time.Time `json:"completedAt,omitempty"`
+}
+
+type DialogueRunActivity struct {
+	ID               string     `json:"id"`
+	RoomID           string     `json:"roomID"`
+	TriggerMessageID string     `json:"triggerMessageID"`
+	Mode             string     `json:"mode"`
+	TurnCount        int        `json:"turnCount"`
+	Status           string     `json:"status"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	CompletedAt      *time.Time `json:"completedAt,omitempty"`
+}
+
+type AgentActivityEvent struct {
+	Kind             string     `json:"kind"`
+	Phase            string     `json:"phase"`
+	ID               string     `json:"id"`
+	RoomID           string     `json:"roomID"`
+	AgentID          string     `json:"agentID,omitempty"`
+	AgentName        string     `json:"agentName,omitempty"`
+	TriggerMessageID string     `json:"triggerMessageID,omitempty"`
+	Status           string     `json:"status,omitempty"`
+	ErrorText        string     `json:"errorText,omitempty"`
+	TurnCount        int        `json:"turnCount,omitempty"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	CompletedAt      *time.Time `json:"completedAt,omitempty"`
+}
+
 type GenerateMinutesResponse struct {
 	Markdown string `json:"markdown"`
 }
@@ -176,16 +220,17 @@ type ClientEvent struct {
 }
 
 type ServerEvent struct {
-	Type          string        `json:"type"`
-	Room          *RoomMeta     `json:"room,omitempty"`
-	Participants  []Participant `json:"participants,omitempty"`
-	Agents        []Agent       `json:"agents,omitempty"`
-	Messages      []Message     `json:"messages,omitempty"`
-	Message       *Message      `json:"message,omitempty"`
-	Participant   *Participant  `json:"participant,omitempty"`
-	ParticipantID string        `json:"participantID,omitempty"`
-	FocusPoints   []FocusPoint  `json:"focusPoints,omitempty"`
-	Error         string        `json:"error,omitempty"`
+	Type          string              `json:"type"`
+	Room          *RoomMeta           `json:"room,omitempty"`
+	Participants  []Participant       `json:"participants,omitempty"`
+	Agents        []Agent             `json:"agents,omitempty"`
+	Messages      []Message           `json:"messages,omitempty"`
+	Message       *Message            `json:"message,omitempty"`
+	Participant   *Participant        `json:"participant,omitempty"`
+	ParticipantID string              `json:"participantID,omitempty"`
+	FocusPoints   []FocusPoint        `json:"focusPoints,omitempty"`
+	Activity      *AgentActivityEvent `json:"activity,omitempty"`
+	Error         string              `json:"error,omitempty"`
 }
 
 type FocusPoint struct {

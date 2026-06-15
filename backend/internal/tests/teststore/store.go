@@ -2,6 +2,7 @@ package teststore
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"agentroom/backend/internal/model"
@@ -9,10 +10,12 @@ import (
 )
 
 type Store struct {
-	Agents    []model.Agent
-	Rooms     map[string]model.RoomMeta
-	Documents []model.KnowledgeDocument
-	Chunks    []model.KnowledgeChunk
+	Agents       []model.Agent
+	Rooms        map[string]model.RoomMeta
+	AgentRuns    []store.AgentRun
+	DialogueRuns []store.DialogueRun
+	Documents    []model.KnowledgeDocument
+	Chunks       []model.KnowledgeChunk
 }
 
 func (s *Store) Ping(context.Context) error { return nil }
@@ -87,13 +90,63 @@ func (s *Store) AddMessage(_ context.Context, message model.Message) (model.Mess
 func (s *Store) ListMessages(context.Context, store.ListMessagesQuery) ([]model.Message, error) {
 	return nil, nil
 }
-func (s *Store) CreateAgentRun(context.Context, store.AgentRun) error { return nil }
-func (s *Store) FinishAgentRun(context.Context, string, string, string, time.Time) error {
+func (s *Store) CreateAgentRun(_ context.Context, run store.AgentRun) error {
+	s.AgentRuns = append(s.AgentRuns, run)
 	return nil
 }
-func (s *Store) CreateDialogueRun(context.Context, store.DialogueRun) error { return nil }
-func (s *Store) FinishDialogueRun(context.Context, string, string, int, time.Time) error {
+func (s *Store) FinishAgentRun(_ context.Context, runID string, status string, errText string, completedAt time.Time) error {
+	for i := range s.AgentRuns {
+		if s.AgentRuns[i].ID == runID {
+			s.AgentRuns[i].Status = status
+			s.AgentRuns[i].Error = errText
+			s.AgentRuns[i].CompletedAt = &completedAt
+			return nil
+		}
+	}
 	return nil
+}
+func (s *Store) ListAgentRuns(_ context.Context, query store.ListRunsQuery) ([]store.AgentRun, error) {
+	result := make([]store.AgentRun, 0)
+	for _, run := range s.AgentRuns {
+		if run.RoomID == query.RoomID {
+			result = append(result, run)
+		}
+	}
+	sortRuns(result, query.Limit, func(i int) time.Time { return result[i].StartedAt })
+	if limit := normalizedTestRunLimit(query.Limit, len(result)); limit < len(result) {
+		return result[:limit], nil
+	}
+	return result, nil
+}
+func (s *Store) CreateDialogueRun(_ context.Context, run store.DialogueRun) error {
+	s.DialogueRuns = append(s.DialogueRuns, run)
+	return nil
+}
+func (s *Store) FinishDialogueRun(_ context.Context, runID string, status string, turnCount int, completedAt time.Time) error {
+	for i := range s.DialogueRuns {
+		if s.DialogueRuns[i].ID == runID {
+			s.DialogueRuns[i].Status = status
+			s.DialogueRuns[i].TurnCount = turnCount
+			s.DialogueRuns[i].CompletedAt = &completedAt
+			return nil
+		}
+	}
+	return nil
+}
+func (s *Store) ListDialogueRuns(_ context.Context, query store.ListRunsQuery) ([]store.DialogueRun, error) {
+	result := make([]store.DialogueRun, 0)
+	for _, run := range s.DialogueRuns {
+		if run.RoomID == query.RoomID {
+			result = append(result, run)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].StartedAt.After(result[j].StartedAt)
+	})
+	if limit := normalizedTestRunLimit(query.Limit, len(result)); limit < len(result) {
+		return result[:limit], nil
+	}
+	return result, nil
 }
 func (s *Store) CreateKnowledgeDocument(_ context.Context, document model.KnowledgeDocument, chunks []model.KnowledgeChunk) (model.KnowledgeDocument, error) {
 	s.Documents = append(s.Documents, document)
@@ -137,4 +190,20 @@ func (s *Store) SearchKnowledgeChunks(_ context.Context, query store.SearchKnowl
 		return result[:query.Limit], nil
 	}
 	return result, nil
+}
+
+func sortRuns[T any](runs []T, _ int, startedAt func(int) time.Time) {
+	sort.Slice(runs, func(i, j int) bool {
+		return startedAt(i).After(startedAt(j))
+	})
+}
+
+func normalizedTestRunLimit(limit int, total int) int {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	if limit > total {
+		return total
+	}
+	return limit
 }

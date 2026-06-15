@@ -18,6 +18,7 @@ Implemented in the current tree:
 - OpenAI-compatible agent responses through `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`.
 - Room and agent Markdown knowledge upload APIs.
 - WebSocket live room updates under `/api/rooms/:roomID/ws`.
+- Agent activity history under `/api/rooms/:roomID/activity` plus live `agent_activity` WebSocket events.
 - Admin key protection for agent and knowledge write APIs when `ADMIN_API_KEY` is configured.
 - WebSocket origin allowlist through `ALLOWED_ORIGINS`.
 - Optional room passcodes for room metadata, message history, minutes, and WebSocket join.
@@ -165,6 +166,7 @@ Primary API routes are under `/api`:
 - `POST /api/rooms`
 - `GET /api/rooms/:roomID`
 - `GET /api/rooms/:roomID/messages`
+- `GET /api/rooms/:roomID/activity`
 - `POST /api/rooms/:roomID/minutes`
 - `GET /api/rooms/:roomID/minutes.md`
 - `GET /api/rooms/:roomID/knowledge`

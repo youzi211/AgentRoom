@@ -60,7 +60,8 @@ func (r *runtimeRoom) NewAgentMessage(a model.Agent, content string) model.Messa
 func (r *runtimeRoom) AppendMessage(message model.Message) {
 	r.messages = append(r.messages, message)
 }
-func (r *runtimeRoom) Broadcast(model.Message) {}
+func (r *runtimeRoom) Broadcast(model.Message)          {}
+func (r *runtimeRoom) BroadcastEvent(model.ServerEvent) {}
 
 func TestRunnerIncludesRoomAndAgentKnowledgeInPrompt(t *testing.T) {
 	llmClient := &recordingLLM{}

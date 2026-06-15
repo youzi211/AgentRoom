@@ -167,25 +167,29 @@
   padding: 12px;
 }
 
-.chat-context-panel,
-.agent-workbench-panel {
+.chat-context-panel {
   background: rgba(255, 255, 255, 0.9);
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
-}
-
-.chat-context-panel {
   overflow-y: auto;
 }
 
-.agent-workbench-panel .resize-handle--vertical {
-  flex: none;
+.agent-workbench-panel {
+  display: grid;
+  grid-template-rows: minmax(180px, 0.9fr) minmax(180px, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.agent-roster-region {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .agent-workbench-panel .focus-panel {
-  flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
@@ -316,6 +320,85 @@
 
 .minutes-panel {
   gap: 10px;
+}
+
+.agent-activity-panel {
+  flex: none;
+  gap: 10px;
+  max-height: min(22vh, 180px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.agent-activity-list {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.agent-activity-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  padding: 9px 10px;
+}
+
+.agent-activity-item--running {
+  border-color: rgba(47, 102, 87, 0.36);
+  background: rgba(47, 102, 87, 0.08);
+}
+
+.agent-activity-main {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.agent-activity-main strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 0.84rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-activity-main span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.agent-activity-status {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: #ffffff;
+  color: var(--muted);
+  padding: 3px 7px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.agent-activity-notice {
+  margin: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--muted);
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.agent-activity-notice--error {
+  background: rgba(210, 72, 72, 0.08);
+  color: var(--danger);
 }
 
 .minutes-actions {

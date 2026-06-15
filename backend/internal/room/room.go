@@ -247,6 +247,10 @@ func (r *Room) Broadcast(message model.Message) {
 	r.Hub().Broadcast(model.ServerEvent{Type: model.EventTypeMessage, Message: &message})
 }
 
+func (r *Room) BroadcastEvent(event model.ServerEvent) {
+	r.Hub().Broadcast(event)
+}
+
 // NewHumanMessage creates a human message model without adding it to the room.
 func (r *Room) NewHumanMessage(participant model.Participant, content string) model.Message {
 	return model.Message{

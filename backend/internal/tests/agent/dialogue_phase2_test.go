@@ -287,6 +287,7 @@ type dialogueRuntimeRoom struct {
 	participants []model.Participant
 	agents       []model.Agent
 	messages     []model.Message
+	events       []model.ServerEvent
 }
 
 func newDialogueRuntimeRoom(policy model.DialoguePolicy, agents []model.Agent) *dialogueRuntimeRoom {
@@ -365,6 +366,10 @@ func (r *dialogueRuntimeRoom) AppendMessage(message model.Message) {
 }
 
 func (r *dialogueRuntimeRoom) Broadcast(model.Message) {}
+
+func (r *dialogueRuntimeRoom) BroadcastEvent(event model.ServerEvent) {
+	r.events = append(r.events, event)
+}
 
 func (r *dialogueRuntimeRoom) Messages() []model.Message {
 	result := make([]model.Message, len(r.messages))

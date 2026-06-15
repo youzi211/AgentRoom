@@ -78,6 +78,14 @@ export async function getMessages(roomId, passcode = '') {
   return parseResponse(response)
 }
 
+export async function getRoomActivity(roomId, passcode = '') {
+  const encodedRoomId = encodeURIComponent(roomId)
+  const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/activity`, {
+    headers: withRoomPasscode({}, passcode),
+  })
+  return parseResponse(response)
+}
+
 export async function generateRoomMinutes(roomId, passcode = '') {
   const encodedRoomId = encodeURIComponent(roomId)
   const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/minutes`, {

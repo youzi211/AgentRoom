@@ -43,6 +43,7 @@ func (r *Runner) handleGuidedDialogue(ctx context.Context, currentRoom RuntimeRo
 		persistedRun = false
 		r.logger.Error("create dialogue run", "room_id", roomInfo.ID, "trigger_message_id", trigger.ID, "error", err)
 	}
+	r.broadcastDialogueRunActivity(currentRoom, dialogueRun, "started", model.DialogueRunStatusRunning, 0, nil)
 
 	status := model.DialogueRunStatusSucceeded
 	turnCount := 0
@@ -108,11 +109,13 @@ func (r *Runner) handleGuidedDialogue(ctx context.Context, currentRoom RuntimeRo
 		status = model.DialogueRunStatusStoppedLimit
 	}
 
+	completedAt := time.Now().UTC()
 	if persistedRun {
-		if err := r.store.FinishDialogueRun(ctx, runID, status, turnCount, time.Now().UTC()); err != nil {
+		if err := r.store.FinishDialogueRun(ctx, runID, status, turnCount, completedAt); err != nil {
 			r.logger.Error("finish dialogue run", "run_id", runID, "status", status, "turn_count", turnCount, "error", err)
 		}
 	}
+	r.broadcastDialogueRunActivity(currentRoom, dialogueRun, "finished", status, turnCount, &completedAt)
 }
 
 func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message, rootHumanTrigger model.Message, eligiblePeers []model.Agent, policy model.DialoguePolicy, turnIndex int) (string, error) {
@@ -129,15 +132,18 @@ func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom Runtime
 	if err := r.store.CreateAgentRun(ctx, agentRun); err != nil {
 		r.logger.Error("create agent run", "room_id", roomInfo.ID, "agent_id", responder.ID, "error", err)
 	}
+	r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "started", "", "", nil)
 
 	knowledgeChunks := r.searchKnowledge(ctx, currentRoom, responder, trigger)
 	promptContext := NewGuidedPromptContext(currentRoom, currentRoom.RecentMessages(r.contextLimit), responder, trigger, rootHumanTrigger, eligiblePeers, policy, turnIndex, knowledgeChunks)
 	promptMessages, err := composePromptMessages(responder, promptContext)
-	now := time.Now().UTC()
 	if err != nil {
-		if finishErr := r.store.FinishAgentRun(ctx, runID, "failed", shortReason(err), now); finishErr != nil {
+		now := time.Now().UTC()
+		errText := shortReason(err)
+		if finishErr := r.store.FinishAgentRun(ctx, runID, "failed", errText, now); finishErr != nil {
 			r.logger.Error("finish agent run", "run_id", runID, "status", "failed", "error", finishErr)
 		}
+		r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", "failed", errText, &now)
 		return "", err
 	}
 
@@ -146,26 +152,34 @@ func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom Runtime
 
 	response, err := r.client.Complete(requestCtx, promptMessages)
 	if err != nil {
+		now := time.Now().UTC()
 		status := "failed"
 		if errors.Is(requestCtx.Err(), context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			status = "timeout"
 		}
-		if finishErr := r.store.FinishAgentRun(ctx, runID, status, shortReason(err), now); finishErr != nil {
+		errText := shortReason(err)
+		if finishErr := r.store.FinishAgentRun(ctx, runID, status, errText, now); finishErr != nil {
 			r.logger.Error("finish agent run", "run_id", runID, "status", status, "error", finishErr)
 		}
+		r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", status, errText, &now)
 		return "", err
 	}
 
 	cleaned, err := StripThinkBlocks(response)
 	if err != nil {
-		if finishErr := r.store.FinishAgentRun(ctx, runID, "failed", shortReason(err), now); finishErr != nil {
+		now := time.Now().UTC()
+		errText := shortReason(err)
+		if finishErr := r.store.FinishAgentRun(ctx, runID, "failed", errText, now); finishErr != nil {
 			r.logger.Error("finish agent run", "run_id", runID, "status", "failed", "error", finishErr)
 		}
+		r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", "failed", errText, &now)
 		return "", err
 	}
+	now := time.Now().UTC()
 	if finishErr := r.store.FinishAgentRun(ctx, runID, "succeeded", "", now); finishErr != nil {
 		r.logger.Error("finish agent run", "run_id", runID, "status", "succeeded", "error", finishErr)
 	}
+	r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", "succeeded", "", &now)
 	return cleaned, nil
 }
 

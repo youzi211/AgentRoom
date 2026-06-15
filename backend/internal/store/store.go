@@ -38,8 +38,10 @@ type Store interface {
 	// Agent runs
 	CreateAgentRun(ctx context.Context, run AgentRun) error
 	FinishAgentRun(ctx context.Context, runID string, status string, errText string, completedAt time.Time) error
+	ListAgentRuns(ctx context.Context, query ListRunsQuery) ([]AgentRun, error)
 	CreateDialogueRun(ctx context.Context, run DialogueRun) error
 	FinishDialogueRun(ctx context.Context, runID string, status string, turnCount int, completedAt time.Time) error
+	ListDialogueRuns(ctx context.Context, query ListRunsQuery) ([]DialogueRun, error)
 
 	// Knowledge documents
 	CreateKnowledgeDocument(ctx context.Context, document model.KnowledgeDocument, chunks []model.KnowledgeChunk) (model.KnowledgeDocument, error)
@@ -72,6 +74,11 @@ type ListMessagesQuery struct {
 	RoomID string
 	Limit  int
 	Before string // cursor for future pagination
+}
+
+type ListRunsQuery struct {
+	RoomID string
+	Limit  int
 }
 
 // AgentRun records a single agent execution within a room.
