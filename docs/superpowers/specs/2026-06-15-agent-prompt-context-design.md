@@ -63,12 +63,22 @@ The context packet includes:
 - **Knowledge snippets**
   - room-scoped and agent-scoped snippets exactly as today
 - **Guided-dialogue additions**
+  - `rootHumanTriggerSender`
+  - `rootHumanTriggerContent`
   - current speaker
   - autonomous turn index
   - eligible peers
   - turn and mention policy constraints
 
 This packet intentionally excludes internal IDs, passcode state, and other operational metadata that do not improve response quality.
+
+Turn-context semantics are normative:
+
+- In `mention_fanout`, `trigger*` fields refer to the current human message that directly invoked the agent.
+- In `guided_dialogue`, `trigger*` fields refer to the immediate parent message for the current turn:
+  - turn 1 uses the original human message
+  - turn 2+ use the immediate parent agent message
+- In `guided_dialogue`, `rootHumanTrigger*` always refer to the original human message that started the dialogue run.
 
 ### 3. Prompt layering
 
@@ -127,7 +137,19 @@ Use `langchaingo/prompts` for the shared prompt composer, following the same sty
 - Participant ordering follows the existing room ordering by join time.
 - Agent roster ordering follows the existing room agent order.
 - Transcript ordering remains chronological.
-- `latestVisibleSpeaker` is derived from the latest visible message in the transcript; if no prior visible message exists, it falls back to the trigger sender.
+- Transcript source is the existing bounded raw history window from `RecentMessages(limit)`, followed by exclusion of system messages at prompt-context assembly time.
+- Transcript is limited to visible room messages only:
+  - include human messages
+  - include agent messages
+  - exclude system messages
+- The current trigger message is allowed to appear twice in prompt input:
+  - once in the explicit `trigger*` fields
+  - once in the transcript if it is already present in room history
+- This duplication is intentional. It preserves current behavior while keeping the current-turn trigger salient in a structured field.
+- `latestVisibleSpeaker` is derived from the last non-system message in the transcript.
+- `latestVisibleSpeakerType` is derived from the same message as `latestVisibleSpeaker`.
+- If the transcript is empty, `latestVisibleSpeaker` falls back to `triggerSender`.
+- If the transcript is empty, `latestVisibleSpeakerType` falls back to `triggerSenderType`.
 
 These ordering rules keep prompt rendering stable and make tests predictable.
 
@@ -136,6 +158,21 @@ These ordering rules keep prompt rendering stable and make tests predictable.
 - The management API continues to read and write `systemPrompt`.
 - Documentation and UI should describe that field as **agent role template** rather than generic system behavior.
 - Room context, system contract, mode constraints, and output contract are not editable from the admin surface.
+- Role-template blank behavior is explicit in phase 1:
+  - create with blank `systemPrompt` is allowed and means "no extra role template text"
+  - update with omitted or blank `systemPrompt` preserves the existing stored template
+  - clearing an existing template through a blank update is not supported in phase 1
+
+This preserves current API behavior and avoids requiring a request-shape migration before prompt unification.
+
+## Retrieval Rules
+
+Knowledge retrieval must remain stable during prompt migration:
+
+- In `mention_fanout`, room and agent knowledge retrieval is driven by the current human trigger content.
+- In `guided_dialogue`, room and agent knowledge retrieval is driven by the immediate parent trigger content for that turn.
+- The shared prompt migration must not silently switch guided retrieval to the original human trigger for later turns.
+- The original human trigger may still appear in prompt context through `rootHumanTrigger*`, but retrieval remains anchored to the immediate turn trigger.
 
 ## Testing Strategy
 
@@ -147,11 +184,19 @@ Add tests under `backend/internal/tests/agent` for:
   - includes trigger sender and latest visible speaker
 - `PromptContext` assembly in `guided_dialogue`
   - includes the shared meeting context
+  - distinguishes immediate `trigger*` from `rootHumanTrigger*`
   - includes eligible peers and guided policy metadata
 - prompt composer layering
   - fixed system contract is always present
   - role template is injected in the intended layer
   - output contract remains present regardless of role template content
+- transcript composition
+  - excludes system messages
+  - preserves chronological ordering
+  - defines `latestVisibleSpeaker` from the last visible transcript message
+- retrieval contract
+  - standard mode uses the human trigger content
+  - guided follow-up turns use the immediate parent trigger content
 - runner regressions
   - standard replies now include meeting-member awareness
   - guided replies keep current peer-handoff behavior while gaining full room awareness
