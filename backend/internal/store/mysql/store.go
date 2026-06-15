@@ -73,6 +73,7 @@ func (s *MySQLStore) Migrate(ctx context.Context) error {
 		&DialogueRunModel{},
 		&KnowledgeDocumentModel{},
 		&KnowledgeChunkModel{},
+		&MeetingMinutesModel{},
 		&SchemaMigrationModel{},
 	)
 }
@@ -247,6 +248,145 @@ func (s *MySQLStore) ListRoomAgents(ctx context.Context, roomID string) ([]model
 		agents[i] = m.toDomain()
 	}
 	return agents, nil
+}
+
+func (s *MySQLStore) ListRooms(ctx context.Context, query store.ListRoomsQuery) ([]model.RoomSummary, error) {
+	limit := query.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	offset := query.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	q := s.db.WithContext(ctx).Model(&RoomModel{})
+	switch query.Status {
+	case model.RoomStatusActive, model.RoomStatusArchived:
+		q = q.Where("status = ?", query.Status)
+	}
+
+	var rooms []RoomModel
+	if err := q.Order("created_at DESC, id DESC").Limit(limit).Offset(offset).Find(&rooms).Error; err != nil {
+		return nil, fmt.Errorf("list rooms: %w", err)
+	}
+	if len(rooms) == 0 {
+		return []model.RoomSummary{}, nil
+	}
+
+	roomIDs := make([]string, len(rooms))
+	for i, r := range rooms {
+		roomIDs[i] = r.ID
+	}
+
+	type messageStat struct {
+		RoomID string
+		Total  int
+		LastAt *time.Time
+	}
+	var stats []messageStat
+	if err := s.db.WithContext(ctx).
+		Model(&MessageModel{}).
+		Select("room_id AS room_id, COUNT(*) AS total, MAX(created_at) AS last_at").
+		Where("room_id IN ?", roomIDs).
+		Group("room_id").
+		Scan(&stats).Error; err != nil {
+		return nil, fmt.Errorf("aggregate room messages: %w", err)
+	}
+	statByRoom := make(map[string]messageStat, len(stats))
+	for _, stat := range stats {
+		statByRoom[stat.RoomID] = stat
+	}
+
+	summaries := make([]model.RoomSummary, len(rooms))
+	for i, r := range rooms {
+		stat := statByRoom[r.ID]
+		summaries[i] = model.RoomSummary{
+			ID:            r.ID,
+			Name:          r.Name,
+			Status:        r.Status,
+			HasPasscode:   r.PasscodeHash != "",
+			CreatedAt:     r.CreatedAt,
+			ArchivedAt:    r.ArchivedAt,
+			MessageCount:  stat.Total,
+			LastMessageAt: stat.LastAt,
+		}
+	}
+	return summaries, nil
+}
+
+func (s *MySQLStore) SetRoomStatus(ctx context.Context, roomID string, status string, archivedAt *time.Time) error {
+	result := s.db.WithContext(ctx).
+		Model(&RoomModel{}).
+		Where("id = ?", roomID).
+		Updates(map[string]interface{}{
+			"status":      status,
+			"archived_at": archivedAt,
+			"updated_at":  time.Now().UTC(),
+		})
+	if result.Error != nil {
+		return fmt.Errorf("set room status: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("room %s not found", roomID)
+	}
+	return nil
+}
+
+// ── Meeting minutes ──────────────────────────────────────────────────
+
+func (s *MySQLStore) CreateMinutes(ctx context.Context, minutes model.MeetingMinutes) (model.MeetingMinutes, error) {
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var maxVersion int
+		if err := tx.Model(&MeetingMinutesModel{}).
+			Where("room_id = ?", minutes.RoomID).
+			Select("COALESCE(MAX(version), 0)").
+			Scan(&maxVersion).Error; err != nil {
+			return fmt.Errorf("read max minutes version: %w", err)
+		}
+		minutes.Version = maxVersion + 1
+		m := meetingMinutesToModel(minutes)
+		if err := tx.Create(&m).Error; err != nil {
+			return fmt.Errorf("insert minutes: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return model.MeetingMinutes{}, err
+	}
+	return minutes, nil
+}
+
+func (s *MySQLStore) ListMinutes(ctx context.Context, roomID string) ([]model.MeetingMinutes, error) {
+	var models []MeetingMinutesModel
+	if err := s.db.WithContext(ctx).
+		Where("room_id = ?", roomID).
+		Order("version DESC").
+		Find(&models).Error; err != nil {
+		return nil, fmt.Errorf("list minutes: %w", err)
+	}
+	minutes := make([]model.MeetingMinutes, len(models))
+	for i, m := range models {
+		minutes[i] = m.toDomain()
+	}
+	return minutes, nil
+}
+
+func (s *MySQLStore) LatestMinutes(ctx context.Context, roomID string) (model.MeetingMinutes, bool, error) {
+	var m MeetingMinutesModel
+	if err := s.db.WithContext(ctx).
+		Where("room_id = ?", roomID).
+		Order("version DESC").
+		First(&m).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return model.MeetingMinutes{}, false, nil
+		}
+		return model.MeetingMinutes{}, false, fmt.Errorf("latest minutes: %w", err)
+	}
+	return m.toDomain(), true, nil
 }
 
 // ── Participants ─────────────────────────────────────────────────────

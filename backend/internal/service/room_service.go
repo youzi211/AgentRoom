@@ -56,6 +56,40 @@ func (s *RoomService) GetRoom(ctx context.Context, roomID string) (*room.Room, b
 	return s.manager.GetRoom(ctx, roomID)
 }
 
+// ErrRoomArchived is returned when a write is attempted on an archived room.
+var ErrRoomArchived = fmt.Errorf("room is archived")
+
+func (s *RoomService) ListRooms(ctx context.Context, query store.ListRoomsQuery) ([]model.RoomSummary, error) {
+	return s.store.ListRooms(ctx, query)
+}
+
+func (s *RoomService) ArchiveRoom(ctx context.Context, roomID string) error {
+	return s.setRoomStatus(ctx, roomID, model.RoomStatusArchived)
+}
+
+func (s *RoomService) RestoreRoom(ctx context.Context, roomID string) error {
+	return s.setRoomStatus(ctx, roomID, model.RoomStatusActive)
+}
+
+func (s *RoomService) setRoomStatus(ctx context.Context, roomID string, status string) error {
+	if _, ok := s.GetRoom(ctx, roomID); !ok {
+		return fmt.Errorf("room not found")
+	}
+	var archivedAt *time.Time
+	if status == model.RoomStatusArchived {
+		now := time.Now().UTC()
+		archivedAt = &now
+	}
+	if err := s.store.SetRoomStatus(ctx, roomID, status, archivedAt); err != nil {
+		return err
+	}
+	// Reflect the change in the live room so it takes effect without a reload.
+	if currentRoom, ok := s.GetRoom(ctx, roomID); ok {
+		currentRoom.SetStatus(status, archivedAt)
+	}
+	return nil
+}
+
 func (s *RoomService) CanAccessRoom(currentRoom *room.Room, passcode string) bool {
 	if currentRoom == nil {
 		return false
@@ -184,12 +218,69 @@ func (s *RoomService) ListRoomActivity(ctx context.Context, currentRoom *room.Ro
 	return activity, nil
 }
 
-func (s *RoomService) GenerateMinutes(ctx context.Context, currentRoom *room.Room) (string, error) {
+// GenerateMinutes produces meeting minutes from the room transcript and
+// persists them as a new AI-sourced version. The returned markdown is the
+// content of the saved version (or the freshly generated content if
+// persistence fails).
+func (s *RoomService) GenerateMinutes(ctx context.Context, currentRoom *room.Room) (string, model.MeetingMinutes, error) {
 	messages := s.ListMessages(ctx, currentRoom, 500)
+	roomInfo := currentRoom.Info()
+
+	var markdown string
 	if s.minutes != nil {
-		return s.minutes.Generate(ctx, currentRoom.Info(), messages)
+		generated, err := s.minutes.Generate(ctx, roomInfo, messages)
+		if err != nil {
+			return "", model.MeetingMinutes{}, err
+		}
+		markdown = generated
+	} else {
+		markdown = fallbackMinutes(roomInfo, messages)
 	}
-	return fallbackMinutes(currentRoom.Info(), messages), nil
+
+	saved, err := s.persistMinutes(ctx, roomInfo.ID, markdown, model.MinutesSourceAI)
+	if err != nil {
+		s.logger.Warn("persist generated minutes failed", "room_id", roomInfo.ID, "error", err)
+		return markdown, model.MeetingMinutes{}, nil
+	}
+	return saved.Content, saved, nil
+}
+
+// ListMinutes returns all persisted minutes versions for a room, newest first.
+func (s *RoomService) ListMinutes(ctx context.Context, currentRoom *room.Room) ([]model.MeetingMinutes, error) {
+	return s.store.ListMinutes(ctx, currentRoom.Info().ID)
+}
+
+// SaveManualMinutes stores an admin-edited minutes body as a new manual version.
+func (s *RoomService) SaveManualMinutes(ctx context.Context, currentRoom *room.Room, content string) (model.MeetingMinutes, error) {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return model.MeetingMinutes{}, fmt.Errorf("minutes content must not be empty")
+	}
+	return s.persistMinutes(ctx, currentRoom.Info().ID, trimmed, model.MinutesSourceManual)
+}
+
+// LatestMinutesMarkdown returns the latest persisted minutes content, falling
+// back to a freshly generated (and persisted) version when none exist yet.
+func (s *RoomService) LatestMinutesMarkdown(ctx context.Context, currentRoom *room.Room) (string, error) {
+	latest, ok, err := s.store.LatestMinutes(ctx, currentRoom.Info().ID)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		return latest.Content, nil
+	}
+	markdown, _, err := s.GenerateMinutes(ctx, currentRoom)
+	return markdown, err
+}
+
+func (s *RoomService) persistMinutes(ctx context.Context, roomID string, content string, source string) (model.MeetingMinutes, error) {
+	return s.store.CreateMinutes(ctx, model.MeetingMinutes{
+		ID:        model.NewID("minutes"),
+		RoomID:    roomID,
+		Content:   content,
+		Source:    source,
+		CreatedAt: time.Now().UTC(),
+	})
 }
 
 func (s *RoomService) JoinParticipant(ctx context.Context, currentRoom *room.Room, name string) model.Participant {
@@ -222,6 +313,10 @@ func (s *RoomService) HandleHumanMessage(ctx context.Context, currentRoom *room.
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" {
 		return model.Message{}, nil, fmt.Errorf("message content must not be empty")
+	}
+
+	if currentRoom.Info().IsArchived() {
+		return model.Message{}, nil, ErrRoomArchived
 	}
 
 	message := currentRoom.NewHumanMessage(participant, trimmed)

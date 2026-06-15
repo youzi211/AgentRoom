@@ -3,7 +3,37 @@ const JSON_HEADERS = {
 }
 
 const API_BASE_PATH = '/api'
-const ADMIN_API_KEY = (import.meta.env?.VITE_ADMIN_API_KEY || '').trim()
+const ADMIN_KEY_STORAGE = 'agentroom:admin-key'
+const BUILD_ADMIN_API_KEY = (import.meta.env?.VITE_ADMIN_API_KEY || '').trim()
+
+export function getStoredAdminKey() {
+  try {
+    return (window.localStorage.getItem(ADMIN_KEY_STORAGE) || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+export function setStoredAdminKey(key) {
+  try {
+    const trimmed = (key || '').trim()
+    if (trimmed) {
+      window.localStorage.setItem(ADMIN_KEY_STORAGE, trimmed)
+    } else {
+      window.localStorage.removeItem(ADMIN_KEY_STORAGE)
+    }
+  } catch {
+    // localStorage can be unavailable in hardened browser contexts.
+  }
+}
+
+export function clearStoredAdminKey() {
+  setStoredAdminKey('')
+}
+
+function adminApiKey() {
+  return getStoredAdminKey() || BUILD_ADMIN_API_KEY
+}
 
 async function parseResponse(response) {
   let payload = null
@@ -33,12 +63,13 @@ function withRoomPasscode(headers = {}, passcode = '') {
 }
 
 function withAdminKey(headers = {}) {
-  if (!ADMIN_API_KEY) {
+  const key = adminApiKey()
+  if (!key) {
     return headers
   }
   return {
     ...headers,
-    'X-Admin-Key': ADMIN_API_KEY,
+    'X-Admin-Key': key,
   }
 }
 
@@ -200,6 +231,67 @@ export async function deleteKnowledgeDocument(documentId) {
     headers: withAdminKey(),
   })
 
+  return parseResponse(response)
+}
+
+export async function verifyAdminKey() {
+  const response = await fetch(`${API_BASE_PATH}/admin/verify`, {
+    headers: withAdminKey(),
+  })
+  return parseResponse(response)
+}
+
+export async function listRooms({ status = '', limit, offset } = {}) {
+  const params = new URLSearchParams()
+  if (status) {
+    params.set('status', status)
+  }
+  if (limit) {
+    params.set('limit', String(limit))
+  }
+  if (offset) {
+    params.set('offset', String(offset))
+  }
+  const query = params.toString()
+  const response = await fetch(`${API_BASE_PATH}/rooms${query ? `?${query}` : ''}`, {
+    headers: withAdminKey(),
+  })
+  return parseResponse(response)
+}
+
+export async function archiveRoom(roomId) {
+  const encodedRoomId = encodeURIComponent(roomId)
+  const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/archive`, {
+    method: 'POST',
+    headers: withAdminKey(),
+  })
+  return parseResponse(response)
+}
+
+export async function restoreRoom(roomId) {
+  const encodedRoomId = encodeURIComponent(roomId)
+  const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/restore`, {
+    method: 'POST',
+    headers: withAdminKey(),
+  })
+  return parseResponse(response)
+}
+
+export async function getMinutesHistory(roomId, passcode = '') {
+  const encodedRoomId = encodeURIComponent(roomId)
+  const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/minutes/history`, {
+    headers: withAdminKey(withRoomPasscode({}, passcode)),
+  })
+  return parseResponse(response)
+}
+
+export async function saveRoomMinutes(roomId, content, passcode = '') {
+  const encodedRoomId = encodeURIComponent(roomId)
+  const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/minutes`, {
+    method: 'PUT',
+    headers: withAdminKey(withRoomPasscode(JSON_HEADERS, passcode)),
+    body: JSON.stringify({ content }),
+  })
   return parseResponse(response)
 }
 

@@ -25,6 +25,14 @@ const (
 	KnowledgeStatusReady = "ready"
 )
 
+const (
+	RoomStatusActive   = "active"
+	RoomStatusArchived = "archived"
+
+	MinutesSourceAI     = "ai"
+	MinutesSourceManual = "manual"
+)
+
 type Room struct {
 	ID           string                  `json:"id"`
 	Name         string                  `json:"name"`
@@ -41,6 +49,36 @@ type RoomMeta struct {
 	HasPasscode    bool           `json:"hasPasscode"`
 	PasscodeHash   string         `json:"-"`
 	DialoguePolicy DialoguePolicy `json:"dialoguePolicy"`
+	Status         string         `json:"status,omitempty"`
+	ArchivedAt     *time.Time     `json:"archivedAt,omitempty"`
+}
+
+// IsArchived reports whether the room has been archived and should reject new turns.
+func (r RoomMeta) IsArchived() bool {
+	return r.Status == RoomStatusArchived
+}
+
+// RoomSummary is a lightweight room listing entry for the admin meeting list.
+type RoomSummary struct {
+	ID            string     `json:"id"`
+	Name          string     `json:"name"`
+	Status        string     `json:"status"`
+	HasPasscode   bool       `json:"hasPasscode"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	ArchivedAt    *time.Time `json:"archivedAt,omitempty"`
+	MessageCount  int        `json:"messageCount"`
+	LastMessageAt *time.Time `json:"lastMessageAt,omitempty"`
+}
+
+// MeetingMinutes is a persisted, versioned meeting minutes record.
+type MeetingMinutes struct {
+	ID        string    `json:"id"`
+	RoomID    string    `json:"roomID"`
+	Version   int       `json:"version"`
+	Content   string    `json:"content"`
+	Source    string    `json:"source"`
+	CreatedBy string    `json:"createdBy,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 type RoomState struct {
@@ -207,7 +245,20 @@ type AgentActivityEvent struct {
 }
 
 type GenerateMinutesResponse struct {
-	Markdown string `json:"markdown"`
+	Markdown string          `json:"markdown"`
+	Minutes  *MeetingMinutes `json:"minutes,omitempty"`
+}
+
+type ListRoomsResponse struct {
+	Rooms []RoomSummary `json:"rooms"`
+}
+
+type MinutesHistoryResponse struct {
+	Minutes []MeetingMinutes `json:"minutes"`
+}
+
+type SaveMinutesRequest struct {
+	Content string `json:"content"`
 }
 
 type ErrorResponse struct {

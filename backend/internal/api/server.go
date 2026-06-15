@@ -20,6 +20,7 @@ import (
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/service"
+	"agentroom/backend/internal/store"
 )
 
 type Server struct {
@@ -80,6 +81,12 @@ func (s *Server) Routes() http.Handler {
 
 func (s *Server) registerAPIRoutes(routes gin.IRoutes) {
 	routes.GET("/health", s.handleHealth)
+	routes.GET("/admin/verify", s.requireAdmin, s.handleAdminVerify)
+	routes.GET("/rooms", s.requireAdmin, s.handleListRooms)
+	routes.POST("/rooms/:roomID/archive", s.requireAdmin, s.handleArchiveRoom)
+	routes.POST("/rooms/:roomID/restore", s.requireAdmin, s.handleRestoreRoom)
+	routes.GET("/rooms/:roomID/minutes/history", s.requireAdmin, s.handleListMinutes)
+	routes.PUT("/rooms/:roomID/minutes", s.requireAdmin, s.handleSaveMinutes)
 	routes.GET("/agents", s.handleAgents)
 	routes.POST("/agents", s.requireAdmin, s.handleCreateAgent)
 	routes.PUT("/agents/:agentID", s.requireAdmin, s.handleUpdateAgent)
@@ -335,14 +342,19 @@ func (s *Server) handleGenerateMinutes(c *gin.Context) {
 		return
 	}
 
-	markdown, err := s.rooms.GenerateMinutes(c.Request.Context(), currentRoom)
+	markdown, minutes, err := s.rooms.GenerateMinutes(c.Request.Context(), currentRoom)
 	if err != nil {
 		s.logger.Error("generate minutes", "room_id", currentRoom.Info().ID, "error", err)
 		writeError(c, http.StatusInternalServerError, "failed to generate meeting minutes")
 		return
 	}
 
-	c.JSON(http.StatusOK, model.GenerateMinutesResponse{Markdown: markdown})
+	response := model.GenerateMinutesResponse{Markdown: markdown}
+	if minutes.ID != "" {
+		saved := minutes
+		response.Minutes = &saved
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 func (s *Server) handleDownloadMinutes(c *gin.Context) {
@@ -351,7 +363,7 @@ func (s *Server) handleDownloadMinutes(c *gin.Context) {
 		return
 	}
 
-	markdown, err := s.rooms.GenerateMinutes(c.Request.Context(), currentRoom)
+	markdown, err := s.rooms.LatestMinutesMarkdown(c.Request.Context(), currentRoom)
 	if err != nil {
 		s.logger.Error("download minutes", "room_id", currentRoom.Info().ID, "error", err)
 		writeError(c, http.StatusInternalServerError, "failed to export meeting minutes")
@@ -362,6 +374,108 @@ func (s *Server) handleDownloadMinutes(c *gin.Context) {
 	c.Header("Content-Type", "text/markdown; charset=utf-8")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
 	c.String(http.StatusOK, markdown)
+}
+
+func (s *Server) handleAdminVerify(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (s *Server) handleListRooms(c *gin.Context) {
+	query := store.ListRoomsQuery{
+		Status: strings.TrimSpace(c.Query("status")),
+		Limit:  50,
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			query.Limit = parsed
+		}
+	}
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if parsed, err := strconv.Atoi(offsetStr); err == nil && parsed >= 0 {
+			query.Offset = parsed
+		}
+	}
+
+	rooms, err := s.rooms.ListRooms(c.Request.Context(), query)
+	if err != nil {
+		s.logger.Error("list rooms", "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to list rooms")
+		return
+	}
+	c.JSON(http.StatusOK, model.ListRoomsResponse{Rooms: rooms})
+}
+
+func (s *Server) handleArchiveRoom(c *gin.Context) {
+	s.changeRoomStatus(c, true)
+}
+
+func (s *Server) handleRestoreRoom(c *gin.Context) {
+	s.changeRoomStatus(c, false)
+}
+
+func (s *Server) changeRoomStatus(c *gin.Context, archive bool) {
+	roomID := strings.TrimSpace(c.Param("roomID"))
+	if roomID == "" {
+		writeError(c, http.StatusBadRequest, "missing room id")
+		return
+	}
+
+	var err error
+	if archive {
+		err = s.rooms.ArchiveRoom(c.Request.Context(), roomID)
+	} else {
+		err = s.rooms.RestoreRoom(c.Request.Context(), roomID)
+	}
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			writeError(c, http.StatusNotFound, "room not found")
+			return
+		}
+		s.logger.Error("change room status", "room_id", roomID, "archive", archive, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to update room status")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (s *Server) handleListMinutes(c *gin.Context) {
+	currentRoom, ok := s.getRoomForAdmin(c)
+	if !ok {
+		return
+	}
+
+	minutes, err := s.rooms.ListMinutes(c.Request.Context(), currentRoom)
+	if err != nil {
+		s.logger.Error("list minutes", "room_id", currentRoom.Info().ID, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to list meeting minutes")
+		return
+	}
+	c.JSON(http.StatusOK, model.MinutesHistoryResponse{Minutes: minutes})
+}
+
+func (s *Server) handleSaveMinutes(c *gin.Context) {
+	currentRoom, ok := s.getRoomForAdmin(c)
+	if !ok {
+		return
+	}
+
+	var request model.SaveMinutesRequest
+	if err := json.NewDecoder(c.Request.Body).Decode(&request); err != nil && !errors.Is(err, context.Canceled) {
+		writeError(c, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	saved, err := s.rooms.SaveManualMinutes(c.Request.Context(), currentRoom, request.Content)
+	if err != nil {
+		if strings.Contains(err.Error(), "must not be empty") {
+			writeError(c, http.StatusBadRequest, "minutes content must not be empty")
+			return
+		}
+		s.logger.Error("save minutes", "room_id", currentRoom.Info().ID, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to save meeting minutes")
+		return
+	}
+	c.JSON(http.StatusOK, saved)
 }
 
 func (s *Server) handleListRoomKnowledge(c *gin.Context) {
@@ -504,9 +618,13 @@ func (s *Server) handleClientEvent(currentRoom *room.Room, participant model.Par
 
 		savedMessage, focusPoints, err := s.rooms.HandleHumanMessage(context.Background(), currentRoom, participant, content)
 		if err != nil {
+			errMessage := "failed to send message, please try again"
+			if errors.Is(err, service.ErrRoomArchived) {
+				errMessage = "this meeting has been archived and is read-only"
+			}
 			sendClientEvent(client, model.ServerEvent{
 				Type:  model.EventTypeError,
-				Error: "failed to send message, please try again",
+				Error: errMessage,
 			})
 			return
 		}
@@ -548,8 +666,30 @@ func (s *Server) getRoomFromRequest(c *gin.Context) (*room.Room, bool) {
 		writeError(c, http.StatusNotFound, "room not found")
 		return nil, false
 	}
+	if s.hasValidAdminKey(c) {
+		return currentRoom, true
+	}
 	if !s.rooms.CanAccessRoom(currentRoom, roomPasscodeFromRequest(c.Request)) {
 		writeError(c, http.StatusForbidden, "room passcode is required or invalid")
+		return nil, false
+	}
+	return currentRoom, true
+}
+
+// hasValidAdminKey reports whether the request carries the configured admin key.
+// When no admin key is configured, it returns false so normal passcode rules apply.
+func (s *Server) hasValidAdminKey(c *gin.Context) bool {
+	configured := strings.TrimSpace(s.config.AdminAPIKey)
+	return configured != "" && c.GetHeader("X-Admin-Key") == configured
+}
+
+// getRoomForAdmin resolves a room for admin-gated routes. Authorization is the
+// admin key (requireAdmin), so the per-room passcode is not required here.
+func (s *Server) getRoomForAdmin(c *gin.Context) (*room.Room, bool) {
+	roomID := c.Param("roomID")
+	currentRoom, ok := s.rooms.GetRoom(c.Request.Context(), roomID)
+	if !ok {
+		writeError(c, http.StatusNotFound, "room not found")
 		return nil, false
 	}
 	return currentRoom, true

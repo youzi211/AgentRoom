@@ -15,6 +15,8 @@ type Room struct {
 	name           string
 	createdAt      time.Time
 	passcodeHash   string
+	status         string
+	archivedAt     *time.Time
 	dialoguePolicy model.DialoguePolicy
 	participants   map[string]*model.Participant
 	agents         map[string]*model.Agent
@@ -38,6 +40,7 @@ func New(id string, name string, agents []model.Agent) *Room {
 		id:             id,
 		name:           normalizeRoomName(name, id),
 		createdAt:      createdAt,
+		status:         model.RoomStatusActive,
 		dialoguePolicy: model.DefaultDialoguePolicy(),
 		participants:   make(map[string]*model.Participant),
 		agents:         agentMap,
@@ -63,6 +66,8 @@ func NewFromState(meta model.RoomMeta, agents []model.Agent) *Room {
 		name:           meta.Name,
 		createdAt:      meta.CreatedAt,
 		passcodeHash:   meta.PasscodeHash,
+		status:         normalizeRoomStatus(meta.Status),
+		archivedAt:     meta.ArchivedAt,
 		dialoguePolicy: meta.DialoguePolicy.WithDefaults(),
 		participants:   make(map[string]*model.Participant),
 		agents:         agentMap,
@@ -97,6 +102,8 @@ func NewFromSnapshot(meta model.RoomMeta, agents []model.Agent, messages []model
 		name:           meta.Name,
 		createdAt:      meta.CreatedAt,
 		passcodeHash:   meta.PasscodeHash,
+		status:         normalizeRoomStatus(meta.Status),
+		archivedAt:     meta.ArchivedAt,
 		dialoguePolicy: meta.DialoguePolicy.WithDefaults(),
 		participants:   participantMap,
 		agents:         agentMap,
@@ -118,6 +125,8 @@ func (r *Room) Info() model.RoomMeta {
 		Name:           r.name,
 		CreatedAt:      r.createdAt,
 		HasPasscode:    r.passcodeHash != "",
+		Status:         r.status,
+		ArchivedAt:     r.archivedAt,
 		DialoguePolicy: r.dialoguePolicy.WithDefaults(),
 	}
 }
@@ -126,6 +135,15 @@ func (r *Room) PasscodeHash() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.passcodeHash
+}
+
+// SetStatus updates the in-memory room status so that an archived room
+// immediately stops accepting new turns without a reload from the store.
+func (r *Room) SetStatus(status string, archivedAt *time.Time) {
+	r.mu.Lock()
+	r.status = normalizeRoomStatus(status)
+	r.archivedAt = archivedAt
+	r.mu.Unlock()
 }
 
 func (r *Room) SetDialoguePolicy(policy model.DialoguePolicy) {
@@ -139,7 +157,7 @@ func (r *Room) Snapshot() model.RoomState {
 	defer r.mu.RUnlock()
 
 	return model.RoomState{
-		Room:         model.RoomMeta{ID: r.id, Name: r.name, CreatedAt: r.createdAt, HasPasscode: r.passcodeHash != "", DialoguePolicy: r.dialoguePolicy.WithDefaults()},
+		Room:         model.RoomMeta{ID: r.id, Name: r.name, CreatedAt: r.createdAt, HasPasscode: r.passcodeHash != "", Status: r.status, ArchivedAt: r.archivedAt, DialoguePolicy: r.dialoguePolicy.WithDefaults()},
 		Participants: cloneParticipants(r.participants),
 		Agents:       cloneAgents(r.agents, r.agentOrder),
 		Messages:     cloneMessages(r.messages),
@@ -332,6 +350,13 @@ func cloneMessages(messages []model.Message) []model.Message {
 	items := make([]model.Message, len(messages))
 	copy(items, messages)
 	return items
+}
+
+func normalizeRoomStatus(status string) string {
+	if status == model.RoomStatusArchived {
+		return model.RoomStatusArchived
+	}
+	return model.RoomStatusActive
 }
 
 func normalizeRoomName(name string, roomID string) string {

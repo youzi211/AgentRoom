@@ -24,6 +24,13 @@ type Store interface {
 	CreateRoom(ctx context.Context, input CreateRoomInput) (model.RoomMeta, []model.Agent, error)
 	GetRoom(ctx context.Context, roomID string) (model.RoomMeta, error)
 	ListRoomAgents(ctx context.Context, roomID string) ([]model.Agent, error)
+	ListRooms(ctx context.Context, query ListRoomsQuery) ([]model.RoomSummary, error)
+	SetRoomStatus(ctx context.Context, roomID string, status string, archivedAt *time.Time) error
+
+	// Meeting minutes (versioned, persisted)
+	CreateMinutes(ctx context.Context, minutes model.MeetingMinutes) (model.MeetingMinutes, error)
+	ListMinutes(ctx context.Context, roomID string) ([]model.MeetingMinutes, error)
+	LatestMinutes(ctx context.Context, roomID string) (model.MeetingMinutes, bool, error)
 
 	// Participants
 	AddParticipant(ctx context.Context, input AddParticipantInput) (model.Participant, error)
@@ -67,6 +74,13 @@ type AddParticipantInput struct {
 	DisplayName string
 	GuestKey    string
 	JoinedAt    time.Time
+}
+
+// ListRoomsQuery holds query parameters for listing rooms in the admin console.
+type ListRoomsQuery struct {
+	Status string // "active", "archived", or "" / "all" for no filter
+	Limit  int
+	Offset int
 }
 
 // ListMessagesQuery holds query parameters for listing messages.

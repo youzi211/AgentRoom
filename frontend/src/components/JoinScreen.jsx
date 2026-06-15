@@ -105,7 +105,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
         <nav className="app-nav" aria-label="主导航">
           <span className="app-nav-item app-nav-item--active">会议入口</span>
           <button className="app-nav-item" type="button" onClick={onOpenAgentAdmin}>
-            Agent 管理
+            管理后台
           </button>
         </nav>
       </header>

@@ -16,6 +16,7 @@ type Store struct {
 	DialogueRuns []store.DialogueRun
 	Documents    []model.KnowledgeDocument
 	Chunks       []model.KnowledgeChunk
+	Minutes      []model.MeetingMinutes
 }
 
 func (s *Store) Ping(context.Context) error { return nil }
@@ -71,6 +72,79 @@ func (s *Store) GetRoom(_ context.Context, roomID string) (model.RoomMeta, error
 }
 func (s *Store) ListRoomAgents(context.Context, string) ([]model.Agent, error) {
 	return nil, nil
+}
+func (s *Store) ListRooms(_ context.Context, query store.ListRoomsQuery) ([]model.RoomSummary, error) {
+	result := make([]model.RoomSummary, 0, len(s.Rooms))
+	for _, meta := range s.Rooms {
+		status := meta.Status
+		if status == "" {
+			status = model.RoomStatusActive
+		}
+		if query.Status == model.RoomStatusActive || query.Status == model.RoomStatusArchived {
+			if status != query.Status {
+				continue
+			}
+		}
+		result = append(result, model.RoomSummary{
+			ID:          meta.ID,
+			Name:        meta.Name,
+			Status:      status,
+			HasPasscode: meta.PasscodeHash != "",
+			CreatedAt:   meta.CreatedAt,
+			ArchivedAt:  meta.ArchivedAt,
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.After(result[j].CreatedAt)
+	})
+	return result, nil
+}
+func (s *Store) SetRoomStatus(_ context.Context, roomID string, status string, archivedAt *time.Time) error {
+	if s.Rooms == nil {
+		return nil
+	}
+	meta, ok := s.Rooms[roomID]
+	if !ok {
+		return nil
+	}
+	meta.Status = status
+	meta.ArchivedAt = archivedAt
+	s.Rooms[roomID] = meta
+	return nil
+}
+func (s *Store) CreateMinutes(_ context.Context, minutes model.MeetingMinutes) (model.MeetingMinutes, error) {
+	maxVersion := 0
+	for _, existing := range s.Minutes {
+		if existing.RoomID == minutes.RoomID && existing.Version > maxVersion {
+			maxVersion = existing.Version
+		}
+	}
+	minutes.Version = maxVersion + 1
+	s.Minutes = append(s.Minutes, minutes)
+	return minutes, nil
+}
+func (s *Store) ListMinutes(_ context.Context, roomID string) ([]model.MeetingMinutes, error) {
+	result := make([]model.MeetingMinutes, 0)
+	for _, minutes := range s.Minutes {
+		if minutes.RoomID == roomID {
+			result = append(result, minutes)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Version > result[j].Version
+	})
+	return result, nil
+}
+func (s *Store) LatestMinutes(_ context.Context, roomID string) (model.MeetingMinutes, bool, error) {
+	var latest model.MeetingMinutes
+	found := false
+	for _, minutes := range s.Minutes {
+		if minutes.RoomID == roomID && (!found || minutes.Version > latest.Version) {
+			latest = minutes
+			found = true
+		}
+	}
+	return latest, found, nil
 }
 func (s *Store) AddParticipant(_ context.Context, input store.AddParticipantInput) (model.Participant, error) {
 	return model.Participant{ID: input.ID, Name: input.DisplayName, JoinedAt: input.JoinedAt}, nil

@@ -146,6 +146,19 @@ type KnowledgeChunkModel struct {
 
 func (KnowledgeChunkModel) TableName() string { return "knowledge_chunks" }
 
+// MeetingMinutesModel maps to the `meeting_minutes` table (versioned minutes per room).
+type MeetingMinutesModel struct {
+	ID        string    `gorm:"primaryKey;size:64"`
+	RoomID    string    `gorm:"column:room_id;size:64;not null;index:idx_minutes_room,priority:1"`
+	Version   int       `gorm:"not null;index:idx_minutes_room,priority:2"`
+	Content   string    `gorm:"type:mediumtext;not null"`
+	Source    string    `gorm:"size:16;not null"`
+	CreatedBy string    `gorm:"column:created_by;size:128;not null;default:''"`
+	CreatedAt time.Time `gorm:"not null"`
+}
+
+func (MeetingMinutesModel) TableName() string { return "meeting_minutes" }
+
 // SchemaMigrationModel maps to the `schema_migrations` table.
 type SchemaMigrationModel struct {
 	Version   string    `gorm:"primaryKey;size:64"`
@@ -353,6 +366,8 @@ func (m RoomModel) toDomain() model.RoomMeta {
 		CreatedAt:    m.CreatedAt,
 		HasPasscode:  m.PasscodeHash != "",
 		PasscodeHash: m.PasscodeHash,
+		Status:       m.Status,
+		ArchivedAt:   m.ArchivedAt,
 		DialoguePolicy: model.DialoguePolicy{
 			Mode:                      m.DialogueMode,
 			MaxAutonomousTurns:        m.MaxAutonomousTurns,
@@ -387,6 +402,30 @@ func (m KnowledgeChunkModel) toDomain() model.KnowledgeChunk {
 		ChunkIndex: m.ChunkIndex,
 		Content:    m.Content,
 		CreatedAt:  m.CreatedAt,
+	}
+}
+
+func meetingMinutesToModel(m model.MeetingMinutes) MeetingMinutesModel {
+	return MeetingMinutesModel{
+		ID:        m.ID,
+		RoomID:    m.RoomID,
+		Version:   m.Version,
+		Content:   m.Content,
+		Source:    m.Source,
+		CreatedBy: m.CreatedBy,
+		CreatedAt: m.CreatedAt,
+	}
+}
+
+func (m MeetingMinutesModel) toDomain() model.MeetingMinutes {
+	return model.MeetingMinutes{
+		ID:        m.ID,
+		RoomID:    m.RoomID,
+		Version:   m.Version,
+		Content:   m.Content,
+		Source:    m.Source,
+		CreatedBy: m.CreatedBy,
+		CreatedAt: m.CreatedAt,
 	}
 }
 

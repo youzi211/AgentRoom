@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
 import { createRoom, getRoom } from './api/roomClient'
 import {
+  ADMIN_SECTIONS,
   ROUTE_NAMES,
-  navigateAgents,
+  navigateAdmin,
   navigateHome,
   navigateRoom,
   parseCurrentRoute,
   resolveRoomSession,
   subscribeToNavigation,
 } from './routing'
-import AgentAdmin from './components/AgentAdmin'
+import AdminConsole from './components/AdminConsole'
+import AdminGate from './components/AdminGate'
 import ChatRoom from './components/ChatRoom'
 import JoinScreen from './components/JoinScreen'
 import NotFound from './components/NotFound'
@@ -102,8 +104,17 @@ export default function App() {
     )
   }
 
-  if (route.name === ROUTE_NAMES.agents) {
-    return <AgentAdmin onBack={() => navigateHome()} />
+  if (route.name === ROUTE_NAMES.admin) {
+    return (
+      <AdminGate onBackHome={() => navigateHome()}>
+        <AdminConsole
+          section={route.section || ADMIN_SECTIONS.meetings}
+          onNavigateSection={(section) => navigateAdmin(section)}
+          onBackHome={() => navigateHome()}
+          onSignOut={() => navigateHome()}
+        />
+      </AdminGate>
+    )
   }
 
   if (route.name === ROUTE_NAMES.notFound) {
@@ -116,7 +127,7 @@ export default function App() {
       isSubmitting={submitState.isSubmitting}
       onCreateRoom={handleCreateRoom}
       onJoinRoom={handleJoinRoom}
-      onOpenAgentAdmin={() => navigateAgents()}
+      onOpenAgentAdmin={() => navigateAdmin(ADMIN_SECTIONS.meetings)}
     />
   )
 }

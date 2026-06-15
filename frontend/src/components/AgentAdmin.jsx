@@ -20,7 +20,7 @@ const EMPTY_FORM = {
 
 const CREATE_MODE = '__create__'
 
-function AgentAdmin({ onBack }) {
+function AgentAdmin({ onBack, embedded = false }) {
   const [agents, setAgents] = useState([])
   const [selectedAgentId, setSelectedAgentId] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
@@ -180,23 +180,27 @@ function AgentAdmin({ onBack }) {
     setDeleteTarget(null)
   }
 
+  const containerClass = embedded ? 'admin-section' : 'workbench workbench--admin'
+
   return (
-    <main className="workbench workbench--admin">
-      <header className="app-bar">
-        <div className="brand-lockup">
-          <span className="brand-mark">AR</span>
-          <div>
-            <strong>Agent 管理</strong>
-            <span>配置会议室里的预定义角色</span>
+    <main className={containerClass}>
+      {embedded ? null : (
+        <header className="app-bar">
+          <div className="brand-lockup">
+            <span className="brand-mark">AR</span>
+            <div>
+              <strong>Agent 管理</strong>
+              <span>配置会议室里的预定义角色</span>
+            </div>
           </div>
-        </div>
-        <nav className="app-nav" aria-label="管理导航">
-          <span className="app-nav-item app-nav-item--active">Agent 配置</span>
-          <button className="app-nav-item" type="button" onClick={onBack}>
-            会议入口
-          </button>
-        </nav>
-      </header>
+          <nav className="app-nav" aria-label="管理导航">
+            <span className="app-nav-item app-nav-item--active">Agent 配置</span>
+            <button className="app-nav-item" type="button" onClick={onBack}>
+              会议入口
+            </button>
+          </nav>
+        </header>
+      )}
 
       <section className="admin-hero">
         <div>
