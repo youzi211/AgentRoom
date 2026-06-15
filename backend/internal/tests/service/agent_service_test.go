@@ -46,3 +46,49 @@ func TestAgentServiceRejectsDuplicateMentionOnUpdate(t *testing.T) {
 		t.Fatalf("expected ErrAgentMentionExists, got %v", err)
 	}
 }
+
+func TestAgentServiceCreateAllowsBlankRoleTemplate(t *testing.T) {
+	store := &teststore.Store{}
+	svc := service.NewAgentService(store, nil)
+
+	created, err := svc.CreateAgent(context.Background(), "Reviewer", "QA Engineer", "Finds regression risk.", "   ", true)
+	if err != nil {
+		t.Fatalf("expected create to succeed, got %v", err)
+	}
+	if created.SystemPrompt != "" {
+		t.Fatalf("expected blank role template to remain blank, got %q", created.SystemPrompt)
+	}
+	if len(store.Agents) != 1 || store.Agents[0].SystemPrompt != "" {
+		t.Fatalf("expected persisted blank role template, got %#v", store.Agents)
+	}
+}
+
+func TestAgentServiceBlankUpdatePreservesExistingRoleTemplate(t *testing.T) {
+	agents := []model.Agent{
+		{
+			ID:           "qa",
+			Name:         "QA",
+			Mention:      "@QA",
+			Role:         "QA Engineer",
+			Description:  "Finds risk.",
+			SystemPrompt: "Keep replies brief.",
+			Enabled:      true,
+		},
+	}
+	store := &teststore.Store{Agents: append([]model.Agent(nil), agents...)}
+	svc := service.NewAgentService(store, agents)
+
+	updated, err := svc.UpdateAgent(context.Background(), "qa", service.UpdateAgentInput{
+		Description:  "Finds regressions and release risk.",
+		SystemPrompt: "   ",
+	})
+	if err != nil {
+		t.Fatalf("expected update to succeed, got %v", err)
+	}
+	if updated.SystemPrompt != "Keep replies brief." {
+		t.Fatalf("expected blank update to preserve existing role template, got %q", updated.SystemPrompt)
+	}
+	if updated.Description != "Finds regressions and release risk." {
+		t.Fatalf("expected non-prompt fields to update, got %#v", updated)
+	}
+}

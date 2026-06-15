@@ -263,11 +263,15 @@ type sequenceLLM struct {
 	responses []string
 	errors    []error
 	calls     int
+	requests  [][]llm.ChatMessage
 }
 
-func (s *sequenceLLM) Complete(context.Context, []llm.ChatMessage) (string, error) {
+func (s *sequenceLLM) Complete(_ context.Context, messages []llm.ChatMessage) (string, error) {
 	idx := s.calls
 	s.calls++
+	copied := make([]llm.ChatMessage, len(messages))
+	copy(copied, messages)
+	s.requests = append(s.requests, copied)
 
 	if idx < len(s.errors) && s.errors[idx] != nil {
 		return "", s.errors[idx]
@@ -279,9 +283,10 @@ func (s *sequenceLLM) Complete(context.Context, []llm.ChatMessage) (string, erro
 }
 
 type dialogueRuntimeRoom struct {
-	meta     model.RoomMeta
-	agents   []model.Agent
-	messages []model.Message
+	meta         model.RoomMeta
+	participants []model.Participant
+	agents       []model.Agent
+	messages     []model.Message
 }
 
 func newDialogueRuntimeRoom(policy model.DialoguePolicy, agents []model.Agent) *dialogueRuntimeRoom {
@@ -298,6 +303,12 @@ func newDialogueRuntimeRoom(policy model.DialoguePolicy, agents []model.Agent) *
 }
 
 func (r *dialogueRuntimeRoom) Info() model.RoomMeta { return r.meta }
+
+func (r *dialogueRuntimeRoom) Participants() []model.Participant {
+	result := make([]model.Participant, len(r.participants))
+	copy(result, r.participants)
+	return result
+}
 
 func (r *dialogueRuntimeRoom) Agents() []model.Agent {
 	public := make([]model.Agent, 0, len(r.agents))

@@ -385,5 +385,5 @@ function labelForDialogueMode(mode) {
 function descriptionForDialogueMode(mode) {
   return mode === 'guided_dialogue'
     ? '被点到的 Agent 会先回复，并允许继续 @ 其他 Agent。'
-    : '只有用户直接 @ 到的 Agent 会回复。'
+    : '用户直接 @ 的 Agent 会先回复；如果 Agent 明确 @ 了同伴，也会按房间策略继续接话。'
 }

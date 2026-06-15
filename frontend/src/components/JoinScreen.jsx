@@ -193,7 +193,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
                 <option value="mention_fanout">点名单轮</option>
                 <option value="guided_dialogue">引导多轮</option>
               </select>
-              <p className="field-hint">点名单轮只让被 @ 的 Agent 各回复一次；引导多轮允许受限的 Agent 接力讨论。</p>
+              <p className="field-hint">点名单轮会先让被 @ 的 Agent 回复；如果 Agent 明确 @ 了同伴，也会按策略继续接话。引导多轮允许受限的 Agent 持续接力讨论。</p>
             </div>
 
             {availableAgents.length > 0 ? (

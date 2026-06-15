@@ -144,7 +144,7 @@ Use Gin for the HTTP surface so the implementation is familiar, compact, and eas
 `internal/llm`
 
 - Implements a minimal OpenAI-compatible chat completion client.
-- Takes system prompt, recent context messages, and user message.
+- Takes a structured chat prompt composed from a fixed system contract, an optional agent role template, and room-context user content.
 - Returns plain text content.
 
 `internal/api`
@@ -278,13 +278,15 @@ Examples:
 
 Each agent response should include:
 
-- The agent's role system prompt.
-- The latest room context, limited to recent messages.
-- The user message that triggered the agent.
+- A fixed system contract plus an optional agent role template stored in `systemPrompt`.
+- The latest room context, including participants, room agents, trigger metadata, and recent visible messages.
+- Retrieved knowledge snippets and a fixed output contract for one room-visible reply.
 
 Keep context bounded. Use the latest 30 messages for the MVP.
 
-Generic agent system prompt pattern:
+The editable `systemPrompt` field is now treated as an agent role template, not a place for platform-wide runtime rules.
+
+Generic agent role template pattern:
 
 ```text
 你是 AgentRoom 中的一个职能型 AI Agent。
@@ -298,7 +300,7 @@ Generic agent system prompt pattern:
 - 如果问题超出你的角色范围，请指出并给出有限建议。
 ```
 
-Meeting secretary prompt pattern:
+Meeting secretary role template pattern:
 
 ```text
 你是 AgentRoom 的会议秘书。
@@ -348,7 +350,7 @@ Returns all predefined agents.
 }
 ```
 
-Do not expose full system prompts to the frontend unless needed.
+Do not expose full role templates or prompt internals to the frontend unless needed.
 
 ### `POST /rooms`
 

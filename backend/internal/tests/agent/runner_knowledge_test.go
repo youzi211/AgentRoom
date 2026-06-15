@@ -22,12 +22,18 @@ func (c *recordingLLM) Complete(_ context.Context, messages []llm.ChatMessage) (
 }
 
 type runtimeRoom struct {
-	meta     model.RoomMeta
-	agents   []model.Agent
-	messages []model.Message
+	meta         model.RoomMeta
+	participants []model.Participant
+	agents       []model.Agent
+	messages     []model.Message
 }
 
 func (r *runtimeRoom) Info() model.RoomMeta { return r.meta }
+func (r *runtimeRoom) Participants() []model.Participant {
+	result := make([]model.Participant, len(r.participants))
+	copy(result, r.participants)
+	return result
+}
 func (r *runtimeRoom) Agents() []model.Agent {
 	public := make([]model.Agent, 0, len(r.agents))
 	for _, a := range r.agents {

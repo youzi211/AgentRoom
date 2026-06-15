@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"agentroom/backend/internal/llm"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/store"
 )
@@ -67,7 +66,7 @@ func (r *Runner) handleGuidedDialogue(ctx context.Context, currentRoom RuntimeRo
 		}
 
 		eligiblePeers := eligibleDialoguePeers(fullAgents, turnsByAgent, responder.ID, lastSpeakerID, policy)
-		response, err := r.generateGuidedResponse(ctx, currentRoom, responder, parentMessage, eligiblePeers, policy, turnCount+1)
+		response, err := r.generateGuidedResponse(ctx, currentRoom, responder, parentMessage, trigger, eligiblePeers, policy, turnCount+1)
 		if err != nil {
 			status = dialogueFailureStatus(err)
 			content := fmt.Sprintf("Agent %s failed to respond: %s", responder.Name, shortReason(err))
@@ -116,7 +115,7 @@ func (r *Runner) handleGuidedDialogue(ctx context.Context, currentRoom RuntimeRo
 	}
 }
 
-func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message, eligiblePeers []model.Agent, policy model.DialoguePolicy, turnIndex int) (string, error) {
+func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message, rootHumanTrigger model.Message, eligiblePeers []model.Agent, policy model.DialoguePolicy, turnIndex int) (string, error) {
 	runID := model.NewID("run")
 	roomInfo := currentRoom.Info()
 	agentRun := store.AgentRun{
@@ -132,15 +131,20 @@ func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom Runtime
 	}
 
 	knowledgeChunks := r.searchKnowledge(ctx, currentRoom, responder, trigger)
-	prompt := buildGuidedPrompt(currentRoom.RecentMessages(r.contextLimit), responder, trigger, eligiblePeers, policy, turnIndex, knowledgeChunks)
+	promptContext := NewGuidedPromptContext(currentRoom, currentRoom.RecentMessages(r.contextLimit), responder, trigger, rootHumanTrigger, eligiblePeers, policy, turnIndex, knowledgeChunks)
+	promptMessages, err := composePromptMessages(responder, promptContext)
+	now := time.Now().UTC()
+	if err != nil {
+		if finishErr := r.store.FinishAgentRun(ctx, runID, "failed", shortReason(err), now); finishErr != nil {
+			r.logger.Error("finish agent run", "run_id", runID, "status", "failed", "error", finishErr)
+		}
+		return "", err
+	}
+
 	requestCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	response, err := r.client.Complete(requestCtx, []llm.ChatMessage{
-		{Role: llm.RoleSystem, Content: responder.SystemPrompt},
-		{Role: llm.RoleUser, Content: prompt},
-	})
-	now := time.Now().UTC()
+	response, err := r.client.Complete(requestCtx, promptMessages)
 	if err != nil {
 		status := "failed"
 		if errors.Is(requestCtx.Err(), context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -273,66 +277,4 @@ func isDuplicateDialogueTurn(candidate string, existing []string) bool {
 		}
 	}
 	return false
-}
-
-func buildGuidedPrompt(messages []model.Message, responder model.Agent, trigger model.Message, eligiblePeers []model.Agent, policy model.DialoguePolicy, turnIndex int, knowledgeChunks []model.KnowledgeChunk) string {
-	var builder strings.Builder
-	builder.WriteString("You are participating in a bounded multi-agent room dialogue.\n")
-	builder.WriteString("Current speaker: ")
-	builder.WriteString(responder.Name)
-	builder.WriteString("\n")
-	builder.WriteString("Autonomous turn: ")
-	builder.WriteString(fmt.Sprintf("%d/%d", turnIndex, policy.MaxAutonomousTurns))
-	builder.WriteString("\n")
-	builder.WriteString("Response strategy: ")
-	builder.WriteString(policy.ResponseStrategy)
-	builder.WriteString("\n")
-	builder.WriteString("Allow self follow-up: ")
-	builder.WriteString(fmt.Sprintf("%t", policy.AllowSelfFollowup))
-	builder.WriteString("\n")
-	builder.WriteString("Allow agent-to-agent mentions: ")
-	builder.WriteString(fmt.Sprintf("%t", policy.AllowAgentToAgentMentions))
-	builder.WriteString("\n")
-	builder.WriteString("Max turns per agent: ")
-	builder.WriteString(fmt.Sprintf("%d", policy.MaxTurnsPerAgent))
-	builder.WriteString("\n")
-	if len(eligiblePeers) > 0 {
-		builder.WriteString("Eligible peers for follow-up: ")
-		for index, peer := range eligiblePeers {
-			if index > 0 {
-				builder.WriteString(", ")
-			}
-			builder.WriteString(peer.Mention)
-		}
-		builder.WriteString("\n")
-	}
-	builder.WriteString("Trigger message sender: ")
-	builder.WriteString(trigger.SenderName)
-	builder.WriteString(" (")
-	builder.WriteString(trigger.SenderType)
-	builder.WriteString(")\n")
-	builder.WriteString("Trigger message content:\n")
-	builder.WriteString(trigger.Content)
-	builder.WriteString("\n\nRecent room messages:\n")
-	for _, message := range messages {
-		builder.WriteString("- ")
-		builder.WriteString(message.SenderName)
-		builder.WriteString(" (")
-		builder.WriteString(message.SenderType)
-		builder.WriteString("): ")
-		builder.WriteString(message.Content)
-		builder.WriteString("\n")
-	}
-	if len(knowledgeChunks) > 0 {
-		builder.WriteString("\nKnowledge snippets:\n")
-		for _, chunk := range knowledgeChunks {
-			builder.WriteString("- [")
-			builder.WriteString(chunk.Scope)
-			builder.WriteString("] ")
-			builder.WriteString(chunk.Content)
-			builder.WriteString("\n")
-		}
-	}
-	builder.WriteString("\nReply with exactly one visible room message. Keep it concise, stay in character, and do not reveal hidden reasoning.")
-	return builder.String()
 }

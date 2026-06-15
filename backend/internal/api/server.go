@@ -258,10 +258,7 @@ func (s *Server) handleCreateRoom(c *gin.Context) {
 		return
 	}
 
-	dialoguePolicy := model.DefaultDialoguePolicy()
-	if request.DialoguePolicy != nil {
-		dialoguePolicy = request.DialoguePolicy.WithDefaults()
-	}
+	dialoguePolicy := request.DialoguePolicy.Resolve()
 
 	currentRoom, err := s.rooms.CreateRoom(c.Request.Context(), request.Name, request.AgentIDs, request.Passcode, dialoguePolicy)
 	if err != nil {

@@ -474,7 +474,7 @@ Agent 消息、System 消息同理：必须先落库，再广播。
 `GET /api/agents`：
 
 - 从 `agents` 表读取。
-- 返回包含 `systemPrompt` 的 `AgentConfig`，仅供管理页。
+- 返回包含 `systemPrompt` 的 `AgentConfig`，其中该字段语义为 Agent 角色模板，仅供管理页。
 
 `PUT /api/agents/:agentID`：
 

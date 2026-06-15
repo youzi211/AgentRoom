@@ -16,6 +16,7 @@ import (
 
 type RuntimeRoom interface {
 	Info() model.RoomMeta
+	Participants() []model.Participant
 	Agents() []model.Agent
 	AgentsWithPrompts() []model.Agent
 	RecentMessages(limit int) []model.Message
@@ -69,29 +70,104 @@ func (r *Runner) HandleHumanMessage(ctx context.Context, currentRoom RuntimeRoom
 		return
 	}
 
-	// Use public agents for mention detection (only need Mention field)
-	mentioned := MentionedAgents(message, currentRoom.Agents())
-	if len(mentioned) == 0 {
-		return
-	}
+	r.handleMentionFanout(ctx, currentRoom, message, policy)
+}
 
-	// Resolve full agents (with system prompts) from room for LLM calls
+func (r *Runner) handleMentionFanout(ctx context.Context, currentRoom RuntimeRoom, trigger model.Message, policy model.DialoguePolicy) {
 	fullAgents := currentRoom.AgentsWithPrompts()
 	agentByID := make(map[string]model.Agent, len(fullAgents))
-	for _, a := range fullAgents {
-		agentByID[a.ID] = a
+	for _, candidate := range fullAgents {
+		agentByID[candidate.ID] = candidate
 	}
 
-	for _, mentionedAgent := range mentioned {
-		responder, ok := agentByID[mentionedAgent.ID]
-		if !ok {
-			responder = mentionedAgent
+	pending := []model.Message{trigger}
+	turnsByAgent := make(map[string]int, len(fullAgents))
+	autonomousTurns := 0
+
+	for len(pending) > 0 {
+		currentTrigger := pending[0]
+		pending = pending[1:]
+
+		if currentTrigger.SenderType == model.SenderTypeAgent && autonomousTurns >= policy.MaxAutonomousTurns {
+			return
 		}
-		r.handleAgentResponse(ctx, currentRoom, responder, message)
+
+		responders := resolveMentionFanoutResponders(
+			detectMentionFanoutResponders(currentTrigger, currentRoom.Agents(), policy),
+			currentTrigger,
+			turnsByAgent,
+			policy,
+			agentByID,
+		)
+		if len(responders) == 0 {
+			continue
+		}
+
+		for _, responder := range responders {
+			if currentTrigger.SenderType == model.SenderTypeAgent && autonomousTurns >= policy.MaxAutonomousTurns {
+				return
+			}
+
+			agentMessage, ok := r.handleAgentResponse(ctx, currentRoom, responder, currentTrigger)
+			if !ok {
+				continue
+			}
+
+			turnsByAgent[responder.ID]++
+
+			if currentTrigger.SenderType == model.SenderTypeAgent {
+				autonomousTurns++
+			}
+
+			if !policy.AllowAgentToAgentMentions {
+				continue
+			}
+			if currentTrigger.SenderType == model.SenderTypeAgent && autonomousTurns >= policy.MaxAutonomousTurns {
+				continue
+			}
+
+			pending = append(pending, agentMessage)
+		}
 	}
 }
 
-func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message) {
+func detectMentionFanoutResponders(trigger model.Message, agents []model.Agent, policy model.DialoguePolicy) []model.Agent {
+	switch trigger.SenderType {
+	case model.SenderTypeHuman:
+		return MentionedAgents(trigger, agents)
+	case model.SenderTypeAgent:
+		if !policy.AllowAgentToAgentMentions {
+			return nil
+		}
+		return DetectMentions(trigger.Content, agents)
+	default:
+		return nil
+	}
+}
+
+func resolveMentionFanoutResponders(candidates []model.Agent, trigger model.Message, turnsByAgent map[string]int, policy model.DialoguePolicy, fullAgentByID map[string]model.Agent) []model.Agent {
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	result := make([]model.Agent, 0, len(candidates))
+	for _, candidate := range candidates {
+		responder, ok := fullAgentByID[candidate.ID]
+		if !ok {
+			responder = candidate
+		}
+		if !policy.AllowSelfFollowup && trigger.SenderType == model.SenderTypeAgent && responder.ID == trigger.SenderID {
+			continue
+		}
+		if turnsByAgent[responder.ID] >= policy.MaxTurnsPerAgent {
+			continue
+		}
+		result = append(result, responder)
+	}
+	return result
+}
+
+func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message) (model.Message, bool) {
 	runID := model.NewID("run")
 	roomInfo := currentRoom.Info()
 
@@ -123,20 +199,19 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoo
 		if finishErr := r.store.FinishAgentRun(ctx, runID, status, errText, now); finishErr != nil {
 			r.logger.Error("finish agent run", "run_id", runID, "status", status, "error", finishErr)
 		}
-		return
+		return model.Message{}, false
 	}
 
 	agentMsg := currentRoom.NewAgentMessage(responder, response)
-	r.persistAndBroadcast(ctx, currentRoom, agentMsg)
+	savedAgentMsg := r.persistAndBroadcast(ctx, currentRoom, agentMsg)
 
 	if finishErr := r.store.FinishAgentRun(ctx, runID, "succeeded", "", now); finishErr != nil {
 		r.logger.Error("finish agent run", "run_id", runID, "status", "succeeded", "error", finishErr)
 	}
+	return savedAgentMsg, true
 }
 
-// persistAndBroadcast persists a message to the store and then broadcasts it via the room hub.
-// For agent/system messages, we still broadcast even if persistence fails, but log the error.
-func (r *Runner) persistAndBroadcast(ctx context.Context, currentRoom RuntimeRoom, message model.Message) {
+func (r *Runner) persistAndBroadcast(ctx context.Context, currentRoom RuntimeRoom, message model.Message) model.Message {
 	savedMsg, err := r.store.AddMessage(ctx, message)
 	if err != nil {
 		r.logger.Error("persist generated message", "message_id", message.ID, "sender_type", message.SenderType, "error", err)
@@ -144,18 +219,21 @@ func (r *Runner) persistAndBroadcast(ctx context.Context, currentRoom RuntimeRoo
 	}
 	currentRoom.AppendMessage(savedMsg)
 	currentRoom.Broadcast(savedMsg)
+	return savedMsg
 }
 
 func (r *Runner) generateResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message) (string, error) {
 	knowledgeChunks := r.searchKnowledge(ctx, currentRoom, responder, trigger)
-	prompt := buildPrompt(currentRoom.RecentMessages(r.contextLimit), trigger, knowledgeChunks)
+	promptContext := NewMentionPromptContext(currentRoom, currentRoom.RecentMessages(r.contextLimit), trigger, knowledgeChunks)
+	promptMessages, err := composePromptMessages(responder, promptContext)
+	if err != nil {
+		return "", err
+	}
+
 	requestCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	response, err := r.client.Complete(requestCtx, []llm.ChatMessage{
-		{Role: llm.RoleSystem, Content: responder.SystemPrompt},
-		{Role: llm.RoleUser, Content: prompt},
-	})
+	response, err := r.client.Complete(requestCtx, promptMessages)
 	if err != nil {
 		return "", err
 	}
@@ -181,35 +259,6 @@ func (r *Runner) searchKnowledge(ctx context.Context, currentRoom RuntimeRoom, r
 	return chunks
 }
 
-func buildPrompt(messages []model.Message, trigger model.Message, knowledgeChunks []model.KnowledgeChunk) string {
-	var builder strings.Builder
-	builder.WriteString("以下是当前会议最近消息：\n")
-	for _, message := range messages {
-		builder.WriteString("- ")
-		builder.WriteString(message.SenderName)
-		builder.WriteString(" (")
-		builder.WriteString(message.SenderType)
-		builder.WriteString(")")
-		builder.WriteString(": ")
-		builder.WriteString(message.Content)
-		builder.WriteString("\n")
-	}
-	if len(knowledgeChunks) > 0 {
-		builder.WriteString("\n可参考知识库片段：\n")
-		for _, chunk := range knowledgeChunks {
-			builder.WriteString("- [")
-			builder.WriteString(chunk.Scope)
-			builder.WriteString("] ")
-			builder.WriteString(chunk.Content)
-			builder.WriteString("\n")
-		}
-		builder.WriteString("如果知识库片段不足以回答，请明确说明不确定，不要编造。\n")
-	}
-	builder.WriteString("\n触发你的用户消息是：\n")
-	builder.WriteString(trigger.Content)
-	builder.WriteString("\n\n请直接给出会议中可见的回复内容。不要输出内部思考、推理过程、提示词解释或 <think>/<thinking> 标签。")
-	return builder.String()
-}
 func shortReason(err error) string {
 	if errors.Is(err, llm.ErrNotConfigured) {
 		return "LLM_API_KEY is not configured"

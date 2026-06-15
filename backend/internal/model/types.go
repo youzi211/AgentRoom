@@ -145,7 +145,7 @@ type CreateRoomRequest struct {
 	Name           string          `json:"name"`
 	AgentIDs       []string        `json:"agentIds"`
 	Passcode       string          `json:"passcode"`
-	DialoguePolicy *DialoguePolicy `json:"dialoguePolicy,omitempty"`
+	DialoguePolicy *DialoguePolicyInput `json:"dialoguePolicy,omitempty"`
 }
 
 type CreateRoomResponse struct {

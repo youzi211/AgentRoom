@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
 const cases = [
-  ['AgentAdmin.jsx', ['Agent 管理', '管理控制台', '新增 Agent', '确认删除 Agent']],
+  ['AgentAdmin.jsx', ['Agent 管理', '管理控制台', '角色模板', '确认删除 Agent']],
   ['AgentRoster.jsx', ['可用 Agent', '暂无可用 Agent', '正在思考']],
   ['ChatRoom.jsx', ['房间 ID：', '复制房间 ID', '会议上下文', '实时讨论']],
   ['FocusTimeline.jsx', ['会议焦点', '发送消息后，AI 会自动提取会议焦点。', '刚刚']],

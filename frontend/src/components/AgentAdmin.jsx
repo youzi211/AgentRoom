@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { createAgent, deleteAgent, deleteKnowledgeDocument, getAgentKnowledge, getAgents, updateAgent, uploadAgentKnowledge } from '../api/roomClient'
+import {
+  createAgent,
+  deleteAgent,
+  deleteKnowledgeDocument,
+  getAgentKnowledge,
+  getAgents,
+  updateAgent,
+  uploadAgentKnowledge,
+} from '../api/roomClient'
 import KnowledgePanel from './KnowledgePanel'
 
 const EMPTY_FORM = {
@@ -120,7 +128,7 @@ function AgentAdmin({ onBack }) {
         const nextAgents = [...agents, created]
         setAgents(nextAgents)
         setSelectedAgentId(created.id)
-        setNotice('Agent 已创建。它可以被拉入新的会议室。')
+        setNotice('Agent 已创建。它可以被加入新的会议室。')
       } else if (selectedAgent) {
         const updatedAgent = await updateAgent(selectedAgent.id, {
           name: form.name.trim(),
@@ -130,7 +138,7 @@ function AgentAdmin({ onBack }) {
           enabled: form.enabled,
         })
         setAgents((current) => current.map((agent) => (agent.id === updatedAgent.id ? updatedAgent : agent)))
-        setNotice('Agent 配置已保存。新建房间会使用最新配置，已存在房间里的 Agent 快照不会自动改变。')
+        setNotice('Agent 配置已保存。新建房间会使用最新配置，已存在房间中的 Agent 快照不会自动改变。')
       }
     } catch (error) {
       setErrorMessage(error.message || (isCreating ? '创建 Agent 失败。' : '保存 Agent 配置失败。'))
@@ -159,7 +167,7 @@ function AgentAdmin({ onBack }) {
       if (selectedAgentId === deleteTarget.id) {
         setSelectedAgentId(nextAgents[0]?.id || '')
       }
-      setNotice(`Agent「${deleteTarget.name}」已删除。已有房间中的快照不受影响。`)
+      setNotice(`Agent「${deleteTarget.name}」已删除。已存在房间中的快照不受影响。`)
     } catch (error) {
       setErrorMessage(error.message || '删除 Agent 失败。')
     } finally {
@@ -193,9 +201,10 @@ function AgentAdmin({ onBack }) {
       <section className="admin-hero">
         <div>
           <p className="eyebrow">管理控制台</p>
-          <h1>管理 Agent、行为规则与专属知识库</h1>
+          <h1>管理 Agent、角色模板与专属知识库</h1>
           <p className="section-copy">
-            这里维护的是可被新会议选择的角色模板。停用后，该 Agent 不会出现在新房间的可选列表，也不会响应新的 @ 提及。
+            这里维护的是可被新会议选择的角色模板。停用后，该 Agent 不会出现在新房间的可选列表，也不会响应新的 @
+            提及。
           </p>
         </div>
         <button className="button button--primary" type="button" onClick={handleStartCreate} disabled={isSaving}>
@@ -211,10 +220,10 @@ function AgentAdmin({ onBack }) {
           <div className="delete-confirm-card">
             <h2>确认删除 Agent</h2>
             <p>
-              确定要删除 Agent「<strong>{deleteTarget.name}</strong>」吗？此操作不可撤销。
+              确定要删除 Agent <strong>{deleteTarget.name}</strong> 吗？此操作不可撤销。
             </p>
             <p className="helper-text">
-              已有房间中该 Agent 的快照不会被删除，历史消息也不受影响。但新建房间将不再包含此 Agent。
+              已有房间中该 Agent 的快照不会被删除，历史消息也不受影响，但新建房间将不再包含这个 Agent。
             </p>
             <div className="button-row">
               <button className="button button--secondary" type="button" onClick={handleDeleteCancel} disabled={isSaving}>
@@ -235,7 +244,7 @@ function AgentAdmin({ onBack }) {
               <h2>Agent 列表</h2>
               <span className="panel-badge panel-badge--neutral">{agents.length}</span>
             </div>
-            <p className="panel-copy">选择一个 Agent 后，在右侧编辑它的职责、行为规则和知识库。</p>
+            <p className="panel-copy">选择一个 Agent 后，在右侧编辑它的职责、角色模板和知识库。</p>
           </div>
 
           {isLoading ? (
@@ -260,7 +269,7 @@ function AgentAdmin({ onBack }) {
                   <button
                     className="agent-delete-button"
                     type="button"
-                    title="删除此 Agent"
+                    title="删除这个 Agent"
                     onClick={() => handleDeleteRequest(agent)}
                     disabled={isSaving}
                   >
@@ -276,7 +285,7 @@ function AgentAdmin({ onBack }) {
           <div className="panel-header panel-header--horizontal">
             <div>
               <h2>{isCreating ? '新增 Agent' : selectedAgent ? selectedAgent.name : '选择 Agent'}</h2>
-              <p className="panel-copy">名称会生成 @ 提及词；行为规则为空时，会保留后端当前提示词。</p>
+              <p className="panel-copy">名称会生成 @ 提及词；角色模板留空时，系统只使用代码内置的会议规则。</p>
             </div>
             <div className="panel-badge-group">
               {selectedAgent ? <span className="panel-badge">{selectedAgent.mention}</span> : null}
@@ -348,12 +357,12 @@ function AgentAdmin({ onBack }) {
               onClick={() => setShowSystemPrompt((current) => !current)}
               disabled={!selectedAgent && !isCreating}
             >
-              <span className="collapse-toggle-label">行为规则</span>
+              <span className="collapse-toggle-label">角色模板</span>
               <span className="collapse-toggle-hint">
-                {form.systemPrompt ? '已自定义系统提示词' : '使用默认系统提示词'}
+                {form.systemPrompt ? '已自定义角色模板' : '使用默认角色模板'}
               </span>
               <span className={`collapse-chevron${showSystemPrompt ? ' collapse-chevron--open' : ''}`} aria-hidden="true">
-                ▾
+                ▲
               </span>
             </button>
             {showSystemPrompt ? (
@@ -364,7 +373,7 @@ function AgentAdmin({ onBack }) {
                 onChange={(event) => handleFieldChange('systemPrompt', event.target.value)}
                 disabled={(!selectedAgent && !isCreating) || isSaving}
                 rows={8}
-                placeholder="留空则保留当前后端提示词。"
+                placeholder="创建时留空表示不追加额外角色模板；更新时留空会保留当前模板。"
               />
             ) : null}
           </div>
@@ -375,7 +384,11 @@ function AgentAdmin({ onBack }) {
               title="Agent 知识库"
               description="上传 Markdown 文档，只有当前 Agent 在会议中发言时会参考这些知识。"
               disabled={isCreating || !selectedAgent}
-              emptyText={isCreating ? '创建 Agent 后即可上传知识文档。' : '暂无知识文档。上传 .md 后，该 Agent 会在回答时参考。'}
+              emptyText={
+                isCreating
+                  ? '创建 Agent 后即可上传知识文档。'
+                  : '暂无知识文档。上传 .md 后，这个 Agent 会在回答时参考它们。'
+              }
               listDocuments={selectedAgent ? () => getAgentKnowledge(selectedAgent.id) : null}
               onUploadDocument={selectedAgent ? (file) => uploadAgentKnowledge(selectedAgent.id, file) : null}
               onDeleteDocument={deleteKnowledgeDocument}
