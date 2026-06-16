@@ -13,11 +13,6 @@ import (
 	"agentroom/backend/internal/store"
 )
 
-var (
-	ErrAgentNotFound      = errors.New("agent not found")
-	ErrAgentMentionExists = errors.New("agent mention already exists")
-)
-
 type UpdateAgentInput struct {
 	Name         string
 	Role         string
@@ -28,12 +23,18 @@ type UpdateAgentInput struct {
 
 type AgentService struct {
 	mu     sync.RWMutex
-	store  store.Store
+	store  agentStore
 	agents []model.Agent
 	logger *slog.Logger
 }
 
-func NewAgentService(s store.Store, agents []model.Agent) *AgentService {
+type agentStore interface {
+	CreateAgent(ctx context.Context, agent model.Agent) (model.Agent, error)
+	UpdateAgent(ctx context.Context, agent model.Agent) (model.Agent, error)
+	DeleteAgent(ctx context.Context, agentID string) error
+}
+
+func NewAgentService(s agentStore, agents []model.Agent) *AgentService {
 	copiedAgents := make([]model.Agent, len(agents))
 	copy(copiedAgents, agents)
 
@@ -89,7 +90,7 @@ func (s *AgentService) ResolveForRoom(agentIDs []string) []model.Agent {
 
 func (s *AgentService) UpdateAgent(ctx context.Context, agentID string, input UpdateAgentInput) (model.Agent, error) {
 	s.mu.Lock()
-
+	defer s.mu.Unlock()
 	var current *model.Agent
 	for i := range s.agents {
 		if s.agents[i].ID == agentID {
@@ -98,24 +99,24 @@ func (s *AgentService) UpdateAgent(ctx context.Context, agentID string, input Up
 		}
 	}
 	if current == nil {
-		s.mu.Unlock()
 		return model.Agent{}, ErrAgentNotFound
 	}
 
 	updated := applyAgentUpdate(*current, input)
 	if hasAgentMentionConflict(s.agents, updated.ID, updated.Mention) {
-		s.mu.Unlock()
 		return model.Agent{}, ErrAgentMentionExists
 	}
-	s.agents = replaceAgentInSlice(s.agents, updated)
-	s.mu.Unlock()
 
 	result, err := s.store.UpdateAgent(ctx, updated)
 	if err != nil {
 		s.logger.Error("persist agent update", "agent_id", agentID, "error", err)
+		if errors.Is(err, store.ErrAgentNotFound) {
+			return model.Agent{}, ErrAgentNotFound
+		}
 		return model.Agent{}, fmt.Errorf("persist agent update: %w", err)
 	}
 
+	s.agents = replaceAgentInSlice(s.agents, result)
 	return result, nil
 }
 
@@ -157,6 +158,9 @@ func (s *AgentService) CreateAgent(ctx context.Context, name, role, description,
 
 func (s *AgentService) DeleteAgent(ctx context.Context, agentID string) error {
 	if err := s.store.DeleteAgent(ctx, agentID); err != nil {
+		if errors.Is(err, store.ErrAgentNotFound) {
+			return ErrAgentNotFound
+		}
 		return fmt.Errorf("delete agent: %w", err)
 	}
 

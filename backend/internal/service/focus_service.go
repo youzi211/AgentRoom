@@ -27,6 +27,7 @@ type roomFocusState struct {
 	messages     []model.Message
 	focusPoints  []model.FocusPoint
 	lastAnalyzed int
+	analyzing    bool
 }
 
 var focusPromptTemplate = prompts.NewChatPromptTemplate([]prompts.MessageFormatter{
@@ -56,7 +57,6 @@ func NewFocusService(llmClient llm.Client) *FocusService {
 
 func (s *FocusService) AddMessage(ctx context.Context, roomID string, message model.Message) []model.FocusPoint {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	state, exists := s.rooms[roomID]
 	if !exists {
@@ -67,6 +67,7 @@ func (s *FocusService) AddMessage(ctx context.Context, roomID string, message mo
 	state.messages = append(state.messages, message)
 	messageCount := len(state.messages)
 	threshold := 3
+	currentFocus := cloneFocusPoints(state.focusPoints)
 
 	s.logger.Info("focus: message added",
 		"room_id", roomID,
@@ -75,19 +76,34 @@ func (s *FocusService) AddMessage(ctx context.Context, roomID string, message mo
 		"diff", messageCount-state.lastAnalyzed,
 		"threshold", threshold)
 
-	if messageCount-state.lastAnalyzed >= threshold {
+	if messageCount-state.lastAnalyzed >= threshold && !state.analyzing {
 		s.logger.Info("focus: triggering analysis", "room_id", roomID)
-		focusPoints := s.analyzeMessages(ctx, roomID, state.messages)
+		state.analyzing = true
+		messagesSnapshot := append([]model.Message(nil), state.messages...)
+		targetCount := messageCount
+		s.mu.Unlock()
+
+		focusPoints := s.analyzeMessages(ctx, roomID, messagesSnapshot)
+
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		state = s.rooms[roomID]
+		if state == nil {
+			return currentFocus
+		}
+		state.analyzing = false
 		if len(focusPoints) > 0 {
 			state.focusPoints = focusPoints
-			state.lastAnalyzed = messageCount
+			state.lastAnalyzed = targetCount
 			s.logger.Info("focus: analysis complete", "room_id", roomID, "points_count", len(focusPoints))
-			return focusPoints
+			return cloneFocusPoints(state.focusPoints)
 		}
 		s.logger.Warn("focus: analysis returned no points", "room_id", roomID)
+		return cloneFocusPoints(state.focusPoints)
 	}
 
-	return state.focusPoints
+	s.mu.Unlock()
+	return currentFocus
 }
 
 func (s *FocusService) GetFocusPoints(roomID string) []model.FocusPoint {
@@ -98,7 +114,7 @@ func (s *FocusService) GetFocusPoints(roomID string) []model.FocusPoint {
 	if !exists {
 		return nil
 	}
-	return state.focusPoints
+	return cloneFocusPoints(state.focusPoints)
 }
 
 func (s *FocusService) analyzeMessages(ctx context.Context, roomID string, messages []model.Message) []model.FocusPoint {
@@ -195,4 +211,13 @@ func renderChatMessages(template prompts.ChatPromptTemplate, values map[string]a
 	}
 
 	return result, nil
+}
+
+func cloneFocusPoints(points []model.FocusPoint) []model.FocusPoint {
+	if len(points) == 0 {
+		return nil
+	}
+	cloned := make([]model.FocusPoint, len(points))
+	copy(cloned, points)
+	return cloned
 }

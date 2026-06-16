@@ -9,6 +9,7 @@ import (
 
 	"agentroom/backend/internal/logging"
 	"agentroom/backend/internal/model"
+	"agentroom/backend/internal/realtime"
 	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/store"
 )
@@ -33,7 +34,7 @@ func (h runtimeTimer) Stop() bool {
 }
 
 type MeetingLifecycle struct {
-	store      store.Store
+	store      lifecycleStore
 	logger     *slog.Logger
 	now        func() time.Time
 	schedule   scheduleFunc
@@ -43,7 +44,12 @@ type MeetingLifecycle struct {
 	timers map[string]timerHandle
 }
 
-func NewMeetingLifecycle(s store.Store) *MeetingLifecycle {
+type lifecycleStore interface {
+	UpdateRoomLifecycle(ctx context.Context, input store.UpdateRoomLifecycleInput) error
+	MarkParticipantLeft(ctx context.Context, participantID string, leftAt time.Time) error
+}
+
+func NewMeetingLifecycle(s lifecycleStore) *MeetingLifecycle {
 	return &MeetingLifecycle{
 		store:  s,
 		logger: logging.Component("meeting_lifecycle"),
@@ -188,8 +194,8 @@ func (l *MeetingLifecycle) CloseByOwner(ctx context.Context, currentRoom *room.R
 
 	l.markCurrentParticipantsLeft(ctx, currentRoom.ClearParticipants())
 	meta := currentRoom.Info()
-	currentRoom.Hub().BroadcastAndClose(model.ServerEvent{
-		Type: model.EventTypeRoomClosed,
+	currentRoom.Events().BroadcastAndClose(realtime.Event{
+		Type: realtime.EventTypeRoomClosed,
 		Room: &meta,
 	})
 	return nil
@@ -224,8 +230,8 @@ func (l *MeetingLifecycle) Archive(ctx context.Context, currentRoom *room.Room) 
 	if info.IsActive() {
 		l.markCurrentParticipantsLeft(ctx, currentRoom.ClearParticipants())
 		meta := currentRoom.Info()
-		currentRoom.Hub().BroadcastAndClose(model.ServerEvent{
-			Type: model.EventTypeRoomArchived,
+		currentRoom.Events().BroadcastAndClose(realtime.Event{
+			Type: realtime.EventTypeRoomArchived,
 			Room: &meta,
 		})
 	}
@@ -360,7 +366,7 @@ func (l *MeetingLifecycle) applyAndBroadcastSnapshot(ctx context.Context, curren
 	if err := l.applyLifecycle(ctx, currentRoom, state); err != nil {
 		return err
 	}
-	currentRoom.Hub().Broadcast(snapshotEvent(currentRoom.Snapshot()))
+	currentRoom.Events().BroadcastEvent(snapshotEvent(currentRoom.Snapshot()))
 	return nil
 }
 
@@ -395,6 +401,9 @@ func (l *MeetingLifecycle) applyLifecycle(ctx context.Context, currentRoom *room
 		AutoCloseDeadlineAt: state.AutoCloseDeadlineAt,
 		ArchivedAt:          state.ArchivedAt,
 	}); err != nil {
+		if errors.Is(err, store.ErrRoomNotFound) {
+			return ErrRoomNotFound
+		}
 		return err
 	}
 
@@ -404,7 +413,7 @@ func (l *MeetingLifecycle) applyLifecycle(ctx context.Context, currentRoom *room
 
 func (l *MeetingLifecycle) markCurrentParticipantsLeft(ctx context.Context, participants []model.Participant) {
 	for _, participant := range participants {
-		if err := l.store.MarkParticipantLeft(ctx, participant.ID, l.now()); err != nil && !errors.Is(err, ErrRoomNotFound) {
+		if err := l.store.MarkParticipantLeft(ctx, participant.ID, l.now()); err != nil && !errors.Is(err, store.ErrParticipantNotFound) {
 			l.logger.Warn("mark participant left", "participant_id", participant.ID, "error", err)
 		}
 	}
@@ -434,9 +443,9 @@ func participantOnline(participants []model.Participant, participantID string) b
 	return false
 }
 
-func snapshotEvent(state model.RoomState) model.ServerEvent {
-	return model.ServerEvent{
-		Type:         model.EventTypeRoomSnapshot,
+func snapshotEvent(state room.Snapshot) realtime.Event {
+	return realtime.Event{
+		Type:         realtime.EventTypeRoomSnapshot,
 		Room:         &state.Room,
 		Participants: state.Participants,
 		Agents:       state.Agents,

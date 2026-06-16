@@ -4,12 +4,13 @@ import (
 	"sync"
 
 	"agentroom/backend/internal/model"
+	"agentroom/backend/internal/realtime"
 )
 
 type Client struct {
 	ID            string
 	ParticipantID string
-	Send          chan model.ServerEvent
+	Send          chan realtime.Event
 }
 
 type Hub struct {
@@ -35,11 +36,19 @@ func (h *Hub) Unregister(client *Client) {
 	h.dropLocked(client)
 }
 
-func (h *Hub) Broadcast(event model.ServerEvent) {
+func (h *Hub) Broadcast(event realtime.Event) {
 	h.broadcast(event, nil)
 }
 
-func (h *Hub) BroadcastAndClose(event model.ServerEvent) {
+func (h *Hub) BroadcastEvent(event realtime.Event) {
+	h.Broadcast(event)
+}
+
+func (h *Hub) BroadcastMessage(message model.Message) {
+	h.Broadcast(realtime.Event{Type: realtime.EventTypeMessage, Message: &message})
+}
+
+func (h *Hub) BroadcastAndClose(event realtime.Event) {
 	h.mu.Lock()
 	clients := make([]*Client, 0, len(h.clients))
 	for client := range h.clients {
@@ -61,11 +70,11 @@ func (h *Hub) BroadcastAndClose(event model.ServerEvent) {
 	h.mu.Unlock()
 }
 
-func (h *Hub) BroadcastExcept(event model.ServerEvent, excluded *Client) {
+func (h *Hub) BroadcastExcept(event realtime.Event, excluded *Client) {
 	h.broadcast(event, excluded)
 }
 
-func (h *Hub) broadcast(event model.ServerEvent, excluded *Client) {
+func (h *Hub) broadcast(event realtime.Event, excluded *Client) {
 	h.mu.RLock()
 	clients := make([]*Client, 0, len(h.clients))
 	for client := range h.clients {

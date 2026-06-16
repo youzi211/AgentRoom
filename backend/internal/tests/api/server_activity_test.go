@@ -20,7 +20,7 @@ import (
 )
 
 func TestRoomActivityListsAgentAndDialogueRuns(t *testing.T) {
-	server, backingStore := newActivityTestServer(t, api.Config{})
+	server, _, backingStore := newActivityTestServer(t, api.Config{})
 	created := createActivityRoom(t, server, `{"name":"Activity room"}`)
 	completedAt := time.Date(2026, 6, 15, 10, 30, 1, 0, time.UTC)
 	startedAt := completedAt.Add(-time.Second)
@@ -97,7 +97,7 @@ func TestRoomActivityListsAgentAndDialogueRuns(t *testing.T) {
 }
 
 func TestRoomActivityRequiresPasscodeForProtectedRooms(t *testing.T) {
-	server, _ := newActivityTestServer(t, api.Config{})
+	server, _, _ := newActivityTestServer(t, api.Config{})
 	created := createActivityRoom(t, server, `{"name":"Protected activity","passcode":"open-sesame"}`)
 
 	request := httptest.NewRequest(http.MethodGet, "/api/rooms/"+created.Room.ID+"/activity", nil)
@@ -123,7 +123,7 @@ func TestRoomActivityRequiresPasscodeForProtectedRooms(t *testing.T) {
 	}
 }
 
-func newActivityTestServer(t *testing.T, config api.Config) (*api.Server, *teststore.Store) {
+func newActivityTestServer(t *testing.T, config api.Config) (*api.Server, *service.RoomService, *teststore.Store) {
 	t.Helper()
 
 	backingStore := &teststore.Store{}
@@ -139,7 +139,12 @@ func newActivityTestServer(t *testing.T, config api.Config) (*api.Server, *tests
 	runner := agent.NewRunner(llmClient, backingStore).WithKnowledge(knowledgeService)
 	focusService := service.NewFocusService(llmClient)
 	roomService := service.NewRoomService(manager, agentService, knowledgeService, runner, focusService, backingStore)
-	return api.NewServerWithConfig(roomService, config), backingStore
+	server := api.NewServerWithConfig(api.Dependencies{
+		Queries:  roomService.Queries(),
+		Commands: roomService.Commands(),
+		Access:   roomService.Access(),
+	}, config)
+	return server, roomService, backingStore
 }
 
 func createActivityRoom(t *testing.T, server *api.Server, body string) struct {

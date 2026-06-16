@@ -15,13 +15,18 @@ import (
 
 type Manager struct {
 	mu            sync.RWMutex
-	store         store.Store
+	store         managerStore
 	resolveAgents func(agentIDs []string) []model.Agent
 	rooms         map[string]*Room
 	logger        *slog.Logger
 }
 
-func NewManager(s store.Store, resolveAgents func(agentIDs []string) []model.Agent) *Manager {
+type managerStore interface {
+	CreateRoom(ctx context.Context, input store.CreateRoomInput) (model.RoomMeta, []model.Agent, error)
+	LoadRoomSnapshot(ctx context.Context, roomID string, messageLimit int) (store.RoomSnapshot, error)
+}
+
+func NewManager(s managerStore, resolveAgents func(agentIDs []string) []model.Agent) *Manager {
 	return &Manager{
 		store:         s,
 		resolveAgents: resolveAgents,
@@ -57,6 +62,7 @@ func (m *Manager) CreateRoom(ctx context.Context, name string, agentIDs []string
 	r := NewFromState(meta, agents)
 
 	m.mu.Lock()
+	m.pruneInactiveRoomsLocked(roomID)
 	m.rooms[roomID] = r
 	m.mu.Unlock()
 
@@ -72,31 +78,13 @@ func (m *Manager) GetRoom(ctx context.Context, roomID string) (*Room, bool) {
 		return r, true
 	}
 
-	// Load from store
-	meta, err := m.store.GetRoom(ctx, roomID)
+	snapshot, err := m.store.LoadRoomSnapshot(ctx, roomID, 100)
 	if err != nil {
+		m.logger.Warn("load room snapshot failed", "room_id", roomID, "error", err)
 		return nil, false
 	}
 
-	agents, err := m.store.ListRoomAgents(ctx, roomID)
-	if err != nil {
-		m.logger.Warn("load room agents failed", "room_id", roomID, "error", err)
-		agents = nil
-	}
-
-	messages, err := m.store.ListMessages(ctx, store.ListMessagesQuery{RoomID: roomID, Limit: 100})
-	if err != nil {
-		m.logger.Warn("load room messages failed", "room_id", roomID, "error", err)
-		messages = nil
-	}
-
-	participants, err := m.store.ListActiveParticipants(ctx, roomID)
-	if err != nil {
-		m.logger.Warn("load room participants failed", "room_id", roomID, "error", err)
-		participants = nil
-	}
-
-	r = NewFromSnapshot(meta, agents, messages, participants)
+	r = NewFromSnapshot(snapshot.Meta, snapshot.Agents, snapshot.Messages, snapshot.Participants)
 
 	m.mu.Lock()
 	// Double-check: another goroutine may have loaded the room
@@ -104,6 +92,7 @@ func (m *Manager) GetRoom(ctx context.Context, roomID string) (*Room, bool) {
 		m.mu.Unlock()
 		return existing, true
 	}
+	m.pruneInactiveRoomsLocked(roomID)
 	m.rooms[roomID] = r
 	m.mu.Unlock()
 
@@ -112,4 +101,20 @@ func (m *Manager) GetRoom(ctx context.Context, roomID string) (*Room, bool) {
 
 func ptr[T any](value T) *T {
 	return &value
+}
+
+func (m *Manager) pruneInactiveRoomsLocked(exemptRoomID string) {
+	for roomID, currentRoom := range m.rooms {
+		if roomID == exemptRoomID || currentRoom == nil {
+			continue
+		}
+		info := currentRoom.Info()
+		if info.IsActive() {
+			continue
+		}
+		if len(currentRoom.Participants()) > 0 {
+			continue
+		}
+		delete(m.rooms, roomID)
+	}
 }

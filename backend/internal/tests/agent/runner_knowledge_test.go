@@ -9,6 +9,8 @@ import (
 	"agentroom/backend/internal/agent"
 	"agentroom/backend/internal/llm"
 	"agentroom/backend/internal/model"
+	"agentroom/backend/internal/realtime"
+	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/tests/teststore"
 )
 
@@ -60,8 +62,9 @@ func (r *runtimeRoom) NewAgentMessage(a model.Agent, content string) model.Messa
 func (r *runtimeRoom) AppendMessage(message model.Message) {
 	r.messages = append(r.messages, message)
 }
-func (r *runtimeRoom) Broadcast(model.Message)          {}
-func (r *runtimeRoom) BroadcastEvent(model.ServerEvent) {}
+func (r *runtimeRoom) Broadcaster() room.MessageBroadcaster {
+	return noopBroadcaster{}
+}
 
 func TestRunnerIncludesRoomAndAgentKnowledgeInPrompt(t *testing.T) {
 	llmClient := &recordingLLM{}
@@ -99,6 +102,12 @@ func TestRunnerIncludesRoomAndAgentKnowledgeInPrompt(t *testing.T) {
 type testKnowledgeProvider struct {
 	store *teststore.Store
 }
+
+type noopBroadcaster struct{}
+
+func (noopBroadcaster) BroadcastMessage(model.Message) {}
+
+func (noopBroadcaster) BroadcastEvent(realtime.Event) {}
 
 func (p testKnowledgeProvider) SearchForAgent(_ context.Context, roomID string, agentID string, _ string) ([]model.KnowledgeChunk, error) {
 	result := make([]model.KnowledgeChunk, 0)

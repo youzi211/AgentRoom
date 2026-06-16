@@ -75,7 +75,11 @@ func main() {
 	focusService := service.NewFocusService(llmClient)
 	minutesService := service.NewMinutesService(llmClient)
 	roomService := service.NewRoomService(manager, agentService, knowledgeService, runner, focusService, store).WithMinutes(minutesService)
-	server := api.NewServerWithConfig(roomService, api.Config{
+	server := api.NewServerWithConfig(api.Dependencies{
+		Queries:  roomService.Queries(),
+		Commands: roomService.Commands(),
+		Access:   roomService.Access(),
+	}, api.Config{
 		AdminAPIKey:    securityConfig.AdminAPIKey,
 		AllowedOrigins: securityConfig.AllowedOrigins,
 	})

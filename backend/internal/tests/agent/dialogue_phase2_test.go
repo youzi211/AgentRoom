@@ -11,6 +11,8 @@ import (
 	"agentroom/backend/internal/agent"
 	"agentroom/backend/internal/llm"
 	"agentroom/backend/internal/model"
+	"agentroom/backend/internal/realtime"
+	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/store"
 	"agentroom/backend/internal/tests/teststore"
 )
@@ -287,7 +289,7 @@ type dialogueRuntimeRoom struct {
 	participants []model.Participant
 	agents       []model.Agent
 	messages     []model.Message
-	events       []model.ServerEvent
+	events       []realtime.Event
 }
 
 func newDialogueRuntimeRoom(policy model.DialoguePolicy, agents []model.Agent) *dialogueRuntimeRoom {
@@ -365,10 +367,8 @@ func (r *dialogueRuntimeRoom) AppendMessage(message model.Message) {
 	r.messages = append(r.messages, message)
 }
 
-func (r *dialogueRuntimeRoom) Broadcast(model.Message) {}
-
-func (r *dialogueRuntimeRoom) BroadcastEvent(event model.ServerEvent) {
-	r.events = append(r.events, event)
+func (r *dialogueRuntimeRoom) Broadcaster() room.MessageBroadcaster {
+	return dialogueBroadcaster{room: r}
 }
 
 func (r *dialogueRuntimeRoom) Messages() []model.Message {
@@ -402,6 +402,16 @@ func (r *dialogueRuntimeRoom) newHumanMessage(name string, content string) model
 type dialogueStore struct {
 	teststore.Store
 	dialogueRuns []store.DialogueRun
+}
+
+type dialogueBroadcaster struct {
+	room *dialogueRuntimeRoom
+}
+
+func (b dialogueBroadcaster) BroadcastMessage(model.Message) {}
+
+func (b dialogueBroadcaster) BroadcastEvent(event realtime.Event) {
+	b.room.events = append(b.room.events, event)
 }
 
 func (s *dialogueStore) AddMessage(_ context.Context, message model.Message) (model.Message, error) {

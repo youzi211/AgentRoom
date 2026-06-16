@@ -26,15 +26,16 @@ const (
 	maxKnowledgeChunks  = 6
 )
 
-var (
-	ErrKnowledgeInvalidScope = errors.New("invalid knowledge scope")
-	ErrKnowledgeInvalidFile  = errors.New("invalid knowledge file")
-	ErrKnowledgeTooLarge     = errors.New("knowledge file is too large")
-)
-
 type KnowledgeService struct {
-	store store.Store
+	store knowledgeStore
 	md    goldmark.Markdown
+}
+
+type knowledgeStore interface {
+	CreateKnowledgeDocument(ctx context.Context, document model.KnowledgeDocument, chunks []model.KnowledgeChunk) (model.KnowledgeDocument, error)
+	ListKnowledgeDocuments(ctx context.Context, query store.ListKnowledgeDocumentsQuery) ([]model.KnowledgeDocument, error)
+	DeleteKnowledgeDocument(ctx context.Context, documentID string) error
+	SearchKnowledgeChunks(ctx context.Context, query store.SearchKnowledgeChunksQuery) ([]model.KnowledgeChunk, error)
 }
 
 type UploadKnowledgeInput struct {
@@ -44,7 +45,7 @@ type UploadKnowledgeInput struct {
 	Content  []byte
 }
 
-func NewKnowledgeService(s store.Store) *KnowledgeService {
+func NewKnowledgeService(s knowledgeStore) *KnowledgeService {
 	return &KnowledgeService{
 		store: s,
 		md:    goldmark.New(),
@@ -119,7 +120,13 @@ func (s *KnowledgeService) DeleteDocument(ctx context.Context, documentID string
 	if trimmed == "" {
 		return ErrKnowledgeInvalidFile
 	}
-	return s.store.DeleteKnowledgeDocument(ctx, trimmed)
+	if err := s.store.DeleteKnowledgeDocument(ctx, trimmed); err != nil {
+		if errors.Is(err, store.ErrKnowledgeDocumentNotFound) {
+			return ErrKnowledgeDocumentNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *KnowledgeService) SearchForAgent(ctx context.Context, roomID string, agentID string, query string) ([]model.KnowledgeChunk, error) {

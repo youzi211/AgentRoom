@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"agentroom/backend/internal/model"
@@ -24,6 +23,7 @@ type Store interface {
 	// Room lifecycle
 	CreateRoom(ctx context.Context, input CreateRoomInput) (model.RoomMeta, []model.Agent, error)
 	GetRoom(ctx context.Context, roomID string) (model.RoomMeta, error)
+	LoadRoomSnapshot(ctx context.Context, roomID string, messageLimit int) (RoomSnapshot, error)
 	ListRoomAgents(ctx context.Context, roomID string) ([]model.Agent, error)
 	ListRooms(ctx context.Context, query ListRoomsQuery) ([]model.RoomSummary, error)
 	UpdateRoomLifecycle(ctx context.Context, input UpdateRoomLifecycleInput) error
@@ -108,7 +108,12 @@ type MessagePage struct {
 	NextBefore string
 }
 
-var ErrInvalidMessageCursor = errors.New("invalid message cursor")
+type RoomSnapshot struct {
+	Meta         model.RoomMeta
+	Agents       []model.Agent
+	Messages     []model.Message
+	Participants []model.Participant
+}
 
 type ListRunsQuery struct {
 	RoomID string

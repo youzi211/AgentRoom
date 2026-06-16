@@ -11,6 +11,8 @@ import (
 	"agentroom/backend/internal/llm"
 	"agentroom/backend/internal/logging"
 	"agentroom/backend/internal/model"
+	"agentroom/backend/internal/realtime"
+	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/store"
 )
 
@@ -23,24 +25,33 @@ type RuntimeRoom interface {
 	NewSystemMessage(content string) model.Message
 	NewAgentMessage(agent model.Agent, content string) model.Message
 	AppendMessage(message model.Message)
-	Broadcast(message model.Message)
-	BroadcastEvent(event model.ServerEvent)
+	Broadcaster() room.MessageBroadcaster
 }
 
 type Runner struct {
 	client       llm.Client
-	store        store.Store
+	store        runnerStore
 	knowledge    KnowledgeProvider
 	logger       *slog.Logger
 	contextLimit int
 	timeout      time.Duration
 }
 
+type runnerStore interface {
+	AddMessage(ctx context.Context, message model.Message) (model.Message, error)
+	CreateAgentRun(ctx context.Context, run store.AgentRun) error
+	FinishAgentRun(ctx context.Context, runID string, status string, errText string, completedAt time.Time) error
+	ListAgentRuns(ctx context.Context, query store.ListRunsQuery) ([]store.AgentRun, error)
+	CreateDialogueRun(ctx context.Context, run store.DialogueRun) error
+	FinishDialogueRun(ctx context.Context, runID string, status string, turnCount int, completedAt time.Time) error
+	ListDialogueRuns(ctx context.Context, query store.ListRunsQuery) ([]store.DialogueRun, error)
+}
+
 type KnowledgeProvider interface {
 	SearchForAgent(ctx context.Context, roomID string, agentID string, query string) ([]model.KnowledgeChunk, error)
 }
 
-func NewRunner(client llm.Client, s store.Store) *Runner {
+func NewRunner(client llm.Client, s runnerStore) *Runner {
 	return &Runner{
 		client:       client,
 		store:        s,
@@ -216,9 +227,9 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoo
 }
 
 func (r *Runner) broadcastAgentRunActivity(currentRoom RuntimeRoom, run store.AgentRun, responder model.Agent, phase string, status string, errText string, completedAt *time.Time) {
-	currentRoom.BroadcastEvent(model.ServerEvent{
-		Type: model.EventTypeAgentActivity,
-		Activity: &model.AgentActivityEvent{
+	currentRoom.Broadcaster().BroadcastEvent(realtime.Event{
+		Type: realtime.EventTypeAgentActivity,
+		Activity: &realtime.Activity{
 			Kind:             "agent_run",
 			Phase:            phase,
 			ID:               run.ID,
@@ -235,9 +246,9 @@ func (r *Runner) broadcastAgentRunActivity(currentRoom RuntimeRoom, run store.Ag
 }
 
 func (r *Runner) broadcastDialogueRunActivity(currentRoom RuntimeRoom, run store.DialogueRun, phase string, status string, turnCount int, completedAt *time.Time) {
-	currentRoom.BroadcastEvent(model.ServerEvent{
-		Type: model.EventTypeAgentActivity,
-		Activity: &model.AgentActivityEvent{
+	currentRoom.Broadcaster().BroadcastEvent(realtime.Event{
+		Type: realtime.EventTypeAgentActivity,
+		Activity: &realtime.Activity{
 			Kind:             "dialogue_run",
 			Phase:            phase,
 			ID:               run.ID,
@@ -258,7 +269,7 @@ func (r *Runner) persistAndBroadcast(ctx context.Context, currentRoom RuntimeRoo
 		savedMsg = message
 	}
 	currentRoom.AppendMessage(savedMsg)
-	currentRoom.Broadcast(savedMsg)
+	currentRoom.Broadcaster().BroadcastMessage(savedMsg)
 	return savedMsg
 }
 

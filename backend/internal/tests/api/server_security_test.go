@@ -303,7 +303,7 @@ func TestCreateRoomPersistsDialoguePolicy(t *testing.T) {
 }
 
 func TestMeetingMinutesCanBeGeneratedAsMarkdown(t *testing.T) {
-	server := newTestServer(t, api.Config{})
+	server, roomService := newTestServerWithRuntime(t, api.Config{})
 
 	createBody := bytes.NewBufferString(`{"name":"Planning"}`)
 	createRequest := httptest.NewRequest(http.MethodPost, "/api/rooms", createBody)
@@ -323,12 +323,12 @@ func TestMeetingMinutesCanBeGeneratedAsMarkdown(t *testing.T) {
 		t.Fatalf("decode create response: %v", err)
 	}
 
-	roomValue, ok := server.RoomsForTest().GetRoom(context.Background(), created.Room.ID)
+	roomValue, ok := roomService.GetRoom(context.Background(), created.Room.ID)
 	if !ok {
 		t.Fatal("created room not found")
 	}
 	participant := roomValue.NewParticipant("Alice")
-	if _, _, err := server.RoomsForTest().HandleHumanMessage(context.Background(), roomValue, participant, "We decided to launch v0.2 after auth is finished."); err != nil {
+	if _, _, err := roomService.HandleHumanMessage(context.Background(), roomValue, participant, "We decided to launch v0.2 after auth is finished."); err != nil {
 		t.Fatalf("add message: %v", err)
 	}
 
@@ -345,7 +345,7 @@ func TestMeetingMinutesCanBeGeneratedAsMarkdown(t *testing.T) {
 }
 
 func TestMeetingMinutesMarkdownCanBeDownloaded(t *testing.T) {
-	server := newTestServer(t, api.Config{})
+	server, roomService := newTestServerWithRuntime(t, api.Config{})
 
 	createBody := bytes.NewBufferString(`{"name":"Planning"}`)
 	createRequest := httptest.NewRequest(http.MethodPost, "/api/rooms", createBody)
@@ -365,12 +365,12 @@ func TestMeetingMinutesMarkdownCanBeDownloaded(t *testing.T) {
 		t.Fatalf("decode create response: %v", err)
 	}
 
-	roomValue, ok := server.RoomsForTest().GetRoom(context.Background(), created.Room.ID)
+	roomValue, ok := roomService.GetRoom(context.Background(), created.Room.ID)
 	if !ok {
 		t.Fatal("created room not found")
 	}
 	participant := roomValue.NewParticipant("Alice")
-	if _, _, err := server.RoomsForTest().HandleHumanMessage(context.Background(), roomValue, participant, "Please export these meeting notes."); err != nil {
+	if _, _, err := roomService.HandleHumanMessage(context.Background(), roomValue, participant, "Please export these meeting notes."); err != nil {
 		t.Fatalf("add message: %v", err)
 	}
 
@@ -402,6 +402,13 @@ func TestMeetingMinutesMarkdownCanBeDownloaded(t *testing.T) {
 func newTestServer(t *testing.T, config api.Config) *api.Server {
 	t.Helper()
 
+	server, _ := newTestServerWithRuntime(t, config)
+	return server
+}
+
+func newTestServerWithRuntime(t *testing.T, config api.Config) (*api.Server, *service.RoomService) {
+	t.Helper()
+
 	store := &teststore.Store{}
 	agents := agent.PredefinedAgents()
 	if err := store.SeedAgents(context.Background(), agents); err != nil {
@@ -415,7 +422,12 @@ func newTestServer(t *testing.T, config api.Config) *api.Server {
 	runner := agent.NewRunner(llmClient, store).WithKnowledge(knowledgeService)
 	focusService := service.NewFocusService(llmClient)
 	roomService := service.NewRoomService(manager, agentService, knowledgeService, runner, focusService, store)
-	return api.NewServerWithConfig(roomService, config)
+	server := api.NewServerWithConfig(api.Dependencies{
+		Queries:  roomService.Queries(),
+		Commands: roomService.Commands(),
+		Access:   roomService.Access(),
+	}, config)
+	return server, roomService
 }
 
 type stubLLM struct {

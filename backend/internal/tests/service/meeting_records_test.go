@@ -8,7 +8,6 @@ import (
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/service"
-	"agentroom/backend/internal/store"
 	"agentroom/backend/internal/tests/teststore"
 )
 
@@ -98,7 +97,7 @@ func TestListRoomsFiltersByStatus(t *testing.T) {
 	}
 	roomService := service.NewRoomService(nil, nil, nil, nil, nil, memStore)
 
-	all, err := roomService.ListRooms(context.Background(), store.ListRoomsQuery{})
+	all, err := roomService.ListRooms(context.Background(), service.ListRoomsInput{})
 	if err != nil {
 		t.Fatalf("list all rooms: %v", err)
 	}
@@ -106,7 +105,7 @@ func TestListRoomsFiltersByStatus(t *testing.T) {
 		t.Fatalf("expected 2 rooms, got %d", len(all))
 	}
 
-	archived, err := roomService.ListRooms(context.Background(), store.ListRoomsQuery{Status: model.RoomStatusArchived})
+	archived, err := roomService.ListRooms(context.Background(), service.ListRoomsInput{Status: model.RoomStatusArchived})
 	if err != nil {
 		t.Fatalf("list archived rooms: %v", err)
 	}

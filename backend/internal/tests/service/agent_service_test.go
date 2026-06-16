@@ -3,10 +3,12 @@ package service_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/service"
+	"agentroom/backend/internal/store"
 	"agentroom/backend/internal/tests/teststore"
 )
 
@@ -90,5 +92,37 @@ func TestAgentServiceBlankUpdatePreservesExistingRoleTemplate(t *testing.T) {
 	}
 	if updated.Description != "Finds regressions and release risk." {
 		t.Fatalf("expected non-prompt fields to update, got %#v", updated)
+	}
+}
+
+func TestAgentServiceFailedUpdateDoesNotMutateResolvedAgentState(t *testing.T) {
+	agents := []model.Agent{
+		{
+			ID:           "qa",
+			Name:         "QA",
+			Mention:      "@QA",
+			Role:         "QA Engineer",
+			Description:  "Finds risk.",
+			SystemPrompt: "Keep replies brief.",
+			Enabled:      true,
+		},
+	}
+	backingStore := &teststore.Store{
+		Agents:         append([]model.Agent(nil), agents...),
+		UpdateAgentErr: fmt.Errorf("update failed: %w", store.ErrAgentNotFound),
+	}
+	svc := service.NewAgentService(backingStore, agents)
+
+	_, err := svc.UpdateAgent(context.Background(), "qa", service.UpdateAgentInput{Name: "Reviewer"})
+	if !errors.Is(err, service.ErrAgentNotFound) {
+		t.Fatalf("expected ErrAgentNotFound, got %v", err)
+	}
+
+	resolved := svc.ResolveForRoom([]string{"qa"})
+	if len(resolved) != 1 {
+		t.Fatalf("expected original agent to remain resolvable, got %#v", resolved)
+	}
+	if resolved[0].Name != "QA" || resolved[0].Mention != "@QA" {
+		t.Fatalf("expected in-memory agent state to remain unchanged, got %#v", resolved[0])
 	}
 }

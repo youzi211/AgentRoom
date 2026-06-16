@@ -9,6 +9,8 @@ import (
 	"agentroom/backend/internal/model"
 )
 
+const maxRetainedRoomMessages = 500
+
 type Room struct {
 	mu                  sync.RWMutex
 	id                  string
@@ -26,7 +28,7 @@ type Room struct {
 	agents              map[string]*model.Agent
 	agentOrder          []string
 	messages            []model.Message
-	hub                 *Hub
+	events              RealtimeEvents
 }
 
 type LifecycleState struct {
@@ -59,7 +61,7 @@ func New(id string, name string, agents []model.Agent) *Room {
 		agents:         agentMap,
 		agentOrder:     agentOrder,
 		messages:       make([]model.Message, 0),
-		hub:            NewHub(),
+		events:         NewHub(),
 	}
 }
 
@@ -90,7 +92,7 @@ func NewFromState(meta model.RoomMeta, agents []model.Agent) *Room {
 		agents:              agentMap,
 		agentOrder:          agentOrder,
 		messages:            make([]model.Message, 0),
-		hub:                 NewHub(),
+		events:              NewHub(),
 	}
 }
 
@@ -113,6 +115,7 @@ func NewFromSnapshot(meta model.RoomMeta, agents []model.Agent, messages []model
 
 	msgCopy := make([]model.Message, len(messages))
 	copy(msgCopy, messages)
+	msgCopy = retainRecentMessages(msgCopy)
 
 	return &Room{
 		id:                  meta.ID,
@@ -130,12 +133,16 @@ func NewFromSnapshot(meta model.RoomMeta, agents []model.Agent, messages []model
 		agents:              agentMap,
 		agentOrder:          agentOrder,
 		messages:            msgCopy,
-		hub:                 NewHub(),
+		events:              NewHub(),
 	}
 }
 
-func (r *Room) Hub() *Hub {
-	return r.hub
+func (r *Room) Events() RealtimeEvents {
+	return r.events
+}
+
+func (r *Room) Broadcaster() MessageBroadcaster {
+	return r.events
 }
 
 func (r *Room) Info() model.RoomMeta {
@@ -201,11 +208,11 @@ func (r *Room) SetDialoguePolicy(policy model.DialoguePolicy) {
 	r.mu.Unlock()
 }
 
-func (r *Room) Snapshot() model.RoomState {
+func (r *Room) Snapshot() Snapshot {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return model.RoomState{
+	return Snapshot{
 		Room: model.RoomMeta{
 			ID:                  r.id,
 			Name:                r.name,
@@ -338,15 +345,8 @@ func (r *Room) ClearParticipants() []model.Participant {
 func (r *Room) AppendMessage(message model.Message) {
 	r.mu.Lock()
 	r.messages = append(r.messages, message)
+	r.messages = retainRecentMessages(r.messages)
 	r.mu.Unlock()
-}
-
-func (r *Room) Broadcast(message model.Message) {
-	r.Hub().Broadcast(model.ServerEvent{Type: model.EventTypeMessage, Message: &message})
-}
-
-func (r *Room) BroadcastEvent(event model.ServerEvent) {
-	r.Hub().Broadcast(event)
 }
 
 // NewHumanMessage creates a human message model without adding it to the room.
@@ -430,6 +430,16 @@ func cloneMessages(messages []model.Message) []model.Message {
 	items := make([]model.Message, len(messages))
 	copy(items, messages)
 	return items
+}
+
+func retainRecentMessages(messages []model.Message) []model.Message {
+	if len(messages) <= maxRetainedRoomMessages {
+		return messages
+	}
+	start := len(messages) - maxRetainedRoomMessages
+	retained := make([]model.Message, maxRetainedRoomMessages)
+	copy(retained, messages[start:])
+	return retained
 }
 
 func normalizeRoomStatus(status string) string {

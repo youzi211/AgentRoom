@@ -6,6 +6,7 @@ import (
 
 	"agentroom/backend/internal/agent"
 	"agentroom/backend/internal/model"
+	"agentroom/backend/internal/realtime"
 	"agentroom/backend/internal/tests/teststore"
 )
 
@@ -74,10 +75,10 @@ func TestDialogueActivityEventsWrapGuidedDialogueRun(t *testing.T) {
 	}
 }
 
-func activityEvents(events []model.ServerEvent, kind string, phase string) []model.ServerEvent {
-	result := make([]model.ServerEvent, 0)
+func activityEvents(events []realtime.Event, kind string, phase string) []realtime.Event {
+	result := make([]realtime.Event, 0)
 	for _, event := range events {
-		if event.Type != model.EventTypeAgentActivity || event.Activity == nil {
+		if event.Type != realtime.EventTypeAgentActivity || event.Activity == nil {
 			continue
 		}
 		if event.Activity.Kind == kind && event.Activity.Phase == phase {

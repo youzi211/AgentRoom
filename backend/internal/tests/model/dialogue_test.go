@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"agentroom/backend/internal/api/contracts"
 	"agentroom/backend/internal/model"
 )
 
@@ -11,7 +12,7 @@ import (
 // agent-to-agent handoff default. This is the regression guard for rooms where
 // agents could not reply to each other's @mentions.
 func TestDialoguePolicyInputResolveKeepsAgentHandoffByDefault(t *testing.T) {
-	var input model.DialoguePolicyInput
+	var input contracts.DialoguePolicyInput
 	if err := json.Unmarshal([]byte(`{"mode":"guided_dialogue"}`), &input); err != nil {
 		t.Fatalf("unmarshal partial policy: %v", err)
 	}
@@ -32,7 +33,7 @@ func TestDialoguePolicyInputResolveKeepsAgentHandoffByDefault(t *testing.T) {
 // An explicit false must still be honored — the pointer DTO distinguishes it
 // from an omitted field.
 func TestDialoguePolicyInputResolveHonorsExplicitFalse(t *testing.T) {
-	var input model.DialoguePolicyInput
+	var input contracts.DialoguePolicyInput
 	if err := json.Unmarshal([]byte(`{"mode":"guided_dialogue","allowAgentToAgentMentions":false}`), &input); err != nil {
 		t.Fatalf("unmarshal policy: %v", err)
 	}
@@ -44,7 +45,7 @@ func TestDialoguePolicyInputResolveHonorsExplicitFalse(t *testing.T) {
 
 // A nil input (no dialoguePolicy in the request) resolves to the full defaults.
 func TestDialoguePolicyInputResolveNilUsesDefaults(t *testing.T) {
-	var input *model.DialoguePolicyInput
+	var input *contracts.DialoguePolicyInput
 
 	if input.Resolve() != model.DefaultDialoguePolicy() {
 		t.Fatal("expected nil input to resolve to default dialogue policy")

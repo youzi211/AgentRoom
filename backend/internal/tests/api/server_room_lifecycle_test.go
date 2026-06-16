@@ -15,9 +15,9 @@ import (
 )
 
 func TestRoomLifecycleClosedRoomReadOnlyAccessAndMinutesRules(t *testing.T) {
-	server, backingStore := newActivityTestServer(t, api.Config{AdminAPIKey: "secret"})
+	server, roomService, backingStore := newActivityTestServer(t, api.Config{AdminAPIKey: "secret"})
 	roomID := createRoomForTest(t, server, "Closed room")
-	currentRoom, ok := server.RoomsForTest().GetRoom(context.Background(), roomID)
+	currentRoom, ok := roomService.GetRoom(context.Background(), roomID)
 	if !ok {
 		t.Fatal("expected room to exist")
 	}
@@ -148,7 +148,7 @@ func TestRoomLifecycleArchivedRoomReadDeniedAndRestoreReturnsClosed(t *testing.T
 }
 
 func TestRoomMessagesPaginationAndInvalidCursor(t *testing.T) {
-	server, backingStore := newActivityTestServer(t, api.Config{})
+	server, _, backingStore := newActivityTestServer(t, api.Config{})
 	roomID := createRoomForTest(t, server, "Paginated room")
 	otherRoomID := createRoomForTest(t, server, "Other room")
 
@@ -238,9 +238,9 @@ func TestRoomMessagesPaginationAndInvalidCursor(t *testing.T) {
 }
 
 func TestRoomLifecycleReopenOnlyWorksForClosedRooms(t *testing.T) {
-	server, backingStore := newActivityTestServer(t, api.Config{AdminAPIKey: "secret"})
+	server, roomService, backingStore := newActivityTestServer(t, api.Config{AdminAPIKey: "secret"})
 	roomID := createRoomForTest(t, server, "Needs reopen")
-	currentRoom, ok := server.RoomsForTest().GetRoom(context.Background(), roomID)
+	currentRoom, ok := roomService.GetRoom(context.Background(), roomID)
 	if !ok {
 		t.Fatal("expected room to exist")
 	}
@@ -278,9 +278,9 @@ func TestRoomLifecycleReopenOnlyWorksForClosedRooms(t *testing.T) {
 }
 
 func TestClosedRoomMinutesWriteForAdminSupportsManualSave(t *testing.T) {
-	server, backingStore := newActivityTestServer(t, api.Config{AdminAPIKey: "secret"})
+	server, roomService, backingStore := newActivityTestServer(t, api.Config{AdminAPIKey: "secret"})
 	roomID := createRoomForTest(t, server, "Closed save")
-	currentRoom, ok := server.RoomsForTest().GetRoom(context.Background(), roomID)
+	currentRoom, ok := roomService.GetRoom(context.Background(), roomID)
 	if !ok {
 		t.Fatal("expected room to exist")
 	}

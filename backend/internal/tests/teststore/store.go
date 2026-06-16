@@ -21,6 +21,12 @@ type Store struct {
 	Documents          []model.KnowledgeDocument
 	Chunks             []model.KnowledgeChunk
 	Minutes            []model.MeetingMinutes
+	UpdateAgentErr     error
+	DeleteAgentErr     error
+	ListRoomAgentsErr  error
+	ListMessagesErr    error
+	ListParticipantsErr error
+	DeleteDocumentErr  error
 }
 
 func (s *Store) Ping(context.Context) error { return nil }
@@ -41,22 +47,33 @@ func (s *Store) CreateAgent(_ context.Context, agent model.Agent) (model.Agent, 
 }
 
 func (s *Store) UpdateAgent(_ context.Context, agent model.Agent) (model.Agent, error) {
+	if s.UpdateAgentErr != nil {
+		return model.Agent{}, s.UpdateAgentErr
+	}
 	for i := range s.Agents {
 		if s.Agents[i].ID == agent.ID {
 			s.Agents[i] = agent
 			return agent, nil
 		}
 	}
-	s.Agents = append(s.Agents, agent)
-	return agent, nil
+	return model.Agent{}, fmt.Errorf("%w: %s", store.ErrAgentNotFound, agent.ID)
 }
 
 func (s *Store) DeleteAgent(_ context.Context, agentID string) error {
+	if s.DeleteAgentErr != nil {
+		return s.DeleteAgentErr
+	}
 	next := make([]model.Agent, 0, len(s.Agents))
+	found := false
 	for _, agent := range s.Agents {
 		if agent.ID != agentID {
 			next = append(next, agent)
+			continue
 		}
+		found = true
+	}
+	if !found {
+		return fmt.Errorf("%w: %s", store.ErrAgentNotFound, agentID)
 	}
 	s.Agents = next
 	return nil
@@ -82,13 +99,50 @@ func (s *Store) GetRoom(_ context.Context, roomID string) (model.RoomMeta, error
 	s.ensureMaps()
 	meta, ok := s.Rooms[roomID]
 	if !ok {
-		return model.RoomMeta{}, fmt.Errorf("room %s not found", roomID)
+		return model.RoomMeta{}, fmt.Errorf("%w: %s", store.ErrRoomNotFound, roomID)
 	}
 	return meta, nil
 }
 
+func (s *Store) LoadRoomSnapshot(_ context.Context, roomID string, messageLimit int) (store.RoomSnapshot, error) {
+	s.ensureMaps()
+	meta, ok := s.Rooms[roomID]
+	if !ok {
+		return store.RoomSnapshot{}, fmt.Errorf("%w: %s", store.ErrRoomNotFound, roomID)
+	}
+	if s.ListRoomAgentsErr != nil {
+		return store.RoomSnapshot{}, s.ListRoomAgentsErr
+	}
+	if s.ListMessagesErr != nil {
+		return store.RoomSnapshot{}, s.ListMessagesErr
+	}
+	if s.ListParticipantsErr != nil {
+		return store.RoomSnapshot{}, s.ListParticipantsErr
+	}
+
+	messages, err := s.listMessages(store.ListMessagesQuery{
+		RoomID: roomID,
+		Limit:  messageLimit,
+	}, false)
+	if err != nil {
+		return store.RoomSnapshot{}, err
+	}
+	participants := append([]model.Participant(nil), s.ActiveParticipants[roomID]...)
+	sortParticipants(participants)
+
+	return store.RoomSnapshot{
+		Meta:         meta,
+		Agents:       append([]model.Agent(nil), s.RoomAgents[roomID]...),
+		Messages:     messages,
+		Participants: participants,
+	}, nil
+}
+
 func (s *Store) ListRoomAgents(_ context.Context, roomID string) ([]model.Agent, error) {
 	s.ensureMaps()
+	if s.ListRoomAgentsErr != nil {
+		return nil, s.ListRoomAgentsErr
+	}
 	return append([]model.Agent(nil), s.RoomAgents[roomID]...), nil
 }
 
@@ -135,7 +189,7 @@ func (s *Store) UpdateRoomLifecycle(_ context.Context, input store.UpdateRoomLif
 	s.ensureMaps()
 	meta, ok := s.Rooms[input.RoomID]
 	if !ok {
-		return fmt.Errorf("room %s not found", input.RoomID)
+		return fmt.Errorf("%w: %s", store.ErrRoomNotFound, input.RoomID)
 	}
 	meta.Status = normalizeRoomStatus(input.Status)
 	meta.OwnerParticipantID = input.OwnerParticipantID
@@ -209,11 +263,14 @@ func (s *Store) MarkParticipantLeft(_ context.Context, participantID string, _ t
 			return nil
 		}
 	}
-	return fmt.Errorf("participant %s not found or already left", participantID)
+	return fmt.Errorf("%w: %s", store.ErrParticipantNotFound, participantID)
 }
 
 func (s *Store) ListActiveParticipants(_ context.Context, roomID string) ([]model.Participant, error) {
 	s.ensureMaps()
+	if s.ListParticipantsErr != nil {
+		return nil, s.ListParticipantsErr
+	}
 	participants := append([]model.Participant(nil), s.ActiveParticipants[roomID]...)
 	sortParticipants(participants)
 	return participants, nil
@@ -234,11 +291,17 @@ func (s *Store) AddMessage(_ context.Context, message model.Message) (model.Mess
 
 func (s *Store) ListMessages(_ context.Context, query store.ListMessagesQuery) ([]model.Message, error) {
 	s.ensureMaps()
+	if s.ListMessagesErr != nil {
+		return nil, s.ListMessagesErr
+	}
 	return s.listMessages(query, false)
 }
 
 func (s *Store) ListMessagesPage(_ context.Context, query store.ListMessagesQuery) (store.MessagePage, error) {
 	s.ensureMaps()
+	if s.ListMessagesErr != nil {
+		return store.MessagePage{}, s.ListMessagesErr
+	}
 	messages, err := s.listMessages(query, true)
 	if err != nil {
 		return store.MessagePage{}, err
@@ -336,11 +399,20 @@ func (s *Store) ListKnowledgeDocuments(_ context.Context, query store.ListKnowle
 }
 
 func (s *Store) DeleteKnowledgeDocument(_ context.Context, documentID string) error {
+	if s.DeleteDocumentErr != nil {
+		return s.DeleteDocumentErr
+	}
 	nextDocuments := make([]model.KnowledgeDocument, 0, len(s.Documents))
+	found := false
 	for _, document := range s.Documents {
 		if document.ID != documentID {
 			nextDocuments = append(nextDocuments, document)
+			continue
 		}
+		found = true
+	}
+	if !found {
+		return fmt.Errorf("%w: %s", store.ErrKnowledgeDocumentNotFound, documentID)
 	}
 	nextChunks := make([]model.KnowledgeChunk, 0, len(s.Chunks))
 	for _, chunk := range s.Chunks {

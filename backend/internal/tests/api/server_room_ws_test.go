@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"agentroom/backend/internal/api"
+	"agentroom/backend/internal/api/contracts"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/room"
 
@@ -19,15 +20,15 @@ import (
 )
 
 func TestRoomWebSocketOwnerTransferAndCloseLifecycle(t *testing.T) {
-	server, backingStore := newActivityTestServer(t, api.Config{})
+	server, roomService, backingStore := newActivityTestServer(t, api.Config{})
 	roomID := createRoomForTest(t, server, "WebSocket room")
 	httpServer := httptest.NewServer(server.Routes())
 	defer httpServer.Close()
 
 	alice := dialRoomSocket(t, httpServer.URL, roomID, "Alice")
 	defer alice.Close()
-	aliceSnapshot := waitForServerEvent(t, alice, 2*time.Second, func(event model.ServerEvent) bool {
-		return event.Type == model.EventTypeRoomSnapshot && event.ParticipantID != ""
+	aliceSnapshot := waitForServerEvent(t, alice, 2*time.Second, func(event contracts.ServerEvent) bool {
+		return event.Type == contracts.EventTypeRoomSnapshot && event.ParticipantID != ""
 	})
 	aliceID := aliceSnapshot.ParticipantID
 	if aliceSnapshot.Room == nil || aliceSnapshot.Room.OwnerParticipantID != aliceID {
@@ -36,51 +37,51 @@ func TestRoomWebSocketOwnerTransferAndCloseLifecycle(t *testing.T) {
 
 	bob := dialRoomSocket(t, httpServer.URL, roomID, "Bob")
 	defer bob.Close()
-	bobSnapshot := waitForServerEvent(t, bob, 2*time.Second, func(event model.ServerEvent) bool {
-		return event.Type == model.EventTypeRoomSnapshot && event.ParticipantID != ""
+	bobSnapshot := waitForServerEvent(t, bob, 2*time.Second, func(event contracts.ServerEvent) bool {
+		return event.Type == contracts.EventTypeRoomSnapshot && event.ParticipantID != ""
 	})
 	bobID := bobSnapshot.ParticipantID
 	if bobSnapshot.Room == nil || bobSnapshot.Room.OwnerParticipantID != aliceID || len(bobSnapshot.Participants) != 2 {
 		t.Fatalf("expected second participant snapshot to preserve Alice as owner, got %#v", bobSnapshot)
 	}
 
-	waitForServerEvent(t, alice, 2*time.Second, func(event model.ServerEvent) bool {
-		return event.Type == model.EventTypeRoomSnapshot && event.Room != nil && event.Room.OwnerParticipantID == aliceID && len(event.Participants) == 2
+	waitForServerEvent(t, alice, 2*time.Second, func(event contracts.ServerEvent) bool {
+		return event.Type == contracts.EventTypeRoomSnapshot && event.Room != nil && event.Room.OwnerParticipantID == aliceID && len(event.Participants) == 2
 	})
 
-	if err := alice.WriteJSON(model.ClientEvent{Type: "transfer_owner", ParticipantID: bobID}); err != nil {
+	if err := alice.WriteJSON(contracts.ClientEvent{Type: "transfer_owner", ParticipantID: bobID}); err != nil {
 		t.Fatalf("transfer owner request: %v", err)
 	}
 
-	aliceOwnerSnapshot := waitForServerEvent(t, alice, 2*time.Second, func(event model.ServerEvent) bool {
-		return event.Type == model.EventTypeRoomSnapshot && event.Room != nil && event.Room.OwnerParticipantID == bobID
+	aliceOwnerSnapshot := waitForServerEvent(t, alice, 2*time.Second, func(event contracts.ServerEvent) bool {
+		return event.Type == contracts.EventTypeRoomSnapshot && event.Room != nil && event.Room.OwnerParticipantID == bobID
 	})
 	if aliceOwnerSnapshot.Room.Status != model.RoomStatusActive {
 		t.Fatalf("expected room to stay active during owner transfer, got %#v", aliceOwnerSnapshot.Room)
 	}
-	waitForServerEvent(t, bob, 2*time.Second, func(event model.ServerEvent) bool {
-		return event.Type == model.EventTypeRoomSnapshot && event.Room != nil && event.Room.OwnerParticipantID == bobID
+	waitForServerEvent(t, bob, 2*time.Second, func(event contracts.ServerEvent) bool {
+		return event.Type == contracts.EventTypeRoomSnapshot && event.Room != nil && event.Room.OwnerParticipantID == bobID
 	})
 
-	if err := alice.WriteJSON(model.ClientEvent{Type: "close_room"}); err != nil {
+	if err := alice.WriteJSON(contracts.ClientEvent{Type: "close_room"}); err != nil {
 		t.Fatalf("non-owner close request: %v", err)
 	}
-	ownerError := waitForServerEvent(t, alice, 2*time.Second, func(event model.ServerEvent) bool {
-		return event.Type == model.EventTypeError
+	ownerError := waitForServerEvent(t, alice, 2*time.Second, func(event contracts.ServerEvent) bool {
+		return event.Type == contracts.EventTypeError
 	})
 	if !strings.Contains(ownerError.Error, "only the current meeting owner") {
 		t.Fatalf("expected non-owner close to fail with owner error, got %#v", ownerError)
 	}
 
-	if err := bob.WriteJSON(model.ClientEvent{Type: "close_room"}); err != nil {
+	if err := bob.WriteJSON(contracts.ClientEvent{Type: "close_room"}); err != nil {
 		t.Fatalf("owner close request: %v", err)
 	}
 
-	closedForAlice := waitForServerEvent(t, alice, 2*time.Second, func(event model.ServerEvent) bool {
-		return event.Type == model.EventTypeRoomClosed
+	closedForAlice := waitForServerEvent(t, alice, 2*time.Second, func(event contracts.ServerEvent) bool {
+		return event.Type == contracts.EventTypeRoomClosed
 	})
-	closedForBob := waitForServerEvent(t, bob, 2*time.Second, func(event model.ServerEvent) bool {
-		return event.Type == model.EventTypeRoomClosed
+	closedForBob := waitForServerEvent(t, bob, 2*time.Second, func(event contracts.ServerEvent) bool {
+		return event.Type == contracts.EventTypeRoomClosed
 	})
 	if closedForAlice.Room == nil || closedForAlice.Room.Status != model.RoomStatusClosed {
 		t.Fatalf("expected room_closed payload for Alice, got %#v", closedForAlice)
@@ -92,7 +93,7 @@ func TestRoomWebSocketOwnerTransferAndCloseLifecycle(t *testing.T) {
 	waitForSocketClosure(t, alice, 2*time.Second)
 	waitForSocketClosure(t, bob, 2*time.Second)
 
-	currentRoom, ok := server.RoomsForTest().GetRoom(context.Background(), roomID)
+	currentRoom, ok := roomService.GetRoom(context.Background(), roomID)
 	if !ok {
 		t.Fatal("expected room to still resolve after close")
 	}
@@ -105,9 +106,9 @@ func TestRoomWebSocketOwnerTransferAndCloseLifecycle(t *testing.T) {
 }
 
 func TestRoomWebSocketRejectsClosedRoomJoin(t *testing.T) {
-	server, backingStore := newActivityTestServer(t, api.Config{})
+	server, roomService, backingStore := newActivityTestServer(t, api.Config{})
 	roomID := createRoomForTest(t, server, "Closed socket room")
-	currentRoom, ok := server.RoomsForTest().GetRoom(context.Background(), roomID)
+	currentRoom, ok := roomService.GetRoom(context.Background(), roomID)
 	if !ok {
 		t.Fatal("expected room to exist")
 	}
@@ -147,8 +148,8 @@ func TestRoomWebSocketArchiveBroadcastsAndDisconnectsLiveClients(t *testing.T) {
 
 	alice := dialRoomSocket(t, httpServer.URL, roomID, "Alice")
 	defer alice.Close()
-	waitForServerEvent(t, alice, 2*time.Second, func(event model.ServerEvent) bool {
-		return event.Type == model.EventTypeRoomSnapshot && event.ParticipantID != ""
+	waitForServerEvent(t, alice, 2*time.Second, func(event contracts.ServerEvent) bool {
+		return event.Type == contracts.EventTypeRoomSnapshot && event.ParticipantID != ""
 	})
 
 	request, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/rooms/%s/archive", httpServer.URL, roomID), nil)
@@ -165,8 +166,8 @@ func TestRoomWebSocketArchiveBroadcastsAndDisconnectsLiveClients(t *testing.T) {
 		t.Fatalf("expected archive request to succeed, got %d", response.StatusCode)
 	}
 
-	archivedEvent := waitForServerEvent(t, alice, 2*time.Second, func(event model.ServerEvent) bool {
-		return event.Type == model.EventTypeRoomArchived
+	archivedEvent := waitForServerEvent(t, alice, 2*time.Second, func(event contracts.ServerEvent) bool {
+		return event.Type == contracts.EventTypeRoomArchived
 	})
 	if archivedEvent.Room == nil || archivedEvent.Room.Status != model.RoomStatusArchived {
 		t.Fatalf("expected room_archived payload, got %#v", archivedEvent)
@@ -207,7 +208,7 @@ func roomSocketURL(t *testing.T, baseURL string, roomID string, participantName 
 	return parsed.String()
 }
 
-func waitForServerEvent(t *testing.T, connection *websocket.Conn, timeout time.Duration, match func(model.ServerEvent) bool) model.ServerEvent {
+func waitForServerEvent(t *testing.T, connection *websocket.Conn, timeout time.Duration, match func(contracts.ServerEvent) bool) contracts.ServerEvent {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -216,7 +217,7 @@ func waitForServerEvent(t *testing.T, connection *websocket.Conn, timeout time.D
 			t.Fatalf("set read deadline: %v", err)
 		}
 
-		var event model.ServerEvent
+		var event contracts.ServerEvent
 		if err := connection.ReadJSON(&event); err != nil {
 			t.Fatalf("read websocket event: %v", err)
 		}
@@ -232,7 +233,7 @@ func waitForSocketClosure(t *testing.T, connection *websocket.Conn, timeout time
 	if err := connection.SetReadDeadline(time.Now().Add(timeout)); err != nil {
 		t.Fatalf("set close read deadline: %v", err)
 	}
-	var event model.ServerEvent
+	var event contracts.ServerEvent
 	err := connection.ReadJSON(&event)
 	if err == nil {
 		payload, marshalErr := json.Marshal(event)
