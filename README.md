@@ -1,36 +1,69 @@
-# AgentRoom v0.2 Deployment Preview
+# AgentRoom
 
-AgentRoom is a real-time AI meeting workspace. Humans create a room, invite role-based agents with explicit `@mentions`, attach Markdown knowledge, track meeting focus, and preserve the meeting history in MySQL.
+> A real-time meeting workspace where humans and role-based Agents collaborate through text.
 
-This repository contains:
+AgentRoom turns a chat room into a structured meeting surface. You can create a room, invite role-based Agents, upload Markdown knowledge, direct the conversation with explicit `@mentions`, and keep a permanent record of messages, focus items, and meeting minutes.
 
-- `backend/`: Go HTTP/WebSocket service, MySQL persistence, agent orchestration, knowledge upload, focus extraction, and OpenAI-compatible LLM calls.
-- `frontend/`: React + Vite client for room entry, live chat, focus timeline, knowledge panels, and agent administration.
+It is built for teams that want a practical bridge between live discussion and AI assistance instead of a one-shot chatbot window.
 
-The v0.2 target is an online-ready internal deployment: persistent MySQL storage, container startup, explicit admin protection, WebSocket origin restrictions, optional room passcodes, and meeting minutes export. This README documents the deployment path and calls out the runtime knobs that are already present in the current backend.
+## Preview
 
-## Current Status
+![AgentRoom landing page](./docs/assets/readme/landing.png)
 
-Implemented in the current tree:
+| Admin Console | Meeting Detail |
+| --- | --- |
+| ![Meeting management console](./docs/assets/readme/meeting-admin.png) | ![Meeting detail with full message history](./docs/assets/readme/meeting-detail.png) |
 
-- MySQL-backed agents, rooms, participants, messages, agent runs, and Markdown knowledge metadata/chunks.
+![Versioned meeting minutes](./docs/assets/readme/minutes-history.png)
+
+## Why AgentRoom
+
+- **Live multi-agent meetings**: create rooms, choose the right participants, and explicitly trigger Agents with `@mentions`.
+- **Knowledge-aware responses**: attach Markdown knowledge to a room or to a specific Agent before the meeting starts.
+- **Two dialogue policies**: use `mention_fanout` for direct replies or `guided_dialogue` for bounded multi-turn collaboration.
+- **Persistent records**: store rooms, participants, messages, dialogue runs, agent runs, and knowledge metadata in MySQL.
+- **Focus and activity tracking**: surface extracted focus items and recent agent activity next to the live discussion.
+- **Versioned minutes**: generate AI minutes, edit them, save new versions, and export Markdown.
+- **Admin visibility**: browse all meetings, inspect every message sent during a meeting, and manage room lifecycle transitions from the admin console.
+
+## Meeting Lifecycle
+
+AgentRoom now separates live closure from archival. A meeting is no longer reduced to only "ongoing" and "archived".
+
+| State | Controlled By | Ordinary Participant Access |
+| --- | --- | --- |
+| `active` | Current live human owner and admins | Can join WebSocket, speak, transfer owner, and close the meeting |
+| `closed` | Admins can reopen; the live owner or last-human-left logic can end the live session | Can open the room link in read-only mode, view message history and minutes, but cannot join WebSocket, speak, or restore the meeting |
+| `archived` | Admins only | Ordinary users cannot access it; admins can inspect it and restore it back to `closed` |
+
+The current live human owner can close a meeting or transfer ownership to another online human. When the last human leaves, the backend starts a 30-second grace window and then closes the meeting by default. Closed meetings stay readable through the shared room link, while archived meetings remain admin-only.
+
+## Implemented Today
+
+The current repository already includes:
+
+- MySQL-backed persistence for agents, rooms, participants, messages, agent runs, and Markdown knowledge metadata/chunks.
 - Automatic schema migration when `DB_AUTO_MIGRATE=true`.
 - OpenAI-compatible agent responses through `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`.
-- Room and agent Markdown knowledge upload APIs.
+- Room-level and agent-level Markdown knowledge upload APIs.
 - WebSocket live room updates under `/api/rooms/:roomID/ws`.
-- Agent activity history under `/api/rooms/:roomID/activity` plus live `agent_activity` WebSocket events.
-- Admin key protection for agent and knowledge write APIs when `ADMIN_API_KEY` is configured.
-- WebSocket origin allowlist through `ALLOWED_ORIGINS`.
+- Owner transfer and live room close events over WebSocket.
+- Agent activity history under `/api/rooms/:roomID/activity` plus live `agent_activity` events.
 - Optional room passcodes for room metadata, message history, minutes, and WebSocket join.
+- Three lifecycle states: `active`, `closed`, and `archived`.
+- Read-only access for ordinary participants after a room is closed.
+- Admin console support for room listing, room detail, full message history, archive, reopen, restore, and Agent configuration.
 - Meeting minutes generation, persistence with versioning, admin editing, and Markdown export.
-- Admin console (gated by `ADMIN_API_KEY`) with meeting/room management (list, detail, archive, reopen, restore) and Agent configuration.
 - Health endpoint with database status at `/api/health`.
 
-Recommended for deployment:
+## Tech Stack
 
-- Keep `ADMIN_API_KEY` and `ALLOWED_ORIGINS` set in non-local environments.
-- The admin console at `/admin` prompts for the admin key and stores it in the browser's `localStorage` (sent as `X-Admin-Key`). `VITE_ADMIN_API_KEY` remains an optional build-time fallback for internal deployments.
-- Treat the admin key as an internal deployment convenience, not a substitute for a real user auth system.
+- **Backend**: Go HTTP/WebSocket service under `backend/`
+- **Frontend**: React + Vite app under `frontend/`
+- **Database**: MySQL 8
+- **Realtime transport**: WebSocket room sessions
+- **LLM integration**: OpenAI-compatible chat completion endpoint via `LLM_*`
+- **Ops**: Docker Compose for local containerized startup
 
 ## Prerequisites
 
@@ -144,15 +177,17 @@ Compose-only database bootstrap variables:
 | `MYSQL_ROOT_PASSWORD` | MySQL root password. |
 | `VITE_ADMIN_API_KEY` | Frontend build-time admin key used by the internal management UI. |
 
-## v0.2 Security And Product Checks
+## Deployment Notes
 
 Before exposing AgentRoom outside a trusted internal network, verify these items against the running build:
 
-- Admin API writes require the configured `X-Admin-Key`: creating/updating/deleting agents and uploading/deleting knowledge should not be anonymous.
+- Admin API writes require the configured `X-Admin-Key`: creating, updating, or deleting agents and uploading or deleting knowledge should not be anonymous.
 - WebSocket origin checks allow only the configured production frontend origins.
-- Rooms that are created with a passcode require that passcode for metadata, history, meeting minutes, and WebSocket join paths (a valid admin key bypasses the passcode for admin operations).
-- Meetings persist three lifecycle states: `active`, `closed`, and `archived`. The live room owner can close an active meeting, and admins can archive or reopen rooms from the management UI.
-- Closed rooms stay readable through the shared room link so participants can view history and minutes without rejoining live chat. Archived rooms stay admin-only.
+- Rooms created with a passcode require that passcode for metadata, history, meeting minutes, and WebSocket join paths. A valid admin key bypasses the passcode for admin operations.
+- Meetings persist three lifecycle states: `active`, `closed`, and `archived`.
+- The live room owner can close an active meeting or transfer ownership, while admins can archive, reopen, or restore rooms from the management UI.
+- Closed rooms stay readable through the shared room link so participants can review history and minutes without rejoining live chat.
+- Archived rooms stay admin-only.
 - Meeting minutes can be generated from persisted room messages, are stored as versioned records, can be edited by an admin in any room state, and exported as Markdown.
 - The admin console can list rooms, inspect full message history, archive a room, reopen a closed room, and restore an archived room back to `closed`.
 - `/api/health` reports `"database": {"ok": true}`.
@@ -162,7 +197,7 @@ Before exposing AgentRoom outside a trusted internal network, verify these items
 Primary API routes are under `/api`:
 
 - `GET /api/health`
-- `GET /api/admin/verify` (admin) — validates `X-Admin-Key`, used by the admin console gate
+- `GET /api/admin/verify` (admin) - validates `X-Admin-Key`, used by the admin console gate
 - `GET /api/agents`
 - `POST /api/agents`
 - `PUT /api/agents/:agentID`
@@ -170,23 +205,25 @@ Primary API routes are under `/api`:
 - `GET /api/agents/:agentID/knowledge`
 - `POST /api/agents/:agentID/knowledge`
 - `POST /api/rooms`
-- `GET /api/rooms` (admin) — list rooms for the admin console (`?status=active|closed|archived|all`, `?limit`, `?offset`)
+- `GET /api/rooms` (admin) - list rooms for the admin console (`?status=active|closed|archived|all`, `?limit`, `?offset`)
 - `GET /api/rooms/:roomID`
-- `POST /api/rooms/:roomID/archive` (admin) — archive a room (becomes read-only)
-- `POST /api/rooms/:roomID/reopen` (admin) — reopen a closed room back to `active`
-- `POST /api/rooms/:roomID/restore` (admin) — restore an archived room back to `closed`
-- `GET /api/rooms/:roomID/messages` — paginated history (`{ messages, hasMore, nextBefore }`, with `?limit` and `?before`)
+- `POST /api/rooms/:roomID/archive` (admin) - archive a room
+- `POST /api/rooms/:roomID/reopen` (admin) - reopen a closed room back to `active`
+- `POST /api/rooms/:roomID/restore` (admin) - restore an archived room back to `closed`
+- `GET /api/rooms/:roomID/messages` - paginated history (`{ messages, hasMore, nextBefore }`, with `?limit` and `?before`)
 - `GET /api/rooms/:roomID/activity`
-- `POST /api/rooms/:roomID/minutes` — generate and persist a new AI minutes version (`active` only for ordinary users; admins can use it in any state)
-- `PUT /api/rooms/:roomID/minutes` (admin) — save an edited minutes body as a new manual version
-- `GET /api/rooms/:roomID/minutes/history` (admin) — list persisted minutes versions
-- `GET /api/rooms/:roomID/minutes.md` — pure read download of the latest persisted minutes as Markdown (`404` when none exists)
+- `POST /api/rooms/:roomID/minutes` - generate and persist a new AI minutes version (`active` only for ordinary users; admins can use it in any state)
+- `PUT /api/rooms/:roomID/minutes` (admin) - save an edited minutes body as a new manual version
+- `GET /api/rooms/:roomID/minutes/history` (admin) - list persisted minutes versions
+- `GET /api/rooms/:roomID/minutes.md` - pure read download of the latest persisted minutes as Markdown (`404` when none exists)
 - `GET /api/rooms/:roomID/knowledge`
 - `POST /api/rooms/:roomID/knowledge`
 - `DELETE /api/knowledge/:documentID`
 - `GET /api/rooms/:roomID/ws?name=Alice`
 
-Routes marked **(admin)** require the `X-Admin-Key` header when `ADMIN_API_KEY` is configured. A valid admin key also bypasses a room's passcode for room reads, history, and minutes-management routes, so an operator can manage any room without knowing each passcode. Closed rooms allow ordinary read access to room metadata, messages, and `minutes.md`, but reject WebSocket joins, human messages, owner transfer, and reopen attempts. Archived rooms reject ordinary access and stop all live participation.
+Routes marked **(admin)** require the `X-Admin-Key` header when `ADMIN_API_KEY` is configured. A valid admin key also bypasses a room's passcode for room reads, history, and minutes-management routes, so an operator can manage any room without knowing each passcode.
+
+Closed rooms allow ordinary `GET /api/rooms/:roomID`, `GET /messages`, and `GET /minutes.md`, but reject WebSocket joins, human messages, owner transfer, and ordinary reopen attempts. Archived rooms reject ordinary access entirely and remain available only through admin-gated endpoints.
 
 Legacy non-`/api` backend routes are still registered for compatibility. New frontend and deployment traffic should use `/api/*`.
 
