@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  buildMentionTargets,
+  filterMentionTargets,
+  findMentionQuery,
+  replaceMentionQuery,
+} from './messageComposerModel'
 
-function MessageComposer({ agents = [], disabled, onInsertMentionRef, onSend }) {
+function MessageComposer({ agents = [], participants = [], currentParticipantName = '', disabled, onInsertMentionRef, onSend }) {
   const [content, setContent] = useState('')
   const [showAutocomplete, setShowAutocomplete] = useState(false)
   const [autocompleteFilter, setAutocompleteFilter] = useState('')
@@ -8,11 +14,13 @@ function MessageComposer({ agents = [], disabled, onInsertMentionRef, onSend }) 
   const [cursorPosition, setCursorPosition] = useState(0)
   const textareaRef = useRef(null)
   const autocompleteRef = useRef(null)
-
-  const filteredAgents = agents.filter((agent) =>
-    agent.name.toLowerCase().includes(autocompleteFilter.toLowerCase()) ||
-    agent.mention.toLowerCase().includes(autocompleteFilter.toLowerCase())
-  )
+  const mentionTargets = buildMentionTargets({
+    agents,
+    participants,
+    currentParticipantName,
+  })
+  const filteredMentionTargets = filterMentionTargets(mentionTargets, autocompleteFilter)
+  const hasVisibleAutocomplete = showAutocomplete && filteredMentionTargets.length > 0
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -29,10 +37,10 @@ function MessageComposer({ agents = [], disabled, onInsertMentionRef, onSend }) 
   }
 
   const handleKeyDown = (event) => {
-    if (showAutocomplete) {
+    if (hasVisibleAutocomplete) {
       if (event.key === 'ArrowDown') {
         event.preventDefault()
-        setSelectedIndex((prev) => Math.min(prev + 1, filteredAgents.length - 1))
+        setSelectedIndex((prev) => Math.min(prev + 1, filteredMentionTargets.length - 1))
         return
       }
       if (event.key === 'ArrowUp') {
@@ -42,8 +50,8 @@ function MessageComposer({ agents = [], disabled, onInsertMentionRef, onSend }) 
       }
       if (event.key === 'Enter' || event.key === 'Tab') {
         event.preventDefault()
-        if (filteredAgents[selectedIndex]) {
-          insertMentionFromAutocomplete(filteredAgents[selectedIndex].mention)
+        if (filteredMentionTargets[selectedIndex]) {
+          insertMentionFromAutocomplete(filteredMentionTargets[selectedIndex].mention)
         }
         return
       }
@@ -66,42 +74,27 @@ function MessageComposer({ agents = [], disabled, onInsertMentionRef, onSend }) 
     setContent(newValue)
     setCursorPosition(newCursorPosition)
 
-    // Check for @ trigger
-    const textBeforeCursor = newValue.substring(0, newCursorPosition)
-    const atIndex = textBeforeCursor.lastIndexOf('@')
-
-    if (atIndex !== -1) {
-      const textAfterAt = textBeforeCursor.substring(atIndex + 1)
-      // Only show autocomplete if @ is at start or preceded by whitespace
-      const charBeforeAt = atIndex > 0 ? textBeforeCursor[atIndex - 1] : ' '
-      if (charBeforeAt === ' ' || charBeforeAt === '\n' || atIndex === 0) {
-        // Check if there's no space between @ and cursor
-        if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
-          setAutocompleteFilter(textAfterAt)
-          setShowAutocomplete(true)
-          setSelectedIndex(0)
-          return
-        }
-      }
+    const nextFilter = findMentionQuery(newValue, newCursorPosition)
+    if (nextFilter !== null) {
+      setAutocompleteFilter(nextFilter)
+      setShowAutocomplete(true)
+      setSelectedIndex(0)
+      return
     }
+
     setShowAutocomplete(false)
   }
 
   const insertMentionFromAutocomplete = useCallback((mention) => {
-    const textBeforeCursor = content.substring(0, cursorPosition)
-    const atIndex = textBeforeCursor.lastIndexOf('@')
-    const textAfterCursor = content.substring(cursorPosition)
-
-    const newContent = `${textBeforeCursor.substring(0, atIndex)}${mention} ${textAfterCursor}`
-    setContent(newContent)
+    const nextState = replaceMentionQuery(content, cursorPosition, mention)
+    setContent(nextState.content)
+    setCursorPosition(nextState.cursorPosition)
     setShowAutocomplete(false)
 
-    // Focus and set cursor position after mention
     setTimeout(() => {
       if (textareaRef.current) {
-        const newCursorPos = atIndex + mention.length + 1
         textareaRef.current.focus()
-        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos)
+        textareaRef.current.setSelectionRange(nextState.cursorPosition, nextState.cursorPosition)
       }
     }, 0)
   }, [content, cursorPosition])
@@ -145,22 +138,22 @@ function MessageComposer({ agents = [], disabled, onInsertMentionRef, onSend }) 
           rows={3}
           disabled={disabled}
         />
-        {showAutocomplete && filteredAgents.length > 0 && (
+        {showAutocomplete && filteredMentionTargets.length > 0 && (
           <div className="autocomplete-popup" ref={autocompleteRef}>
             <ul className="autocomplete-list">
-              {filteredAgents.map((agent, index) => (
+              {filteredMentionTargets.map((target, index) => (
                 <li
-                  key={agent.id}
+                  key={`${target.kind}:${target.id}`}
                   className={`autocomplete-item${index === selectedIndex ? ' autocomplete-item--selected' : ''}`}
-                  onClick={() => insertMentionFromAutocomplete(agent.mention)}
+                  onClick={() => insertMentionFromAutocomplete(target.mention)}
                   onMouseEnter={() => setSelectedIndex(index)}
                 >
-                  <span className="autocomplete-avatar">{agent.name.charAt(0).toUpperCase()}</span>
+                  <span className="autocomplete-avatar">{target.name.charAt(0).toUpperCase()}</span>
                   <div className="autocomplete-info">
-                    <span className="autocomplete-name">{agent.name}</span>
-                    <span className="autocomplete-role">{agent.role}</span>
+                    <span className="autocomplete-name">{target.name}</span>
+                    <span className="autocomplete-role">{target.role}</span>
                   </div>
-                  <span className="autocomplete-mention">{agent.mention}</span>
+                  <span className="autocomplete-mention">{target.mention}</span>
                 </li>
               ))}
             </ul>

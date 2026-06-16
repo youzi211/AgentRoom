@@ -21,6 +21,7 @@ import MessageList from './MessageList'
 import ParticipantList from './ParticipantList'
 import ResizeHandle from './ResizeHandle'
 import { mergeActivityEvent, normalizeActivityPayload } from './agentActivity'
+import { buildParticipantJoinedNotice, mergeTimelineMessages } from './liveRoomNotices'
 import { nextRouteAfterLiveTermination } from './roomAccess'
 import '../chat-room.css'
 
@@ -39,6 +40,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
   const [participants, setParticipants] = useState([])
   const [agents, setAgents] = useState([])
   const [messages, setMessages] = useState([])
+  const [liveNotices, setLiveNotices] = useState([])
   const [connectionState, setConnectionState] = useState('connecting')
   const [errorMessage, setErrorMessage] = useState('')
   const [copyState, setCopyState] = useState('idle')
@@ -58,6 +60,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
   const transferableParticipants = participants.filter((participant) => participant.id !== selfParticipantID)
   const ownerParticipant = participants.find((participant) => participant.id === room.ownerParticipantID)
   const isOwner = Boolean(selfParticipantID && room.ownerParticipantID === selfParticipantID)
+  const visibleMessages = mergeTimelineMessages(messages, liveNotices)
 
   useEffect(() => {
     if (!transferableParticipants.some((participant) => participant.id === transferTargetID)) {
@@ -124,6 +127,13 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
         case PARTICIPANT_JOINED_EVENT:
           if (event.participant) {
             setParticipants((current) => upsertById(current, event.participant))
+            const notice = buildParticipantJoinedNotice({
+              participant: event.participant,
+              currentParticipantID: selfParticipantID,
+            })
+            if (notice) {
+              setLiveNotices((current) => upsertById(current, notice))
+            }
           }
           return
         case PARTICIPANT_LEFT_EVENT:
@@ -283,7 +293,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
       return
     }
     listEl.scrollTop = listEl.scrollHeight
-  }, [messages, thinkingAgents])
+  }, [messages, liveNotices, thinkingAgents])
 
   const handleSendMessage = async (content) => {
     const socket = socketRef.current
@@ -503,21 +513,23 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
               <h2>会议记录与决策流</h2>
             </div>
             <div className="conversation-toolbar">
-              <span>{`${messages.length} 条消息`}</span>
+              <span>{`${visibleMessages.length} 条消息`}</span>
               <span>{thinkingAgents.length > 0 ? `${thinkingAgents.length} 个 Agent 正在思考` : '等待讨论'}</span>
             </div>
           </div>
           <MessageList
             ref={messageListRef}
             currentParticipantName={participantName}
-            messages={messages}
+            messages={visibleMessages}
             thinkingAgents={thinkingAgents}
           />
           <MessageComposer
             agents={agents}
+            currentParticipantName={participantName}
             disabled={connectionState !== 'connected'}
             onInsertMentionRef={insertMentionRef}
             onSend={handleSendMessage}
+            participants={participants}
           />
         </section>
 

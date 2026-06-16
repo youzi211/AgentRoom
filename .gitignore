@@ -4,5 +4,7 @@ frontend/dist/
 .gomodcache/
 .env
 .omx
+.codex/
 .claude
 backend/server.exe
+.tmp/
