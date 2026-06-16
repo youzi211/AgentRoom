@@ -84,6 +84,7 @@ func (s *Server) registerAPIRoutes(routes gin.IRoutes) {
 	routes.GET("/admin/verify", s.requireAdmin, s.handleAdminVerify)
 	routes.GET("/rooms", s.requireAdmin, s.handleListRooms)
 	routes.POST("/rooms/:roomID/archive", s.requireAdmin, s.handleArchiveRoom)
+	routes.POST("/rooms/:roomID/reopen", s.requireAdmin, s.handleReopenRoom)
 	routes.POST("/rooms/:roomID/restore", s.requireAdmin, s.handleRestoreRoom)
 	routes.GET("/rooms/:roomID/minutes/history", s.requireAdmin, s.handleListMinutes)
 	routes.PUT("/rooms/:roomID/minutes", s.requireAdmin, s.handleSaveMinutes)
@@ -279,7 +280,7 @@ func (s *Server) handleCreateRoom(c *gin.Context) {
 }
 
 func (s *Server) handleGetRoom(c *gin.Context) {
-	currentRoom, ok := s.getRoomFromRequest(c)
+	currentRoom, ok := s.getRoomForRead(c)
 	if !ok {
 		return
 	}
@@ -292,26 +293,39 @@ func (s *Server) handleGetRoom(c *gin.Context) {
 }
 
 func (s *Server) handleGetMessages(c *gin.Context) {
-	currentRoom, ok := s.getRoomFromRequest(c)
+	currentRoom, ok := s.getRoomForRead(c)
 	if !ok {
 		return
 	}
 
-	// Support limit query parameter
 	limit := 100
 	if limitStr := c.Query("limit"); limitStr != "" {
 		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
 			limit = parsed
 		}
 	}
+	before := strings.TrimSpace(c.Query("before"))
 
-	messages := s.rooms.ListMessages(c.Request.Context(), currentRoom, limit)
+	page, err := s.rooms.ListMessagesPage(c.Request.Context(), currentRoom, limit, before)
+	if err != nil {
+		if errors.Is(err, store.ErrInvalidMessageCursor) {
+			writeError(c, http.StatusBadRequest, "invalid message cursor")
+			return
+		}
+		s.logger.Error("list room messages", "room_id", currentRoom.Info().ID, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to load room messages")
+		return
+	}
 
-	c.JSON(http.StatusOK, model.GetMessagesResponse{Messages: messages})
+	c.JSON(http.StatusOK, model.GetMessagesResponse{
+		Messages:   page.Messages,
+		HasMore:    page.HasMore,
+		NextBefore: page.NextBefore,
+	})
 }
 
 func (s *Server) handleGetRoomActivity(c *gin.Context) {
-	currentRoom, ok := s.getRoomFromRequest(c)
+	currentRoom, ok := s.getRoomForRead(c)
 	if !ok {
 		return
 	}
@@ -337,13 +351,17 @@ func (s *Server) handleGetRoomActivity(c *gin.Context) {
 }
 
 func (s *Server) handleGenerateMinutes(c *gin.Context) {
-	currentRoom, ok := s.getRoomFromRequest(c)
+	currentRoom, ok := s.getRoomForMinutesWrite(c)
 	if !ok {
 		return
 	}
 
 	markdown, minutes, err := s.rooms.GenerateMinutes(c.Request.Context(), currentRoom)
 	if err != nil {
+		if errors.Is(err, service.ErrRoomClosed) || errors.Is(err, service.ErrRoomArchived) {
+			writeError(c, http.StatusForbidden, "meeting is read-only")
+			return
+		}
 		s.logger.Error("generate minutes", "room_id", currentRoom.Info().ID, "error", err)
 		writeError(c, http.StatusInternalServerError, "failed to generate meeting minutes")
 		return
@@ -358,15 +376,19 @@ func (s *Server) handleGenerateMinutes(c *gin.Context) {
 }
 
 func (s *Server) handleDownloadMinutes(c *gin.Context) {
-	currentRoom, ok := s.getRoomFromRequest(c)
+	currentRoom, ok := s.getRoomForRead(c)
 	if !ok {
 		return
 	}
 
-	markdown, err := s.rooms.LatestMinutesMarkdown(c.Request.Context(), currentRoom)
+	markdown, ok, err := s.rooms.LatestPersistedMinutesMarkdown(c.Request.Context(), currentRoom)
 	if err != nil {
 		s.logger.Error("download minutes", "room_id", currentRoom.Info().ID, "error", err)
 		writeError(c, http.StatusInternalServerError, "failed to export meeting minutes")
+		return
+	}
+	if !ok {
+		writeError(c, http.StatusNotFound, "meeting minutes not found")
 		return
 	}
 
@@ -409,6 +431,25 @@ func (s *Server) handleArchiveRoom(c *gin.Context) {
 	s.changeRoomStatus(c, true)
 }
 
+func (s *Server) handleReopenRoom(c *gin.Context) {
+	roomID := strings.TrimSpace(c.Param("roomID"))
+	if roomID == "" {
+		writeError(c, http.StatusBadRequest, "missing room id")
+		return
+	}
+
+	if err := s.rooms.ReopenRoom(c.Request.Context(), roomID); err != nil {
+		s.writeLifecycleError(c, err)
+		return
+	}
+
+	currentRoom, ok := s.getRoomForAdmin(c)
+	if !ok {
+		return
+	}
+	c.JSON(http.StatusOK, model.CreateRoomResponse{Room: currentRoom.Info()})
+}
+
 func (s *Server) handleRestoreRoom(c *gin.Context) {
 	s.changeRoomStatus(c, false)
 }
@@ -427,15 +468,14 @@ func (s *Server) changeRoomStatus(c *gin.Context, archive bool) {
 		err = s.rooms.RestoreRoom(c.Request.Context(), roomID)
 	}
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			writeError(c, http.StatusNotFound, "room not found")
-			return
-		}
-		s.logger.Error("change room status", "room_id", roomID, "archive", archive, "error", err)
-		writeError(c, http.StatusInternalServerError, "failed to update room status")
+		s.writeLifecycleError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	currentRoom, ok := s.getRoomForAdmin(c)
+	if !ok {
+		return
+	}
+	c.JSON(http.StatusOK, model.CreateRoomResponse{Room: currentRoom.Info()})
 }
 
 func (s *Server) handleListMinutes(c *gin.Context) {
@@ -479,19 +519,18 @@ func (s *Server) handleSaveMinutes(c *gin.Context) {
 }
 
 func (s *Server) handleListRoomKnowledge(c *gin.Context) {
-	roomID := strings.TrimSpace(c.Param("roomID"))
-	if roomID == "" {
-		writeError(c, http.StatusBadRequest, "missing room id")
+	currentRoom, ok := s.getRoomForRead(c)
+	if !ok {
 		return
 	}
 
-	documents, err := s.rooms.ListRoomKnowledge(c.Request.Context(), roomID)
+	documents, err := s.rooms.ListRoomKnowledge(c.Request.Context(), currentRoom.Info().ID)
 	if err != nil {
-		if strings.Contains(err.Error(), "room not found") {
+		if errors.Is(err, service.ErrRoomNotFound) || strings.Contains(err.Error(), "room not found") {
 			writeError(c, http.StatusNotFound, "room not found")
 			return
 		}
-		s.logger.Error("list room knowledge", "room_id", roomID, "error", err)
+		s.logger.Error("list room knowledge", "room_id", currentRoom.Info().ID, "error", err)
 		writeError(c, http.StatusInternalServerError, "failed to list room knowledge")
 		return
 	}
@@ -541,7 +580,7 @@ func (s *Server) handleDeleteKnowledgeDocument(c *gin.Context) {
 }
 
 func (s *Server) handleRoomWebSocket(c *gin.Context) {
-	currentRoom, ok := s.getRoomFromRequest(c)
+	currentRoom, ok := s.getRoomForLive(c)
 	if !ok {
 		return
 	}
@@ -558,7 +597,12 @@ func (s *Server) handleRoomWebSocket(c *gin.Context) {
 		return
 	}
 
-	savedParticipant := s.rooms.JoinParticipant(c.Request.Context(), currentRoom, name)
+	savedParticipant, err := s.rooms.JoinParticipant(c.Request.Context(), currentRoom, name)
+	if err != nil {
+		_ = connection.WriteJSON(model.ServerEvent{Type: model.EventTypeError, Error: lifecycleErrorMessage(err)})
+		_ = connection.Close()
+		return
+	}
 
 	client := &room.Client{
 		ID:            model.NewID("client"),
@@ -590,8 +634,10 @@ func (s *Server) handleRoomWebSocket(c *gin.Context) {
 		Type:        model.EventTypeParticipantJoined,
 		Participant: &savedParticipant,
 	}, client)
-
-	client.Send <- snapshotEvent(currentRoom.Snapshot())
+	initialSnapshot := snapshotEvent(currentRoom.Snapshot())
+	initialSnapshot.ParticipantID = savedParticipant.ID
+	client.Send <- initialSnapshot
+	currentRoom.Hub().BroadcastExcept(snapshotEvent(currentRoom.Snapshot()), client)
 
 	connection.SetReadLimit(1 << 20)
 	for {
@@ -621,6 +667,8 @@ func (s *Server) handleClientEvent(currentRoom *room.Room, participant model.Par
 			errMessage := "failed to send message, please try again"
 			if errors.Is(err, service.ErrRoomArchived) {
 				errMessage = "this meeting has been archived and is read-only"
+			} else if errors.Is(err, service.ErrRoomClosed) {
+				errMessage = "this meeting is closed and read-only"
 			}
 			sendClientEvent(client, model.ServerEvent{
 				Type:  model.EventTypeError,
@@ -639,6 +687,19 @@ func (s *Server) handleClientEvent(currentRoom *room.Room, participant model.Par
 		}
 
 		s.rooms.TriggerAgentResponses(context.Background(), currentRoom, savedMessage)
+	case "close_room":
+		if err := s.rooms.CloseRoomByOwner(context.Background(), currentRoom, participant.ID); err != nil {
+			sendClientEvent(client, model.ServerEvent{Type: model.EventTypeError, Error: lifecycleErrorMessage(err)})
+		}
+	case "transfer_owner":
+		targetParticipantID := strings.TrimSpace(event.ParticipantID)
+		if targetParticipantID == "" {
+			sendClientEvent(client, model.ServerEvent{Type: model.EventTypeError, Error: "missing target participant"})
+			return
+		}
+		if err := s.rooms.TransferRoomOwner(context.Background(), currentRoom, participant.ID, targetParticipantID); err != nil {
+			sendClientEvent(client, model.ServerEvent{Type: model.EventTypeError, Error: lifecycleErrorMessage(err)})
+		}
 	default:
 		sendClientEvent(client, model.ServerEvent{Type: model.EventTypeError, Error: fmt.Sprintf("unsupported event type %q", event.Type)})
 	}
@@ -659,7 +720,7 @@ func (s *Server) writePump(connection *websocket.Conn, client *room.Client, onDo
 	}
 }
 
-func (s *Server) getRoomFromRequest(c *gin.Context) (*room.Room, bool) {
+func (s *Server) getRoomForRead(c *gin.Context) (*room.Room, bool) {
 	roomID := c.Param("roomID")
 	currentRoom, ok := s.rooms.GetRoom(c.Request.Context(), roomID)
 	if !ok {
@@ -671,6 +732,48 @@ func (s *Server) getRoomFromRequest(c *gin.Context) (*room.Room, bool) {
 	}
 	if !s.rooms.CanAccessRoom(currentRoom, roomPasscodeFromRequest(c.Request)) {
 		writeError(c, http.StatusForbidden, "room passcode is required or invalid")
+		return nil, false
+	}
+	if currentRoom.Info().IsArchived() {
+		writeError(c, http.StatusForbidden, "meeting has been archived")
+		return nil, false
+	}
+	return currentRoom, true
+}
+
+func (s *Server) getRoomForLive(c *gin.Context) (*room.Room, bool) {
+	currentRoom, ok := s.getRoomForRead(c)
+	if !ok {
+		return nil, false
+	}
+	switch currentRoom.Info().Status {
+	case model.RoomStatusActive, "":
+		return currentRoom, true
+	case model.RoomStatusClosed:
+		writeError(c, http.StatusConflict, "meeting is closed; read-only only")
+		return nil, false
+	default:
+		writeError(c, http.StatusForbidden, "meeting has been archived")
+		return nil, false
+	}
+}
+
+func (s *Server) getRoomForMinutesWrite(c *gin.Context) (*room.Room, bool) {
+	roomID := c.Param("roomID")
+	currentRoom, ok := s.rooms.GetRoom(c.Request.Context(), roomID)
+	if !ok {
+		writeError(c, http.StatusNotFound, "room not found")
+		return nil, false
+	}
+	if s.hasValidAdminKey(c) {
+		return currentRoom, true
+	}
+	if !s.rooms.CanAccessRoom(currentRoom, roomPasscodeFromRequest(c.Request)) {
+		writeError(c, http.StatusForbidden, "room passcode is required or invalid")
+		return nil, false
+	}
+	if !currentRoom.Info().IsActive() {
+		writeError(c, http.StatusForbidden, "meeting is read-only")
 		return nil, false
 	}
 	return currentRoom, true
@@ -693,6 +796,43 @@ func (s *Server) getRoomForAdmin(c *gin.Context) (*room.Room, bool) {
 		return nil, false
 	}
 	return currentRoom, true
+}
+
+func (s *Server) writeLifecycleError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrRoomNotFound) || strings.Contains(err.Error(), "not found"):
+		writeError(c, http.StatusNotFound, "room not found")
+	case errors.Is(err, service.ErrInvalidRoomTransition):
+		writeError(c, http.StatusConflict, "invalid room transition")
+	case errors.Is(err, service.ErrRoomArchived):
+		writeError(c, http.StatusForbidden, "meeting has been archived")
+	case errors.Is(err, service.ErrRoomClosed):
+		writeError(c, http.StatusConflict, "meeting is closed; read-only only")
+	case errors.Is(err, service.ErrNotRoomOwner):
+		writeError(c, http.StatusForbidden, "only the current meeting owner can do that")
+	case errors.Is(err, service.ErrOwnerTargetNotOnline):
+		writeError(c, http.StatusConflict, "owner can only be transferred to an online participant")
+	default:
+		s.logger.Error("room lifecycle mutation failed", "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to update room status")
+	}
+}
+
+func lifecycleErrorMessage(err error) string {
+	switch {
+	case errors.Is(err, service.ErrRoomArchived):
+		return "this meeting has been archived"
+	case errors.Is(err, service.ErrRoomClosed):
+		return "this meeting is closed and read-only"
+	case errors.Is(err, service.ErrNotRoomOwner):
+		return "only the current meeting owner can do that"
+	case errors.Is(err, service.ErrOwnerTargetNotOnline):
+		return "owner can only be transferred to an online participant"
+	case err != nil:
+		return err.Error()
+	default:
+		return "meeting action failed"
+	}
 }
 
 func sendClientEvent(client *room.Client, event model.ServerEvent) {

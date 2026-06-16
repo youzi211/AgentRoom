@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -25,6 +26,7 @@ type RoomService struct {
 	minutes   *MinutesService
 	store     store.Store
 	logger    *slog.Logger
+	lifecycle *MeetingLifecycle
 }
 
 func NewRoomService(manager *room.Manager, agents *AgentService, knowledge *KnowledgeService, runner *agent.Runner, focus *FocusService, s store.Store) *RoomService {
@@ -36,6 +38,7 @@ func NewRoomService(manager *room.Manager, agents *AgentService, knowledge *Know
 		focus:     focus,
 		store:     s,
 		logger:    logging.Component("room_service"),
+		lifecycle: NewMeetingLifecycle(s),
 	}
 }
 
@@ -53,41 +56,51 @@ func (s *RoomService) CreateRoom(ctx context.Context, name string, agentIDs []st
 }
 
 func (s *RoomService) GetRoom(ctx context.Context, roomID string) (*room.Room, bool) {
-	return s.manager.GetRoom(ctx, roomID)
+	currentRoom, ok := s.manager.GetRoom(ctx, roomID)
+	if !ok {
+		return nil, false
+	}
+	if err := s.lifecycle.ReconcileLoadedRoom(ctx, currentRoom); err != nil {
+		s.logger.Warn("reconcile room lifecycle", "room_id", roomID, "error", err)
+	}
+	return currentRoom, true
 }
 
-// ErrRoomArchived is returned when a write is attempted on an archived room.
-var ErrRoomArchived = fmt.Errorf("room is archived")
+var (
+	ErrRoomNotFound          = errors.New("room not found")
+	ErrRoomClosed            = errors.New("room is closed")
+	ErrRoomArchived          = errors.New("room is archived")
+	ErrInvalidRoomTransition = errors.New("invalid room transition")
+	ErrNotRoomOwner          = errors.New("not room owner")
+	ErrOwnerTargetNotOnline  = errors.New("owner transfer target is not an online participant")
+)
 
 func (s *RoomService) ListRooms(ctx context.Context, query store.ListRoomsQuery) ([]model.RoomSummary, error) {
 	return s.store.ListRooms(ctx, query)
 }
 
 func (s *RoomService) ArchiveRoom(ctx context.Context, roomID string) error {
-	return s.setRoomStatus(ctx, roomID, model.RoomStatusArchived)
+	currentRoom, ok := s.GetRoom(ctx, roomID)
+	if !ok {
+		return ErrRoomNotFound
+	}
+	return s.lifecycle.Archive(ctx, currentRoom)
 }
 
 func (s *RoomService) RestoreRoom(ctx context.Context, roomID string) error {
-	return s.setRoomStatus(ctx, roomID, model.RoomStatusActive)
+	currentRoom, ok := s.GetRoom(ctx, roomID)
+	if !ok {
+		return ErrRoomNotFound
+	}
+	return s.lifecycle.Restore(ctx, currentRoom)
 }
 
-func (s *RoomService) setRoomStatus(ctx context.Context, roomID string, status string) error {
-	if _, ok := s.GetRoom(ctx, roomID); !ok {
-		return fmt.Errorf("room not found")
+func (s *RoomService) ReopenRoom(ctx context.Context, roomID string) error {
+	currentRoom, ok := s.GetRoom(ctx, roomID)
+	if !ok {
+		return ErrRoomNotFound
 	}
-	var archivedAt *time.Time
-	if status == model.RoomStatusArchived {
-		now := time.Now().UTC()
-		archivedAt = &now
-	}
-	if err := s.store.SetRoomStatus(ctx, roomID, status, archivedAt); err != nil {
-		return err
-	}
-	// Reflect the change in the live room so it takes effect without a reload.
-	if currentRoom, ok := s.GetRoom(ctx, roomID); ok {
-		currentRoom.SetStatus(status, archivedAt)
-	}
-	return nil
+	return s.lifecycle.Reopen(ctx, currentRoom)
 }
 
 func (s *RoomService) CanAccessRoom(currentRoom *room.Room, passcode string) bool {
@@ -166,6 +179,14 @@ func (s *RoomService) ListMessages(ctx context.Context, currentRoom *room.Room, 
 		return currentRoom.Messages()
 	}
 	return messages
+}
+
+func (s *RoomService) ListMessagesPage(ctx context.Context, currentRoom *room.Room, limit int, before string) (store.MessagePage, error) {
+	return s.store.ListMessagesPage(ctx, store.ListMessagesQuery{
+		RoomID: currentRoom.Info().ID,
+		Limit:  limit,
+		Before: before,
+	})
 }
 
 func (s *RoomService) ListRoomActivity(ctx context.Context, currentRoom *room.Room, limit int) (model.RoomActivityResponse, error) {
@@ -259,18 +280,17 @@ func (s *RoomService) SaveManualMinutes(ctx context.Context, currentRoom *room.R
 	return s.persistMinutes(ctx, currentRoom.Info().ID, trimmed, model.MinutesSourceManual)
 }
 
-// LatestMinutesMarkdown returns the latest persisted minutes content, falling
-// back to a freshly generated (and persisted) version when none exist yet.
-func (s *RoomService) LatestMinutesMarkdown(ctx context.Context, currentRoom *room.Room) (string, error) {
+// LatestPersistedMinutesMarkdown returns the latest saved minutes content
+// without generating a new version as a side effect.
+func (s *RoomService) LatestPersistedMinutesMarkdown(ctx context.Context, currentRoom *room.Room) (string, bool, error) {
 	latest, ok, err := s.store.LatestMinutes(ctx, currentRoom.Info().ID)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if ok {
-		return latest.Content, nil
+		return latest.Content, true, nil
 	}
-	markdown, _, err := s.GenerateMinutes(ctx, currentRoom)
-	return markdown, err
+	return "", false, nil
 }
 
 func (s *RoomService) persistMinutes(ctx context.Context, roomID string, content string, source string) (model.MeetingMinutes, error) {
@@ -283,7 +303,14 @@ func (s *RoomService) persistMinutes(ctx context.Context, roomID string, content
 	})
 }
 
-func (s *RoomService) JoinParticipant(ctx context.Context, currentRoom *room.Room, name string) model.Participant {
+func (s *RoomService) JoinParticipant(ctx context.Context, currentRoom *room.Room, name string) (model.Participant, error) {
+	if currentRoom == nil {
+		return model.Participant{}, ErrRoomNotFound
+	}
+	if !currentRoom.Info().IsActive() {
+		return model.Participant{}, ErrRoomClosed
+	}
+
 	participant := currentRoom.NewParticipant(name)
 	roomInfo := currentRoom.Info()
 	savedParticipant, err := s.store.AddParticipant(ctx, store.AddParticipantInput{
@@ -294,17 +321,25 @@ func (s *RoomService) JoinParticipant(ctx context.Context, currentRoom *room.Roo
 	})
 	if err != nil {
 		s.logger.Error("persist participant", "room_id", roomInfo.ID, "participant_id", participant.ID, "error", err)
-		savedParticipant = participant
+		return model.Participant{}, err
 	}
 	currentRoom.AddParticipantFromStore(savedParticipant)
+	if err := s.lifecycle.OnParticipantJoined(ctx, currentRoom, savedParticipant); err != nil {
+		return model.Participant{}, err
+	}
 
-	return savedParticipant
+	return savedParticipant, nil
 }
 
 func (s *RoomService) LeaveParticipant(ctx context.Context, currentRoom *room.Room, participantID string) bool {
 	removed := currentRoom.RemoveParticipant(participantID)
 	if err := s.store.MarkParticipantLeft(ctx, participantID, time.Now().UTC()); err != nil {
 		s.logger.Error("mark participant left", "participant_id", participantID, "error", err)
+	}
+	if removed {
+		if err := s.lifecycle.OnParticipantLeft(ctx, currentRoom, participantID); err != nil {
+			s.logger.Warn("room lifecycle on leave", "room_id", currentRoom.Info().ID, "participant_id", participantID, "error", err)
+		}
 	}
 	return removed
 }
@@ -317,6 +352,9 @@ func (s *RoomService) HandleHumanMessage(ctx context.Context, currentRoom *room.
 
 	if currentRoom.Info().IsArchived() {
 		return model.Message{}, nil, ErrRoomArchived
+	}
+	if currentRoom.Info().IsClosed() {
+		return model.Message{}, nil, ErrRoomClosed
 	}
 
 	message := currentRoom.NewHumanMessage(participant, trimmed)
@@ -341,6 +379,14 @@ func (s *RoomService) TriggerAgentResponses(ctx context.Context, currentRoom *ro
 		return
 	}
 	go s.runner.HandleHumanMessage(ctx, currentRoom, message)
+}
+
+func (s *RoomService) TransferRoomOwner(ctx context.Context, currentRoom *room.Room, callerParticipantID string, targetParticipantID string) error {
+	return s.lifecycle.TransferOwner(ctx, currentRoom, callerParticipantID, targetParticipantID)
+}
+
+func (s *RoomService) CloseRoomByOwner(ctx context.Context, currentRoom *room.Room, callerParticipantID string) error {
+	return s.lifecycle.CloseByOwner(ctx, currentRoom, callerParticipantID)
 }
 
 func (s *RoomService) agentByID(agentID string) (model.AgentConfig, bool) {

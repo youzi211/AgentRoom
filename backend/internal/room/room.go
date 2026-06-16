@@ -10,19 +10,32 @@ import (
 )
 
 type Room struct {
-	mu             sync.RWMutex
-	id             string
-	name           string
-	createdAt      time.Time
-	passcodeHash   string
-	status         string
-	archivedAt     *time.Time
-	dialoguePolicy model.DialoguePolicy
-	participants   map[string]*model.Participant
-	agents         map[string]*model.Agent
-	agentOrder     []string
-	messages       []model.Message
-	hub            *Hub
+	mu                  sync.RWMutex
+	id                  string
+	name                string
+	createdAt           time.Time
+	passcodeHash        string
+	status              string
+	ownerParticipantID  string
+	closedAt            *time.Time
+	closedReason        string
+	autoCloseDeadlineAt *time.Time
+	archivedAt          *time.Time
+	dialoguePolicy      model.DialoguePolicy
+	participants        map[string]*model.Participant
+	agents              map[string]*model.Agent
+	agentOrder          []string
+	messages            []model.Message
+	hub                 *Hub
+}
+
+type LifecycleState struct {
+	Status              string
+	OwnerParticipantID  string
+	ClosedAt            *time.Time
+	ClosedReason        string
+	AutoCloseDeadlineAt *time.Time
+	ArchivedAt          *time.Time
 }
 
 // New creates a brand-new room from scratch (used for new room creation).
@@ -62,18 +75,22 @@ func NewFromState(meta model.RoomMeta, agents []model.Agent) *Room {
 	}
 
 	return &Room{
-		id:             meta.ID,
-		name:           meta.Name,
-		createdAt:      meta.CreatedAt,
-		passcodeHash:   meta.PasscodeHash,
-		status:         normalizeRoomStatus(meta.Status),
-		archivedAt:     meta.ArchivedAt,
-		dialoguePolicy: meta.DialoguePolicy.WithDefaults(),
-		participants:   make(map[string]*model.Participant),
-		agents:         agentMap,
-		agentOrder:     agentOrder,
-		messages:       make([]model.Message, 0),
-		hub:            NewHub(),
+		id:                  meta.ID,
+		name:                meta.Name,
+		createdAt:           meta.CreatedAt,
+		passcodeHash:        meta.PasscodeHash,
+		status:              normalizeRoomStatus(meta.Status),
+		ownerParticipantID:  meta.OwnerParticipantID,
+		closedAt:            cloneTimePtr(meta.ClosedAt),
+		closedReason:        meta.ClosedReason,
+		autoCloseDeadlineAt: cloneTimePtr(meta.AutoCloseDeadlineAt),
+		archivedAt:          cloneTimePtr(meta.ArchivedAt),
+		dialoguePolicy:      meta.DialoguePolicy.WithDefaults(),
+		participants:        make(map[string]*model.Participant),
+		agents:              agentMap,
+		agentOrder:          agentOrder,
+		messages:            make([]model.Message, 0),
+		hub:                 NewHub(),
 	}
 }
 
@@ -98,18 +115,22 @@ func NewFromSnapshot(meta model.RoomMeta, agents []model.Agent, messages []model
 	copy(msgCopy, messages)
 
 	return &Room{
-		id:             meta.ID,
-		name:           meta.Name,
-		createdAt:      meta.CreatedAt,
-		passcodeHash:   meta.PasscodeHash,
-		status:         normalizeRoomStatus(meta.Status),
-		archivedAt:     meta.ArchivedAt,
-		dialoguePolicy: meta.DialoguePolicy.WithDefaults(),
-		participants:   participantMap,
-		agents:         agentMap,
-		agentOrder:     agentOrder,
-		messages:       msgCopy,
-		hub:            NewHub(),
+		id:                  meta.ID,
+		name:                meta.Name,
+		createdAt:           meta.CreatedAt,
+		passcodeHash:        meta.PasscodeHash,
+		status:              normalizeRoomStatus(meta.Status),
+		ownerParticipantID:  meta.OwnerParticipantID,
+		closedAt:            cloneTimePtr(meta.ClosedAt),
+		closedReason:        meta.ClosedReason,
+		autoCloseDeadlineAt: cloneTimePtr(meta.AutoCloseDeadlineAt),
+		archivedAt:          cloneTimePtr(meta.ArchivedAt),
+		dialoguePolicy:      meta.DialoguePolicy.WithDefaults(),
+		participants:        participantMap,
+		agents:              agentMap,
+		agentOrder:          agentOrder,
+		messages:            msgCopy,
+		hub:                 NewHub(),
 	}
 }
 
@@ -121,13 +142,18 @@ func (r *Room) Info() model.RoomMeta {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return model.RoomMeta{
-		ID:             r.id,
-		Name:           r.name,
-		CreatedAt:      r.createdAt,
-		HasPasscode:    r.passcodeHash != "",
-		Status:         r.status,
-		ArchivedAt:     r.archivedAt,
-		DialoguePolicy: r.dialoguePolicy.WithDefaults(),
+		ID:                  r.id,
+		Name:                r.name,
+		CreatedAt:           r.createdAt,
+		HasPasscode:         r.passcodeHash != "",
+		PasscodeHash:        r.passcodeHash,
+		Status:              r.status,
+		OwnerParticipantID:  r.ownerParticipantID,
+		ClosedAt:            cloneTimePtr(r.closedAt),
+		ClosedReason:        r.closedReason,
+		AutoCloseDeadlineAt: cloneTimePtr(r.autoCloseDeadlineAt),
+		ArchivedAt:          cloneTimePtr(r.archivedAt),
+		DialoguePolicy:      r.dialoguePolicy.WithDefaults(),
 	}
 }
 
@@ -137,12 +163,35 @@ func (r *Room) PasscodeHash() string {
 	return r.passcodeHash
 }
 
-// SetStatus updates the in-memory room status so that an archived room
-// immediately stops accepting new turns without a reload from the store.
+// SetStatus keeps older tests working; lifecycle-aware code should prefer ApplyLifecycle.
 func (r *Room) SetStatus(status string, archivedAt *time.Time) {
+	r.ApplyLifecycle(LifecycleState{
+		Status:     status,
+		ArchivedAt: archivedAt,
+	})
+}
+
+func (r *Room) Lifecycle() LifecycleState {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return LifecycleState{
+		Status:              r.status,
+		OwnerParticipantID:  r.ownerParticipantID,
+		ClosedAt:            cloneTimePtr(r.closedAt),
+		ClosedReason:        r.closedReason,
+		AutoCloseDeadlineAt: cloneTimePtr(r.autoCloseDeadlineAt),
+		ArchivedAt:          cloneTimePtr(r.archivedAt),
+	}
+}
+
+func (r *Room) ApplyLifecycle(state LifecycleState) {
 	r.mu.Lock()
-	r.status = normalizeRoomStatus(status)
-	r.archivedAt = archivedAt
+	r.status = normalizeRoomStatus(state.Status)
+	r.ownerParticipantID = state.OwnerParticipantID
+	r.closedAt = cloneTimePtr(state.ClosedAt)
+	r.closedReason = state.ClosedReason
+	r.autoCloseDeadlineAt = cloneTimePtr(state.AutoCloseDeadlineAt)
+	r.archivedAt = cloneTimePtr(state.ArchivedAt)
 	r.mu.Unlock()
 }
 
@@ -157,7 +206,20 @@ func (r *Room) Snapshot() model.RoomState {
 	defer r.mu.RUnlock()
 
 	return model.RoomState{
-		Room:         model.RoomMeta{ID: r.id, Name: r.name, CreatedAt: r.createdAt, HasPasscode: r.passcodeHash != "", Status: r.status, ArchivedAt: r.archivedAt, DialoguePolicy: r.dialoguePolicy.WithDefaults()},
+		Room: model.RoomMeta{
+			ID:                  r.id,
+			Name:                r.name,
+			CreatedAt:           r.createdAt,
+			HasPasscode:         r.passcodeHash != "",
+			PasscodeHash:        r.passcodeHash,
+			Status:              r.status,
+			OwnerParticipantID:  r.ownerParticipantID,
+			ClosedAt:            cloneTimePtr(r.closedAt),
+			ClosedReason:        r.closedReason,
+			AutoCloseDeadlineAt: cloneTimePtr(r.autoCloseDeadlineAt),
+			ArchivedAt:          cloneTimePtr(r.archivedAt),
+			DialoguePolicy:      r.dialoguePolicy.WithDefaults(),
+		},
 		Participants: cloneParticipants(r.participants),
 		Agents:       cloneAgents(r.agents, r.agentOrder),
 		Messages:     cloneMessages(r.messages),
@@ -168,6 +230,16 @@ func (r *Room) Participants() []model.Participant {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return cloneParticipants(r.participants)
+}
+
+func (r *Room) Participant(participantID string) (model.Participant, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	participant, ok := r.participants[participantID]
+	if !ok {
+		return model.Participant{}, false
+	}
+	return *participant, true
 }
 
 func (r *Room) Agents() []model.Agent {
@@ -252,6 +324,14 @@ func (r *Room) RemoveParticipant(participantID string) bool {
 	}
 	delete(r.participants, participantID)
 	return true
+}
+
+func (r *Room) ClearParticipants() []model.Participant {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	participants := cloneParticipants(r.participants)
+	r.participants = make(map[string]*model.Participant)
+	return participants
 }
 
 // AppendMessage adds an already-persisted message to the in-memory list.
@@ -353,10 +433,16 @@ func cloneMessages(messages []model.Message) []model.Message {
 }
 
 func normalizeRoomStatus(status string) string {
-	if status == model.RoomStatusArchived {
+	switch status {
+	case "", model.RoomStatusActive:
+		return model.RoomStatusActive
+	case model.RoomStatusClosed:
+		return model.RoomStatusClosed
+	case model.RoomStatusArchived:
 		return model.RoomStatusArchived
+	default:
+		return model.RoomStatusActive
 	}
-	return model.RoomStatusActive
 }
 
 func normalizeRoomName(name string, roomID string) string {
@@ -365,4 +451,12 @@ func normalizeRoomName(name string, roomID string) string {
 		return trimmed
 	}
 	return "Room " + roomID
+}
+
+func cloneTimePtr(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	copyValue := *value
+	return &copyValue
 }

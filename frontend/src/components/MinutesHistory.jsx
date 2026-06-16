@@ -117,7 +117,7 @@ function MinutesHistory({ room, onClose }) {
   const busy = status === 'generating' || status === 'saving'
 
   return (
-    <div className="delete-confirm-overlay" role="dialog" aria-modal="true">
+    <div className="delete-confirm-overlay delete-confirm-overlay--scrollable" role="dialog" aria-modal="true">
       <div className="minutes-history-card">
         <div className="panel-header panel-header--horizontal">
           <div>

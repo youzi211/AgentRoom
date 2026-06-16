@@ -9,6 +9,7 @@ const cases = [
   ['FocusTimeline.jsx', ['会议焦点', '发送消息后，AI 会自动提取会议焦点。', '刚刚']],
   ['JoinScreen.jsx', ['协作会议', '创建会议室', '加入会议室', '房间口令']],
   ['KnowledgePanel.jsx', ['上传 .md', '当前只支持上传 .md 文件。', '加载知识文档失败。']],
+  ['MeetingAdmin.jsx', ['会议记录', '管理所有会议与纪要', '会议列表', '复制房间 ID']],
   ['MeetingMinutesPanel.jsx', ['会议产物', '生成纪要', '导出 Markdown', '预览草稿']],
   ['meetingMinutes.js', ['会议纪要', '基本信息', '消息记录', '暂无消息。']],
   ['MessageComposer.jsx', ['输入消息，使用 @ 提及 Agent 参与讨论。', '发送', 'Enter 发送，Shift + Enter 换行']],

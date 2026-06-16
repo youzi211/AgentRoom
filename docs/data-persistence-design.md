@@ -154,10 +154,15 @@ CREATE TABLE rooms (
   id VARCHAR(64) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'active',
+  owner_participant_id VARCHAR(64) NULL,
   created_at DATETIME(6) NOT NULL,
   updated_at DATETIME(6) NOT NULL,
+  closed_at DATETIME(6) NULL,
+  closed_reason VARCHAR(32) NOT NULL DEFAULT '',
+  auto_close_deadline_at DATETIME(6) NULL,
   archived_at DATETIME(6) NULL,
-  KEY idx_rooms_created_at (created_at)
+  KEY idx_rooms_status_created_at (status, created_at),
+  KEY idx_rooms_auto_close_deadline (auto_close_deadline_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
@@ -168,6 +173,13 @@ CREATE TABLE rooms (
 - `deleted`
 
 第一阶段只使用 `active`。
+
+2026-06 生命周期补充：
+- `rooms.status` 现在正式区分 `active`、`closed`、`archived`。
+- `owner_participant_id` 记录当前在线人类房主；只有房主可以关闭会议或把房主转交给另一位在线人类。
+- `closed_at` / `closed_reason` 记录会议结束语义；`closed_reason` 至少覆盖 `manual`、`last_human_left`、`admin_unarchive`。
+- `auto_close_deadline_at` 用于“最后一位人类离开后 30 秒自动关闭”的宽限期。
+- `archived` 恢复后应进入 `closed`，只有 `reopen` 才能回到 `active`。
 
 ### 7.3 room_agents
 
@@ -254,6 +266,12 @@ CREATE TABLE messages (
 - 建议支持查询参数：
   - `limit`，默认 100，最大 500。
   - `before`，可选，使用消息 `created_at/id` 游标后续实现。
+
+2026-06 消息历史补充：
+- `GET /api/rooms/:roomID/messages` 使用 cursor 分页，返回 `{ messages, hasMore, nextBefore }`。
+- 默认返回最新一页，但页内顺序保持“从旧到新”。
+- `before` 指向上一页最早消息的 id；非法或跨房间 cursor 应返回 `400`。
+- `closed` 房间允许普通用户只读查看消息历史；`archived` 房间仅管理员可读。
 
 ### 7.6 agent_runs
 
@@ -676,3 +694,16 @@ main.go
 4. 会议纪要：新增 `meeting_summaries` 表和秘书总结保存。
 5. 多实例实时：Redis pub/sub 或消息队列。
 6. 权限模型：房间邀请链接、主持人、只读访问。
+## 18. 2026-06 会议生命周期补丁
+
+本轮实现后，接口与权限语义需要以以下内容为准：
+
+- 会议状态固定为 `active`、`closed`、`archived` 三态，不再把“已关闭”和“已归档”混为同一状态。
+- 在线人类房主可以通过 WebSocket 发送 `close_room` 或 `transfer_owner`；不新增独立的参与者鉴权 HTTP 变更接口。
+- 当最后一位人类离开时，后端写入 `auto_close_deadline_at = now + 30s`；若 30 秒内无人重返，房间自动转为 `closed`。
+- `GET /api/rooms/:roomID`、`GET /messages`、`GET /minutes.md`：普通用户在 `closed` 状态下仍可访问，但 `archived` 仅管理员可读。
+- `GET /api/rooms/:roomID/ws?name=Alice`：只允许 `active`；`closed` 必须走只读查看，不能加入实时连接。
+- `POST /api/rooms/:roomID/minutes`：普通用户只允许在 `active` 生成；管理员在三种状态下都可以生成和保存纪要。
+- `POST /api/rooms/:roomID/reopen`：仅管理员可用，只支持 `closed -> active`。
+- `POST /api/rooms/:roomID/restore`：仅管理员可用，只支持 `archived -> closed`。
+- `GET /api/rooms/:roomID/minutes.md` 是纯读取接口；如果没有已持久化纪要，返回 `404`，不再隐式生成。

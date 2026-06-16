@@ -32,6 +32,7 @@ type RoomModel struct {
 	ID                        string     `gorm:"primaryKey;size:64"`
 	Name                      string     `gorm:"size:255;not null"`
 	Status                    string     `gorm:"size:32;not null;default:'active'"`
+	OwnerParticipantID        *string    `gorm:"column:owner_participant_id;size:64"`
 	PasscodeHash              string     `gorm:"column:passcode_hash;size:128;not null;default:''"`
 	DialogueMode              string     `gorm:"column:dialogue_mode;size:32;not null;default:'mention_fanout'"`
 	MaxAutonomousTurns        int        `gorm:"column:max_autonomous_turns;not null;default:3"`
@@ -40,6 +41,9 @@ type RoomModel struct {
 	AllowAgentToAgentMentions bool       `gorm:"column:allow_agent_to_agent_mentions;not null;default:true"`
 	ResponseStrategy          string     `gorm:"column:response_strategy;size:32;not null;default:'mentioned_first'"`
 	CooldownMS                int        `gorm:"column:cooldown_ms;not null;default:0"`
+	ClosedAt                  *time.Time `gorm:"column:closed_at"`
+	ClosedReason              string     `gorm:"column:closed_reason;size:32;not null;default:''"`
+	AutoCloseDeadlineAt       *time.Time `gorm:"column:auto_close_deadline_at"`
 	CreatedAt                 time.Time  `gorm:"not null;index:idx_rooms_created_at"`
 	UpdatedAt                 time.Time  `gorm:"not null"`
 	ArchivedAt                *time.Time `gorm:""`
@@ -361,13 +365,17 @@ func (m DialogueRunModel) toStore() store.DialogueRun {
 
 func (m RoomModel) toDomain() model.RoomMeta {
 	return model.RoomMeta{
-		ID:           m.ID,
-		Name:         m.Name,
-		CreatedAt:    m.CreatedAt,
-		HasPasscode:  m.PasscodeHash != "",
-		PasscodeHash: m.PasscodeHash,
-		Status:       m.Status,
-		ArchivedAt:   m.ArchivedAt,
+		ID:                  m.ID,
+		Name:                m.Name,
+		CreatedAt:           m.CreatedAt,
+		HasPasscode:         m.PasscodeHash != "",
+		PasscodeHash:        m.PasscodeHash,
+		Status:              m.Status,
+		OwnerParticipantID:  strPtrDeref(m.OwnerParticipantID),
+		ClosedAt:            m.ClosedAt,
+		ClosedReason:        m.ClosedReason,
+		AutoCloseDeadlineAt: m.AutoCloseDeadlineAt,
+		ArchivedAt:          m.ArchivedAt,
 		DialoguePolicy: model.DialoguePolicy{
 			Mode:                      m.DialogueMode,
 			MaxAutonomousTurns:        m.MaxAutonomousTurns,

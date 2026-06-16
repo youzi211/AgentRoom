@@ -7,6 +7,14 @@ Rooms support two dialogue modes:
 - `mention_fanout`: only directly mentioned agents reply, once each.
 - `guided_dialogue`: a bounded multi-turn exchange where mentioned agents reply first and may hand off to other agents through explicit mentions.
 
+Rooms also persist three lifecycle states:
+
+- `active`: live meeting, ordinary users can join WebSocket and speak.
+- `closed`: read-only meeting history, ordinary users can still open the room link to view messages and minutes.
+- `archived`: admin-only history, no ordinary reads or live participation.
+
+The current live human owner is the only participant who can close a meeting or transfer ownership to another online human. When the last human leaves, the backend starts a 30-second auto-close grace window.
+
 The LLM integration layer is implemented with `langchaingo` and still uses the existing `LLM_*` environment variables, so OpenAI-compatible providers continue to work without changing the runtime configuration contract.
 
 ## Run Locally
@@ -71,10 +79,16 @@ Primary routes are exposed under `/api`:
 - `GET /api/agents/:agentID/knowledge`
 - `POST /api/agents/:agentID/knowledge`
 - `POST /api/rooms`
+- `GET /api/rooms` (admin)
 - `GET /api/rooms/:roomID`
+- `POST /api/rooms/:roomID/archive` (admin)
+- `POST /api/rooms/:roomID/reopen` (admin)
+- `POST /api/rooms/:roomID/restore` (admin)
 - `GET /api/rooms/:roomID/messages`
 - `GET /api/rooms/:roomID/activity`
 - `POST /api/rooms/:roomID/minutes`
+- `PUT /api/rooms/:roomID/minutes` (admin)
+- `GET /api/rooms/:roomID/minutes/history` (admin)
 - `GET /api/rooms/:roomID/minutes.md`
 - `GET /api/rooms/:roomID/knowledge`
 - `POST /api/rooms/:roomID/knowledge`
@@ -84,6 +98,23 @@ Primary routes are exposed under `/api`:
 Legacy non-`/api` routes are still registered for compatibility.
 
 `GET /api/rooms/:roomID/activity` returns recent `agentRuns` and `dialogueRuns` for the room. The endpoint uses the same room passcode checks as metadata and history reads, and accepts an optional `limit` query parameter capped by the API layer.
+
+`GET /api/rooms/:roomID/messages` is cursor-paginated. It accepts `limit` plus an optional `before` cursor and returns `{ messages, hasMore, nextBefore }`.
+
+`GET /api/rooms/:roomID/minutes.md` is now a pure read endpoint. It downloads the latest persisted minutes and returns `404` when no saved minutes exist.
+
+Room lifecycle semantics:
+
+- Closed rooms allow ordinary `GET /api/rooms/:roomID`, `GET /messages`, and `GET /minutes.md`.
+- Closed rooms reject ordinary WebSocket joins and ordinary `POST /minutes`.
+- Archived rooms reject ordinary room reads entirely and remain available only through admin-gated endpoints.
+- `POST /api/rooms/:roomID/reopen` moves `closed -> active`.
+- `POST /api/rooms/:roomID/restore` moves `archived -> closed`.
+
+Live-room WebSocket control events now include:
+
+- `{"type":"close_room"}`
+- `{"type":"transfer_owner","participantID":"participant_123"}`
 
 `POST /api/rooms` accepts an optional `dialoguePolicy` object. For example:
 

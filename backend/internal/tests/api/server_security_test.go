@@ -374,6 +374,13 @@ func TestMeetingMinutesMarkdownCanBeDownloaded(t *testing.T) {
 		t.Fatalf("add message: %v", err)
 	}
 
+	generateRequest := httptest.NewRequest(http.MethodPost, "/api/rooms/"+created.Room.ID+"/minutes", nil)
+	generateResponse := httptest.NewRecorder()
+	server.Routes().ServeHTTP(generateResponse, generateRequest)
+	if generateResponse.Code != http.StatusOK {
+		t.Fatalf("generate minutes failed: %d body=%s", generateResponse.Code, generateResponse.Body.String())
+	}
+
 	request := httptest.NewRequest(http.MethodGet, "/api/rooms/"+created.Room.ID+"/minutes.md", nil)
 	response := httptest.NewRecorder()
 	server.Routes().ServeHTTP(response, request)

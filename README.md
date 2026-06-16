@@ -23,7 +23,7 @@ Implemented in the current tree:
 - WebSocket origin allowlist through `ALLOWED_ORIGINS`.
 - Optional room passcodes for room metadata, message history, minutes, and WebSocket join.
 - Meeting minutes generation, persistence with versioning, admin editing, and Markdown export.
-- Admin console (gated by `ADMIN_API_KEY`) with meeting/room management (list, archive, restore) and Agent configuration.
+- Admin console (gated by `ADMIN_API_KEY`) with meeting/room management (list, detail, archive, reopen, restore) and Agent configuration.
 - Health endpoint with database status at `/api/health`.
 
 Recommended for deployment:
@@ -151,8 +151,10 @@ Before exposing AgentRoom outside a trusted internal network, verify these items
 - Admin API writes require the configured `X-Admin-Key`: creating/updating/deleting agents and uploading/deleting knowledge should not be anonymous.
 - WebSocket origin checks allow only the configured production frontend origins.
 - Rooms that are created with a passcode require that passcode for metadata, history, meeting minutes, and WebSocket join paths (a valid admin key bypasses the passcode for admin operations).
-- Meeting minutes can be generated from persisted room messages, are stored as versioned records, can be edited by an admin, and exported as Markdown.
-- The admin console can list rooms, archive a room (making it read-only), and restore it.
+- Meetings persist three lifecycle states: `active`, `closed`, and `archived`. The live room owner can close an active meeting, and admins can archive or reopen rooms from the management UI.
+- Closed rooms stay readable through the shared room link so participants can view history and minutes without rejoining live chat. Archived rooms stay admin-only.
+- Meeting minutes can be generated from persisted room messages, are stored as versioned records, can be edited by an admin in any room state, and exported as Markdown.
+- The admin console can list rooms, inspect full message history, archive a room, reopen a closed room, and restore an archived room back to `closed`.
 - `/api/health` reports `"database": {"ok": true}`.
 
 ## HTTP Surface
@@ -168,22 +170,23 @@ Primary API routes are under `/api`:
 - `GET /api/agents/:agentID/knowledge`
 - `POST /api/agents/:agentID/knowledge`
 - `POST /api/rooms`
-- `GET /api/rooms` (admin) — list rooms for the admin console (`?status=active|archived`, `?limit`, `?offset`)
+- `GET /api/rooms` (admin) — list rooms for the admin console (`?status=active|closed|archived|all`, `?limit`, `?offset`)
 - `GET /api/rooms/:roomID`
 - `POST /api/rooms/:roomID/archive` (admin) — archive a room (becomes read-only)
-- `POST /api/rooms/:roomID/restore` (admin) — restore an archived room
-- `GET /api/rooms/:roomID/messages`
+- `POST /api/rooms/:roomID/reopen` (admin) — reopen a closed room back to `active`
+- `POST /api/rooms/:roomID/restore` (admin) — restore an archived room back to `closed`
+- `GET /api/rooms/:roomID/messages` — paginated history (`{ messages, hasMore, nextBefore }`, with `?limit` and `?before`)
 - `GET /api/rooms/:roomID/activity`
-- `POST /api/rooms/:roomID/minutes` — generate and persist a new AI minutes version
+- `POST /api/rooms/:roomID/minutes` — generate and persist a new AI minutes version (`active` only for ordinary users; admins can use it in any state)
 - `PUT /api/rooms/:roomID/minutes` (admin) — save an edited minutes body as a new manual version
 - `GET /api/rooms/:roomID/minutes/history` (admin) — list persisted minutes versions
-- `GET /api/rooms/:roomID/minutes.md` — download the latest persisted minutes as Markdown
+- `GET /api/rooms/:roomID/minutes.md` — pure read download of the latest persisted minutes as Markdown (`404` when none exists)
 - `GET /api/rooms/:roomID/knowledge`
 - `POST /api/rooms/:roomID/knowledge`
 - `DELETE /api/knowledge/:documentID`
 - `GET /api/rooms/:roomID/ws?name=Alice`
 
-Routes marked **(admin)** require the `X-Admin-Key` header when `ADMIN_API_KEY` is configured. A valid admin key also bypasses a room's passcode for minutes/generation routes, so an operator can manage any room without knowing each passcode. Archived rooms reject new human messages over WebSocket and stop triggering agent turns.
+Routes marked **(admin)** require the `X-Admin-Key` header when `ADMIN_API_KEY` is configured. A valid admin key also bypasses a room's passcode for room reads, history, and minutes-management routes, so an operator can manage any room without knowing each passcode. Closed rooms allow ordinary read access to room metadata, messages, and `minutes.md`, but reject WebSocket joins, human messages, owner transfer, and reopen attempts. Archived rooms reject ordinary access and stop all live participation.
 
 Legacy non-`/api` backend routes are still registered for compatibility. New frontend and deployment traffic should use `/api/*`.
 

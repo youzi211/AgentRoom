@@ -4,6 +4,8 @@ import { test } from 'node:test'
 
 const css = readFileSync(new URL('./chat-room.css', import.meta.url), 'utf8')
 const chatRoomSource = readFileSync(new URL('./components/ChatRoom.jsx', import.meta.url), 'utf8')
+const roomGatewaySource = readFileSync(new URL('./components/RoomGateway.jsx', import.meta.url), 'utf8')
+const roomReadOnlySource = readFileSync(new URL('./components/RoomReadOnly.jsx', import.meta.url), 'utf8')
 
 function ruleBlock(selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -57,4 +59,21 @@ test('meeting focus owns the primary right-panel space before activity logs', ()
   assert.ok(activityIndex > -1)
   assert.ok(focusIndex < activityIndex)
   assert.doesNotMatch(chatRoomSource, /rightTopHeight/)
+})
+
+test('closed-room read-only screen avoids live socket and composer imports', () => {
+  assert.match(roomGatewaySource, /import RoomReadOnly from '\.\/RoomReadOnly'/)
+  assert.match(roomGatewaySource, /ROOM_SURFACES\.readOnly/)
+  assert.doesNotMatch(roomReadOnlySource, /createRoomSocket/)
+  assert.doesNotMatch(roomReadOnlySource, /MessageComposer/)
+})
+
+test('chat room includes owner controls and lifecycle exit handling', () => {
+  assert.match(chatRoomSource, /const ROOM_CLOSED_EVENT = 'room_closed'/)
+  assert.match(chatRoomSource, /const ROOM_ARCHIVED_EVENT = 'room_archived'/)
+  assert.match(chatRoomSource, /type:\s*'close_room'/)
+  assert.match(chatRoomSource, /type:\s*'transfer_owner'/)
+  assert.match(chatRoomSource, /clearRoomSession/)
+  assert.match(chatRoomSource, /nextRouteAfterLiveTermination/)
+  assert.match(chatRoomSource, /meeting-owner-panel/)
 })

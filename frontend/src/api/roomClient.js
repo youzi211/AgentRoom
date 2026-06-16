@@ -96,15 +96,22 @@ export function buildCreateRoomPayload(name, agentIds, passcode = '', dialogueMo
 export async function getRoom(roomId, passcode = '') {
   const encodedRoomId = encodeURIComponent(roomId)
   const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}`, {
-    headers: withRoomPasscode({}, passcode),
+    headers: withAdminKey(withRoomPasscode({}, passcode)),
   })
   return parseResponse(response)
 }
 
-export async function getMessages(roomId, passcode = '') {
+export async function getMessages(roomId, passcode = '', { before = '', limit } = {}) {
   const encodedRoomId = encodeURIComponent(roomId)
-  const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/messages`, {
-    headers: withRoomPasscode({}, passcode),
+  const params = new URLSearchParams()
+  if (before) {
+    params.set('before', before)
+  }
+  if (limit) {
+    params.set('limit', String(limit))
+  }
+  const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/messages${params.toString() ? `?${params.toString()}` : ''}`, {
+    headers: withAdminKey(withRoomPasscode({}, passcode)),
   })
   return parseResponse(response)
 }
@@ -112,7 +119,7 @@ export async function getMessages(roomId, passcode = '') {
 export async function getRoomActivity(roomId, passcode = '') {
   const encodedRoomId = encodeURIComponent(roomId)
   const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/activity`, {
-    headers: withRoomPasscode({}, passcode),
+    headers: withAdminKey(withRoomPasscode({}, passcode)),
   })
   return parseResponse(response)
 }
@@ -121,7 +128,7 @@ export async function generateRoomMinutes(roomId, passcode = '') {
   const encodedRoomId = encodeURIComponent(roomId)
   const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/minutes`, {
     method: 'POST',
-    headers: withRoomPasscode(JSON_HEADERS, passcode),
+    headers: withAdminKey(withRoomPasscode(JSON_HEADERS, passcode)),
   })
 
   return parseResponse(response)
@@ -130,7 +137,7 @@ export async function generateRoomMinutes(roomId, passcode = '') {
 export async function exportRoomMinutesMarkdown(roomId, passcode = '') {
   const encodedRoomId = encodeURIComponent(roomId)
   const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/minutes.md`, {
-    headers: withRoomPasscode({}, passcode),
+    headers: withAdminKey(withRoomPasscode({}, passcode)),
   })
 
   if (!response.ok) {
@@ -185,7 +192,7 @@ export async function deleteAgent(agentId) {
 export async function getRoomKnowledge(roomId, passcode = '') {
   const encodedRoomId = encodeURIComponent(roomId)
   const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/knowledge`, {
-    headers: withRoomPasscode({}, passcode),
+    headers: withAdminKey(withRoomPasscode({}, passcode)),
   })
   return parseResponse(response)
 }
@@ -271,6 +278,15 @@ export async function archiveRoom(roomId) {
 export async function restoreRoom(roomId) {
   const encodedRoomId = encodeURIComponent(roomId)
   const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/restore`, {
+    method: 'POST',
+    headers: withAdminKey(),
+  })
+  return parseResponse(response)
+}
+
+export async function reopenRoom(roomId) {
+  const encodedRoomId = encodeURIComponent(roomId)
+  const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/reopen`, {
     method: 'POST',
     headers: withAdminKey(),
   })

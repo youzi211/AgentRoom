@@ -2,6 +2,7 @@ package teststore
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -10,28 +11,35 @@ import (
 )
 
 type Store struct {
-	Agents       []model.Agent
-	Rooms        map[string]model.RoomMeta
-	AgentRuns    []store.AgentRun
-	DialogueRuns []store.DialogueRun
-	Documents    []model.KnowledgeDocument
-	Chunks       []model.KnowledgeChunk
-	Minutes      []model.MeetingMinutes
+	Agents             []model.Agent
+	Rooms              map[string]model.RoomMeta
+	RoomAgents         map[string][]model.Agent
+	RoomMessages       map[string][]model.Message
+	ActiveParticipants map[string][]model.Participant
+	AgentRuns          []store.AgentRun
+	DialogueRuns       []store.DialogueRun
+	Documents          []model.KnowledgeDocument
+	Chunks             []model.KnowledgeChunk
+	Minutes            []model.MeetingMinutes
 }
 
 func (s *Store) Ping(context.Context) error { return nil }
 func (s *Store) Close() error               { return nil }
+
 func (s *Store) SeedAgents(_ context.Context, agents []model.Agent) error {
 	s.Agents = append([]model.Agent(nil), agents...)
 	return nil
 }
+
 func (s *Store) ListAgents(context.Context) ([]model.Agent, error) {
 	return append([]model.Agent(nil), s.Agents...), nil
 }
+
 func (s *Store) CreateAgent(_ context.Context, agent model.Agent) (model.Agent, error) {
 	s.Agents = append(s.Agents, agent)
 	return agent, nil
 }
+
 func (s *Store) UpdateAgent(_ context.Context, agent model.Agent) (model.Agent, error) {
 	for i := range s.Agents {
 		if s.Agents[i].ID == agent.ID {
@@ -42,6 +50,7 @@ func (s *Store) UpdateAgent(_ context.Context, agent model.Agent) (model.Agent, 
 	s.Agents = append(s.Agents, agent)
 	return agent, nil
 }
+
 func (s *Store) DeleteAgent(_ context.Context, agentID string) error {
 	next := make([]model.Agent, 0, len(s.Agents))
 	for _, agent := range s.Agents {
@@ -52,10 +61,9 @@ func (s *Store) DeleteAgent(_ context.Context, agentID string) error {
 	s.Agents = next
 	return nil
 }
+
 func (s *Store) CreateRoom(_ context.Context, input store.CreateRoomInput) (model.RoomMeta, []model.Agent, error) {
-	if s.Rooms == nil {
-		s.Rooms = make(map[string]model.RoomMeta)
-	}
+	s.ensureMaps()
 	meta := model.RoomMeta{
 		ID:             input.ID,
 		Name:           input.Name,
@@ -63,55 +71,82 @@ func (s *Store) CreateRoom(_ context.Context, input store.CreateRoomInput) (mode
 		HasPasscode:    input.PasscodeHash != "",
 		PasscodeHash:   input.PasscodeHash,
 		DialoguePolicy: input.DialoguePolicy.WithDefaults(),
+		Status:         model.RoomStatusActive,
 	}
 	s.Rooms[input.ID] = meta
-	return meta, input.Agents, nil
+	s.RoomAgents[input.ID] = append([]model.Agent(nil), input.Agents...)
+	return meta, append([]model.Agent(nil), input.Agents...), nil
 }
+
 func (s *Store) GetRoom(_ context.Context, roomID string) (model.RoomMeta, error) {
-	return s.Rooms[roomID], nil
+	s.ensureMaps()
+	meta, ok := s.Rooms[roomID]
+	if !ok {
+		return model.RoomMeta{}, fmt.Errorf("room %s not found", roomID)
+	}
+	return meta, nil
 }
-func (s *Store) ListRoomAgents(context.Context, string) ([]model.Agent, error) {
-	return nil, nil
+
+func (s *Store) ListRoomAgents(_ context.Context, roomID string) ([]model.Agent, error) {
+	s.ensureMaps()
+	return append([]model.Agent(nil), s.RoomAgents[roomID]...), nil
 }
+
 func (s *Store) ListRooms(_ context.Context, query store.ListRoomsQuery) ([]model.RoomSummary, error) {
+	s.ensureMaps()
 	result := make([]model.RoomSummary, 0, len(s.Rooms))
 	for _, meta := range s.Rooms {
-		status := meta.Status
-		if status == "" {
-			status = model.RoomStatusActive
-		}
-		if query.Status == model.RoomStatusActive || query.Status == model.RoomStatusArchived {
+		status := normalizeRoomStatus(meta.Status)
+		if query.Status == model.RoomStatusActive || query.Status == model.RoomStatusClosed || query.Status == model.RoomStatusArchived {
 			if status != query.Status {
 				continue
 			}
 		}
+		messages := append([]model.Message(nil), s.RoomMessages[meta.ID]...)
+		var lastMessageAt *time.Time
+		if len(messages) > 0 {
+			lastMessageAt = cloneTimePtr(&messages[len(messages)-1].CreatedAt)
+		}
 		result = append(result, model.RoomSummary{
-			ID:          meta.ID,
-			Name:        meta.Name,
-			Status:      status,
-			HasPasscode: meta.PasscodeHash != "",
-			CreatedAt:   meta.CreatedAt,
-			ArchivedAt:  meta.ArchivedAt,
+			ID:                  meta.ID,
+			Name:                meta.Name,
+			Status:              status,
+			HasPasscode:         meta.PasscodeHash != "",
+			CreatedAt:           meta.CreatedAt,
+			OwnerParticipantID:  meta.OwnerParticipantID,
+			ClosedAt:            cloneTimePtr(meta.ClosedAt),
+			ClosedReason:        meta.ClosedReason,
+			AutoCloseDeadlineAt: cloneTimePtr(meta.AutoCloseDeadlineAt),
+			ArchivedAt:          cloneTimePtr(meta.ArchivedAt),
+			MessageCount:        len(messages),
+			LastMessageAt:       lastMessageAt,
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {
+		if result[i].CreatedAt.Equal(result[j].CreatedAt) {
+			return result[i].ID > result[j].ID
+		}
 		return result[i].CreatedAt.After(result[j].CreatedAt)
 	})
 	return result, nil
 }
-func (s *Store) SetRoomStatus(_ context.Context, roomID string, status string, archivedAt *time.Time) error {
-	if s.Rooms == nil {
-		return nil
-	}
-	meta, ok := s.Rooms[roomID]
+
+func (s *Store) UpdateRoomLifecycle(_ context.Context, input store.UpdateRoomLifecycleInput) error {
+	s.ensureMaps()
+	meta, ok := s.Rooms[input.RoomID]
 	if !ok {
-		return nil
+		return fmt.Errorf("room %s not found", input.RoomID)
 	}
-	meta.Status = status
-	meta.ArchivedAt = archivedAt
-	s.Rooms[roomID] = meta
+	meta.Status = normalizeRoomStatus(input.Status)
+	meta.OwnerParticipantID = input.OwnerParticipantID
+	meta.ClosedAt = cloneTimePtr(input.ClosedAt)
+	meta.ClosedReason = input.ClosedReason
+	meta.AutoCloseDeadlineAt = cloneTimePtr(input.AutoCloseDeadlineAt)
+	meta.ArchivedAt = cloneTimePtr(input.ArchivedAt)
+	s.Rooms[input.RoomID] = meta
 	return nil
 }
+
 func (s *Store) CreateMinutes(_ context.Context, minutes model.MeetingMinutes) (model.MeetingMinutes, error) {
 	maxVersion := 0
 	for _, existing := range s.Minutes {
@@ -123,6 +158,7 @@ func (s *Store) CreateMinutes(_ context.Context, minutes model.MeetingMinutes) (
 	s.Minutes = append(s.Minutes, minutes)
 	return minutes, nil
 }
+
 func (s *Store) ListMinutes(_ context.Context, roomID string) ([]model.MeetingMinutes, error) {
 	result := make([]model.MeetingMinutes, 0)
 	for _, minutes := range s.Minutes {
@@ -135,6 +171,7 @@ func (s *Store) ListMinutes(_ context.Context, roomID string) ([]model.MeetingMi
 	})
 	return result, nil
 }
+
 func (s *Store) LatestMinutes(_ context.Context, roomID string) (model.MeetingMinutes, bool, error) {
 	var latest model.MeetingMinutes
 	found := false
@@ -146,28 +183,85 @@ func (s *Store) LatestMinutes(_ context.Context, roomID string) (model.MeetingMi
 	}
 	return latest, found, nil
 }
+
 func (s *Store) AddParticipant(_ context.Context, input store.AddParticipantInput) (model.Participant, error) {
-	return model.Participant{ID: input.ID, Name: input.DisplayName, JoinedAt: input.JoinedAt}, nil
+	s.ensureMaps()
+	participant := model.Participant{ID: input.ID, Name: input.DisplayName, JoinedAt: input.JoinedAt}
+	s.ActiveParticipants[input.RoomID] = append(s.ActiveParticipants[input.RoomID], participant)
+	sortParticipants(s.ActiveParticipants[input.RoomID])
+	return participant, nil
 }
-func (s *Store) MarkParticipantLeft(context.Context, string, time.Time) error {
-	return nil
+
+func (s *Store) MarkParticipantLeft(_ context.Context, participantID string, _ time.Time) error {
+	s.ensureMaps()
+	for roomID, participants := range s.ActiveParticipants {
+		next := make([]model.Participant, 0, len(participants))
+		found := false
+		for _, participant := range participants {
+			if participant.ID == participantID {
+				found = true
+				continue
+			}
+			next = append(next, participant)
+		}
+		if found {
+			s.ActiveParticipants[roomID] = next
+			return nil
+		}
+	}
+	return fmt.Errorf("participant %s not found or already left", participantID)
 }
-func (s *Store) ListActiveParticipants(context.Context, string) ([]model.Participant, error) {
-	return nil, nil
+
+func (s *Store) ListActiveParticipants(_ context.Context, roomID string) ([]model.Participant, error) {
+	s.ensureMaps()
+	participants := append([]model.Participant(nil), s.ActiveParticipants[roomID]...)
+	sortParticipants(participants)
+	return participants, nil
 }
+
 func (s *Store) MarkAllActiveParticipantsLeft(context.Context, time.Time) error {
+	s.ensureMaps()
+	s.ActiveParticipants = make(map[string][]model.Participant)
 	return nil
 }
+
 func (s *Store) AddMessage(_ context.Context, message model.Message) (model.Message, error) {
+	s.ensureMaps()
+	s.RoomMessages[message.RoomID] = append(s.RoomMessages[message.RoomID], message)
+	sortMessages(s.RoomMessages[message.RoomID])
 	return message, nil
 }
-func (s *Store) ListMessages(context.Context, store.ListMessagesQuery) ([]model.Message, error) {
-	return nil, nil
+
+func (s *Store) ListMessages(_ context.Context, query store.ListMessagesQuery) ([]model.Message, error) {
+	s.ensureMaps()
+	return s.listMessages(query, false)
 }
+
+func (s *Store) ListMessagesPage(_ context.Context, query store.ListMessagesQuery) (store.MessagePage, error) {
+	s.ensureMaps()
+	messages, err := s.listMessages(query, true)
+	if err != nil {
+		return store.MessagePage{}, err
+	}
+
+	limit := normalizeMessageLimit(query.Limit)
+	total := len(messages)
+	if total <= limit {
+		return store.MessagePage{Messages: messages}, nil
+	}
+	page := messages[total-limit:]
+	return store.MessagePage{
+		Messages:   append([]model.Message(nil), page...),
+		HasMore:    true,
+		NextBefore: page[0].ID,
+	}, nil
+}
+
 func (s *Store) CreateAgentRun(_ context.Context, run store.AgentRun) error {
 	s.AgentRuns = append(s.AgentRuns, run)
 	return nil
 }
+
 func (s *Store) FinishAgentRun(_ context.Context, runID string, status string, errText string, completedAt time.Time) error {
 	for i := range s.AgentRuns {
 		if s.AgentRuns[i].ID == runID {
@@ -179,6 +273,7 @@ func (s *Store) FinishAgentRun(_ context.Context, runID string, status string, e
 	}
 	return nil
 }
+
 func (s *Store) ListAgentRuns(_ context.Context, query store.ListRunsQuery) ([]store.AgentRun, error) {
 	result := make([]store.AgentRun, 0)
 	for _, run := range s.AgentRuns {
@@ -186,16 +281,18 @@ func (s *Store) ListAgentRuns(_ context.Context, query store.ListRunsQuery) ([]s
 			result = append(result, run)
 		}
 	}
-	sortRuns(result, query.Limit, func(i int) time.Time { return result[i].StartedAt })
+	sortRuns(result, func(i int) time.Time { return result[i].StartedAt })
 	if limit := normalizedTestRunLimit(query.Limit, len(result)); limit < len(result) {
 		return result[:limit], nil
 	}
 	return result, nil
 }
+
 func (s *Store) CreateDialogueRun(_ context.Context, run store.DialogueRun) error {
 	s.DialogueRuns = append(s.DialogueRuns, run)
 	return nil
 }
+
 func (s *Store) FinishDialogueRun(_ context.Context, runID string, status string, turnCount int, completedAt time.Time) error {
 	for i := range s.DialogueRuns {
 		if s.DialogueRuns[i].ID == runID {
@@ -207,6 +304,7 @@ func (s *Store) FinishDialogueRun(_ context.Context, runID string, status string
 	}
 	return nil
 }
+
 func (s *Store) ListDialogueRuns(_ context.Context, query store.ListRunsQuery) ([]store.DialogueRun, error) {
 	result := make([]store.DialogueRun, 0)
 	for _, run := range s.DialogueRuns {
@@ -214,19 +312,19 @@ func (s *Store) ListDialogueRuns(_ context.Context, query store.ListRunsQuery) (
 			result = append(result, run)
 		}
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].StartedAt.After(result[j].StartedAt)
-	})
+	sortRuns(result, func(i int) time.Time { return result[i].StartedAt })
 	if limit := normalizedTestRunLimit(query.Limit, len(result)); limit < len(result) {
 		return result[:limit], nil
 	}
 	return result, nil
 }
+
 func (s *Store) CreateKnowledgeDocument(_ context.Context, document model.KnowledgeDocument, chunks []model.KnowledgeChunk) (model.KnowledgeDocument, error) {
 	s.Documents = append(s.Documents, document)
 	s.Chunks = append(s.Chunks, chunks...)
 	return document, nil
 }
+
 func (s *Store) ListKnowledgeDocuments(_ context.Context, query store.ListKnowledgeDocumentsQuery) ([]model.KnowledgeDocument, error) {
 	result := make([]model.KnowledgeDocument, 0)
 	for _, document := range s.Documents {
@@ -236,6 +334,7 @@ func (s *Store) ListKnowledgeDocuments(_ context.Context, query store.ListKnowle
 	}
 	return result, nil
 }
+
 func (s *Store) DeleteKnowledgeDocument(_ context.Context, documentID string) error {
 	nextDocuments := make([]model.KnowledgeDocument, 0, len(s.Documents))
 	for _, document := range s.Documents {
@@ -253,6 +352,7 @@ func (s *Store) DeleteKnowledgeDocument(_ context.Context, documentID string) er
 	s.Chunks = nextChunks
 	return nil
 }
+
 func (s *Store) SearchKnowledgeChunks(_ context.Context, query store.SearchKnowledgeChunksQuery) ([]model.KnowledgeChunk, error) {
 	result := make([]model.KnowledgeChunk, 0)
 	for _, chunk := range s.Chunks {
@@ -266,8 +366,89 @@ func (s *Store) SearchKnowledgeChunks(_ context.Context, query store.SearchKnowl
 	return result, nil
 }
 
-func sortRuns[T any](runs []T, _ int, startedAt func(int) time.Time) {
+func (s *Store) listMessages(query store.ListMessagesQuery, strictCursor bool) ([]model.Message, error) {
+	messages := append([]model.Message(nil), s.RoomMessages[query.RoomID]...)
+	sortMessages(messages)
+
+	if query.Before == "" {
+		if strictCursor {
+			return messages, nil
+		}
+		limit := normalizeMessageLimit(query.Limit)
+		if len(messages) > limit {
+			return append([]model.Message(nil), messages[:limit]...), nil
+		}
+		return messages, nil
+	}
+
+	index := -1
+	for i, message := range messages {
+		if message.ID == query.Before {
+			index = i
+			break
+		}
+	}
+	if index == -1 {
+		if strictCursor {
+			return nil, store.ErrInvalidMessageCursor
+		}
+		limit := normalizeMessageLimit(query.Limit)
+		if len(messages) > limit {
+			return append([]model.Message(nil), messages[:limit]...), nil
+		}
+		return messages, nil
+	}
+
+	filtered := append([]model.Message(nil), messages[:index]...)
+	if strictCursor {
+		return filtered, nil
+	}
+
+	limit := normalizeMessageLimit(query.Limit)
+	if len(filtered) > limit {
+		return append([]model.Message(nil), filtered[:limit]...), nil
+	}
+	return filtered, nil
+}
+
+func (s *Store) ensureMaps() {
+	if s.Rooms == nil {
+		s.Rooms = make(map[string]model.RoomMeta)
+	}
+	if s.RoomAgents == nil {
+		s.RoomAgents = make(map[string][]model.Agent)
+	}
+	if s.RoomMessages == nil {
+		s.RoomMessages = make(map[string][]model.Message)
+	}
+	if s.ActiveParticipants == nil {
+		s.ActiveParticipants = make(map[string][]model.Participant)
+	}
+}
+
+func sortParticipants(participants []model.Participant) {
+	sort.Slice(participants, func(i, j int) bool {
+		if participants[i].JoinedAt.Equal(participants[j].JoinedAt) {
+			return participants[i].ID < participants[j].ID
+		}
+		return participants[i].JoinedAt.Before(participants[j].JoinedAt)
+	})
+}
+
+func sortMessages(messages []model.Message) {
+	sort.Slice(messages, func(i, j int) bool {
+		if messages[i].CreatedAt.Equal(messages[j].CreatedAt) {
+			return messages[i].ID < messages[j].ID
+		}
+		return messages[i].CreatedAt.Before(messages[j].CreatedAt)
+	})
+}
+
+func sortRuns[T any](runs []T, startedAt func(int) time.Time) {
 	sort.Slice(runs, func(i, j int) bool {
+		if startedAt(i).Equal(startedAt(j)) {
+			return i < j
+		}
 		return startedAt(i).After(startedAt(j))
 	})
 }
@@ -280,4 +461,35 @@ func normalizedTestRunLimit(limit int, total int) int {
 		return total
 	}
 	return limit
+}
+
+func normalizeMessageLimit(limit int) int {
+	if limit <= 0 {
+		return 100
+	}
+	if limit > 500 {
+		return 500
+	}
+	return limit
+}
+
+func normalizeRoomStatus(status string) string {
+	switch status {
+	case "", model.RoomStatusActive:
+		return model.RoomStatusActive
+	case model.RoomStatusClosed:
+		return model.RoomStatusClosed
+	case model.RoomStatusArchived:
+		return model.RoomStatusArchived
+	default:
+		return model.RoomStatusActive
+	}
+}
+
+func cloneTimePtr(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	copyValue := *value
+	return &copyValue
 }

@@ -39,6 +39,28 @@ func (h *Hub) Broadcast(event model.ServerEvent) {
 	h.broadcast(event, nil)
 }
 
+func (h *Hub) BroadcastAndClose(event model.ServerEvent) {
+	h.mu.Lock()
+	clients := make([]*Client, 0, len(h.clients))
+	for client := range h.clients {
+		clients = append(clients, client)
+	}
+	h.mu.Unlock()
+
+	for _, client := range clients {
+		select {
+		case client.Send <- event:
+		default:
+		}
+	}
+
+	h.mu.Lock()
+	for _, client := range clients {
+		h.dropLocked(client)
+	}
+	h.mu.Unlock()
+}
+
 func (h *Hub) BroadcastExcept(event model.ServerEvent, excluded *Client) {
 	h.broadcast(event, excluded)
 }

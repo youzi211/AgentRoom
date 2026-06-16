@@ -57,9 +57,9 @@ export function navigateAdmin(section = ADMIN_SECTIONS.meetings, { replace = fal
 export function navigateRoom(roomId, roomSession, { replace = false } = {}) {
   const nextSession = {
     roomId,
-    participantName: roomSession.participantName,
-    initialRoom: roomSession.initialRoom,
-    passcode: roomSession.passcode || '',
+    participantName: roomSession?.participantName || '',
+    initialRoom: roomSession?.initialRoom || null,
+    passcode: roomSession?.passcode || '',
   }
   persistRoomSession(roomId, nextSession)
   const searchParams = new URLSearchParams()
@@ -109,6 +109,14 @@ export function resolveRoomSession(roomId, routeParticipantName = '', routePassc
   }
 
   return null
+}
+
+export function clearRoomSession(roomId) {
+  try {
+    window.sessionStorage.removeItem(roomSessionKey(roomId))
+  } catch {
+    // Session storage can be unavailable in hardened browser contexts.
+  }
 }
 
 function navigate(path, { replace = false, state = null } = {}) {

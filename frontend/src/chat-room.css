@@ -283,6 +283,36 @@
   white-space: nowrap;
 }
 
+.meeting-owner-panel {
+  gap: 10px;
+}
+
+.meeting-owner-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.meeting-owner-select {
+  min-height: 40px;
+}
+
+.meeting-owner-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meeting-owner-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-pill);
+  background: rgba(47, 102, 87, 0.12);
+  color: var(--accent-strong);
+  padding: 3px 10px;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
 .focus-task-list {
   display: grid;
   gap: 9px;

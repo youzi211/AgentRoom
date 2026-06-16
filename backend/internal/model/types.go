@@ -11,6 +11,8 @@ const (
 const (
 	EventTypeMessage           = "message"
 	EventTypeRoomSnapshot      = "room_snapshot"
+	EventTypeRoomClosed        = "room_closed"
+	EventTypeRoomArchived      = "room_archived"
 	EventTypeParticipantJoined = "participant_joined"
 	EventTypeParticipantLeft   = "participant_left"
 	EventTypeError             = "error"
@@ -27,7 +29,12 @@ const (
 
 const (
 	RoomStatusActive   = "active"
+	RoomStatusClosed   = "closed"
 	RoomStatusArchived = "archived"
+
+	RoomClosedReasonManual         = "manual"
+	RoomClosedReasonLastHumanLeft  = "last_human_left"
+	RoomClosedReasonAdminUnarchive = "admin_unarchive"
 
 	MinutesSourceAI     = "ai"
 	MinutesSourceManual = "manual"
@@ -43,14 +50,18 @@ type Room struct {
 }
 
 type RoomMeta struct {
-	ID             string         `json:"id"`
-	Name           string         `json:"name"`
-	CreatedAt      time.Time      `json:"createdAt"`
-	HasPasscode    bool           `json:"hasPasscode"`
-	PasscodeHash   string         `json:"-"`
-	DialoguePolicy DialoguePolicy `json:"dialoguePolicy"`
-	Status         string         `json:"status,omitempty"`
-	ArchivedAt     *time.Time     `json:"archivedAt,omitempty"`
+	ID                  string         `json:"id"`
+	Name                string         `json:"name"`
+	CreatedAt           time.Time      `json:"createdAt"`
+	HasPasscode         bool           `json:"hasPasscode"`
+	PasscodeHash        string         `json:"-"`
+	DialoguePolicy      DialoguePolicy `json:"dialoguePolicy"`
+	Status              string         `json:"status,omitempty"`
+	OwnerParticipantID  string         `json:"ownerParticipantID,omitempty"`
+	ClosedAt            *time.Time     `json:"closedAt,omitempty"`
+	ClosedReason        string         `json:"closedReason,omitempty"`
+	AutoCloseDeadlineAt *time.Time     `json:"autoCloseDeadlineAt,omitempty"`
+	ArchivedAt          *time.Time     `json:"archivedAt,omitempty"`
 }
 
 // IsArchived reports whether the room has been archived and should reject new turns.
@@ -58,16 +69,30 @@ func (r RoomMeta) IsArchived() bool {
 	return r.Status == RoomStatusArchived
 }
 
+// IsClosed reports whether the meeting has ended and is only available in read-only mode.
+func (r RoomMeta) IsClosed() bool {
+	return r.Status == RoomStatusClosed
+}
+
+// IsActive reports whether the room is currently live.
+func (r RoomMeta) IsActive() bool {
+	return r.Status == "" || r.Status == RoomStatusActive
+}
+
 // RoomSummary is a lightweight room listing entry for the admin meeting list.
 type RoomSummary struct {
-	ID            string     `json:"id"`
-	Name          string     `json:"name"`
-	Status        string     `json:"status"`
-	HasPasscode   bool       `json:"hasPasscode"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	ArchivedAt    *time.Time `json:"archivedAt,omitempty"`
-	MessageCount  int        `json:"messageCount"`
-	LastMessageAt *time.Time `json:"lastMessageAt,omitempty"`
+	ID                  string     `json:"id"`
+	Name                string     `json:"name"`
+	Status              string     `json:"status"`
+	HasPasscode         bool       `json:"hasPasscode"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	OwnerParticipantID  string     `json:"ownerParticipantID,omitempty"`
+	ClosedAt            *time.Time `json:"closedAt,omitempty"`
+	ClosedReason        string     `json:"closedReason,omitempty"`
+	AutoCloseDeadlineAt *time.Time `json:"autoCloseDeadlineAt,omitempty"`
+	ArchivedAt          *time.Time `json:"archivedAt,omitempty"`
+	MessageCount        int        `json:"messageCount"`
+	LastMessageAt       *time.Time `json:"lastMessageAt,omitempty"`
 }
 
 // MeetingMinutes is a persisted, versioned meeting minutes record.
@@ -198,7 +223,9 @@ type GetRoomResponse struct {
 }
 
 type GetMessagesResponse struct {
-	Messages []Message `json:"messages"`
+	Messages   []Message `json:"messages"`
+	HasMore    bool      `json:"hasMore"`
+	NextBefore string    `json:"nextBefore,omitempty"`
 }
 
 type RoomActivityResponse struct {
@@ -266,8 +293,9 @@ type ErrorResponse struct {
 }
 
 type ClientEvent struct {
-	Type    string `json:"type"`
-	Content string `json:"content,omitempty"`
+	Type          string `json:"type"`
+	Content       string `json:"content,omitempty"`
+	ParticipantID string `json:"participantID,omitempty"`
 }
 
 type ServerEvent struct {

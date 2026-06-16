@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { archiveRoom, listRooms, restoreRoom } from '../api/roomClient'
-import MinutesHistory from './MinutesHistory'
-
-const STATUS_FILTERS = [
-  { value: '', label: '全部' },
-  { value: 'active', label: '进行中' },
-  { value: 'archived', label: '已归档' },
-]
+import { archiveRoom, listRooms, reopenRoom, restoreRoom } from '../api/roomClient'
+import MeetingRoomDetail from './MeetingRoomDetail'
+import {
+  actionsForRoomStatus,
+  labelForRoomAction,
+  labelForRoomStatus,
+  STATUS_FILTERS,
+  toneForRoomStatus,
+} from './meetingAdminModel'
 
 function formatDateTime(value) {
   if (!value) {
@@ -32,7 +33,7 @@ function MeetingAdmin() {
   const [isLoading, setIsLoading] = useState(true)
   const [busyRoomId, setBusyRoomId] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
-  const [minutesRoom, setMinutesRoom] = useState(null)
+  const [selectedRoom, setSelectedRoom] = useState(null)
 
   const loadRooms = useCallback(async (status) => {
     setIsLoading(true)
@@ -41,7 +42,7 @@ function MeetingAdmin() {
       const response = await listRooms({ status })
       setRooms(response.rooms ?? [])
     } catch (error) {
-      setErrorMessage(error.message || '加载会议列表失败。')
+      setErrorMessage(error.message || '加载会议列表失败，请稍后重试。')
     } finally {
       setIsLoading(false)
     }
@@ -51,18 +52,35 @@ function MeetingAdmin() {
     void loadRooms(statusFilter)
   }, [loadRooms, statusFilter])
 
-  const handleToggleArchive = async (roomItem) => {
+  const handleRoomAction = async (roomItem, action) => {
+    if (!roomItem?.id) {
+      return
+    }
+    if (action === 'detail') {
+      setSelectedRoom(roomItem)
+      return
+    }
+
     setBusyRoomId(roomItem.id)
     setErrorMessage('')
     try {
-      if (roomItem.status === 'archived') {
-        await restoreRoom(roomItem.id)
-      } else {
-        await archiveRoom(roomItem.id)
+      let response = null
+
+      if (action === 'archive') {
+        response = await archiveRoom(roomItem.id)
+      } else if (action === 'reopen') {
+        response = await reopenRoom(roomItem.id)
+      } else if (action === 'restore') {
+        response = await restoreRoom(roomItem.id)
       }
+
+      if (response?.room) {
+        setSelectedRoom((current) => (current?.id === roomItem.id ? response.room : current))
+      }
+
       await loadRooms(statusFilter)
     } catch (error) {
-      setErrorMessage(error.message || '更新会议状态失败。')
+      setErrorMessage(error.message || '更新会议状态失败，请稍后重试。')
     } finally {
       setBusyRoomId('')
     }
@@ -82,7 +100,9 @@ function MeetingAdmin() {
         <div>
           <p className="eyebrow">会议记录</p>
           <h1>管理所有会议与纪要</h1>
-          <p className="section-copy">浏览历史会议、查看与编辑会议纪要、归档不再活跃的房间。归档后的房间将变为只读，不再接受新发言。</p>
+          <p className="section-copy">
+            浏览进行中、已关闭和已归档的会议，查看全部消息历史，并按新的生命周期语义执行归档、恢复会议或取消归档。
+          </p>
         </div>
       </section>
 
@@ -94,7 +114,7 @@ function MeetingAdmin() {
             <h2>会议列表</h2>
             <span className="panel-badge panel-badge--neutral">{rooms.length}</span>
           </div>
-          <div className="agent-select-actions" role="tablist" aria-label="状态筛选">
+          <div className="agent-select-actions" role="tablist" aria-label="会议状态筛选">
             {STATUS_FILTERS.map((filter) => (
               <button
                 key={filter.value || 'all'}
@@ -131,25 +151,25 @@ function MeetingAdmin() {
                   </button>
                 </span>
                 <span role="cell">
-                  <span className={`agent-state ${roomItem.status === 'archived' ? 'agent-state--off' : ''}`}>
-                    {roomItem.status === 'archived' ? '已归档' : '进行中'}
+                  <span className={`agent-state agent-state--${toneForRoomStatus(roomItem.status)}`}>
+                    {labelForRoomStatus(roomItem.status)}
                   </span>
                 </span>
                 <span role="cell">{roomItem.messageCount ?? 0}</span>
                 <span role="cell">{formatDateTime(roomItem.createdAt)}</span>
                 <span role="cell">{formatDateTime(roomItem.lastMessageAt)}</span>
                 <span className="meeting-cell-actions" role="cell">
-                  <button className="button button--ghost button--compact" type="button" onClick={() => setMinutesRoom(roomItem)}>
-                    纪要
-                  </button>
-                  <button
-                    className="button button--secondary button--compact"
-                    type="button"
-                    onClick={() => handleToggleArchive(roomItem)}
-                    disabled={busyRoomId === roomItem.id}
-                  >
-                    {roomItem.status === 'archived' ? '恢复' : '归档'}
-                  </button>
+                  {actionsForRoomStatus(roomItem.status).map((action) => (
+                    <button
+                      key={`${roomItem.id}:${action}`}
+                      className={`button ${action === 'detail' ? 'button--ghost' : 'button--secondary'} button--compact`}
+                      type="button"
+                      onClick={() => handleRoomAction(roomItem, action)}
+                      disabled={action !== 'detail' && busyRoomId === roomItem.id}
+                    >
+                      {labelForRoomAction(action)}
+                    </button>
+                  ))}
                 </span>
               </div>
             ))}
@@ -157,7 +177,14 @@ function MeetingAdmin() {
         )}
       </div>
 
-      {minutesRoom ? <MinutesHistory room={minutesRoom} onClose={() => setMinutesRoom(null)} /> : null}
+      {selectedRoom ? (
+        <MeetingRoomDetail
+          busyRoomId={busyRoomId}
+          onClose={() => setSelectedRoom(null)}
+          onRoomAction={handleRoomAction}
+          room={selectedRoom}
+        />
+      ) : null}
     </section>
   )
 }

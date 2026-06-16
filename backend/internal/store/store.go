@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"agentroom/backend/internal/model"
@@ -25,7 +26,7 @@ type Store interface {
 	GetRoom(ctx context.Context, roomID string) (model.RoomMeta, error)
 	ListRoomAgents(ctx context.Context, roomID string) ([]model.Agent, error)
 	ListRooms(ctx context.Context, query ListRoomsQuery) ([]model.RoomSummary, error)
-	SetRoomStatus(ctx context.Context, roomID string, status string, archivedAt *time.Time) error
+	UpdateRoomLifecycle(ctx context.Context, input UpdateRoomLifecycleInput) error
 
 	// Meeting minutes (versioned, persisted)
 	CreateMinutes(ctx context.Context, minutes model.MeetingMinutes) (model.MeetingMinutes, error)
@@ -41,6 +42,7 @@ type Store interface {
 	// Messages
 	AddMessage(ctx context.Context, message model.Message) (model.Message, error)
 	ListMessages(ctx context.Context, query ListMessagesQuery) ([]model.Message, error)
+	ListMessagesPage(ctx context.Context, query ListMessagesQuery) (MessagePage, error)
 
 	// Agent runs
 	CreateAgentRun(ctx context.Context, run AgentRun) error
@@ -78,7 +80,7 @@ type AddParticipantInput struct {
 
 // ListRoomsQuery holds query parameters for listing rooms in the admin console.
 type ListRoomsQuery struct {
-	Status string // "active", "archived", or "" / "all" for no filter
+	Status string // "active", "closed", "archived", or "" / "all" for no filter
 	Limit  int
 	Offset int
 }
@@ -89,6 +91,24 @@ type ListMessagesQuery struct {
 	Limit  int
 	Before string // cursor for future pagination
 }
+
+type UpdateRoomLifecycleInput struct {
+	RoomID              string
+	Status              string
+	OwnerParticipantID  string
+	ClosedAt            *time.Time
+	ClosedReason        string
+	AutoCloseDeadlineAt *time.Time
+	ArchivedAt          *time.Time
+}
+
+type MessagePage struct {
+	Messages   []model.Message
+	HasMore    bool
+	NextBefore string
+}
+
+var ErrInvalidMessageCursor = errors.New("invalid message cursor")
 
 type ListRunsQuery struct {
 	RoomID string

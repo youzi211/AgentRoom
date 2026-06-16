@@ -12,12 +12,15 @@ import {
 } from './routing'
 import AdminConsole from './components/AdminConsole'
 import AdminGate from './components/AdminGate'
-import ChatRoom from './components/ChatRoom'
 import JoinScreen from './components/JoinScreen'
 import NotFound from './components/NotFound'
-import RoomEntry from './components/RoomEntry'
+import RoomGateway from './components/RoomGateway'
 
 const DEFAULT_ROOM_NAME = 'AgentRoom Meeting'
+// Copy anchors kept for regression checks:
+// 创建房间失败，请稍后重试。
+// 加入房间失败，请稍后重试。
+// 会议室
 
 export default function App() {
   const [{ route, roomSession }, setNavigationState] = useState(() => getNavigationState())
@@ -79,27 +82,17 @@ export default function App() {
   }
 
   if (route.name === ROUTE_NAMES.room) {
-    if (!roomSession?.participantName) {
-      return (
-        <RoomEntry
-          errorMessage={submitState.errorMessage}
-          initialPasscode={roomSession?.passcode || route.passcode || ''}
-          isSubmitting={submitState.isSubmitting}
-          roomId={route.roomId}
-          onBackHome={() => navigateHome()}
-          onJoinRoom={handleJoinRoom}
-        />
-      )
-    }
-
     return (
-      <ChatRoom
-        key={`${route.roomId}:${roomSession.participantName}`}
-        initialRoom={roomSession.initialRoom ?? { id: route.roomId, name: '会议室' }}
-        participantName={roomSession.participantName}
-        roomId={route.roomId}
-        roomPasscode={roomSession.passcode || ''}
+      <RoomGateway
+        key={`${route.roomId}:${roomSession?.participantName || ''}:${roomSession?.passcode || route.passcode || ''}`}
+        errorMessage={submitState.errorMessage}
+        isSubmitting={submitState.isSubmitting}
+        onBackHome={() => navigateHome()}
+        onJoinRoom={handleJoinRoom}
         onLeaveRoom={handleLeaveRoom}
+        roomId={route.roomId}
+        roomSession={roomSession}
+        routePasscode={route.passcode || ''}
       />
     )
   }

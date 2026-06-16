@@ -4,12 +4,13 @@ import {
   deleteKnowledgeDocument,
   exportRoomMinutesMarkdown,
   generateRoomMinutes,
-  getRoomActivity,
-  getMessages,
   getRoom,
+  getRoomActivity,
   getRoomKnowledge,
+  getMessages,
   uploadRoomKnowledge,
 } from '../api/roomClient'
+import { clearRoomSession, navigateHome, navigateRoom } from '../routing'
 import AgentActivityPanel from './AgentActivityPanel'
 import AgentRoster from './AgentRoster'
 import FocusTimeline from './FocusTimeline'
@@ -20,6 +21,7 @@ import MessageList from './MessageList'
 import ParticipantList from './ParticipantList'
 import ResizeHandle from './ResizeHandle'
 import { mergeActivityEvent, normalizeActivityPayload } from './agentActivity'
+import { nextRouteAfterLiveTermination } from './roomAccess'
 import '../chat-room.css'
 
 const ROOM_SNAPSHOT_EVENT = 'room_snapshot'
@@ -29,6 +31,8 @@ const PARTICIPANT_LEFT_EVENT = 'participant_left'
 const ERROR_EVENT = 'error'
 const FOCUS_UPDATE_EVENT = 'focus_update'
 const AGENT_ACTIVITY_EVENT = 'agent_activity'
+const ROOM_CLOSED_EVENT = 'room_closed'
+const ROOM_ARCHIVED_EVENT = 'room_archived'
 
 export default function ChatRoom({ initialRoom, participantName, roomId, roomPasscode, onLeaveRoom }) {
   const [room, setRoom] = useState(initialRoom)
@@ -43,14 +47,65 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
   const [activityLoading, setActivityLoading] = useState(true)
   const [activityError, setActivityError] = useState('')
   const [focusPoints, setFocusPoints] = useState([])
+  const [selfParticipantID, setSelfParticipantID] = useState('')
+  const [transferTargetID, setTransferTargetID] = useState('')
   const [leftPanelWidth, setLeftPanelWidth] = useState(270)
   const [rightPanelWidth, setRightPanelWidth] = useState(320)
   const socketRef = useRef(null)
+  const terminatedRef = useRef(false)
   const insertMentionRef = useRef(() => {})
   const messageListRef = useRef(null)
+  const transferableParticipants = participants.filter((participant) => participant.id !== selfParticipantID)
+  const ownerParticipant = participants.find((participant) => participant.id === room.ownerParticipantID)
+  const isOwner = Boolean(selfParticipantID && room.ownerParticipantID === selfParticipantID)
+
+  useEffect(() => {
+    if (!transferableParticipants.some((participant) => participant.id === transferTargetID)) {
+      setTransferTargetID(transferableParticipants[0]?.id || '')
+    }
+  }, [transferTargetID, transferableParticipants])
+
+  const closeCurrentSocket = useCallback(() => {
+    const socket = socketRef.current
+    socketRef.current = null
+
+    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+      socket.close()
+    }
+  }, [])
+
+  const handleLiveTermination = useCallback(
+    (status, nextRoom = null) => {
+      terminatedRef.current = true
+      setConnectionState('disconnected')
+      clearRoomSession(roomId)
+
+      const nextRoute = nextRouteAfterLiveTermination({
+        status,
+        roomId,
+        passcode: roomPasscode,
+      })
+
+      if (nextRoute.route === 'room') {
+        navigateRoom(
+          roomId,
+          {
+            initialRoom: nextRoom,
+            passcode: roomPasscode,
+          },
+          { replace: true },
+        )
+        return
+      }
+
+      navigateHome({ replace: true })
+    },
+    [roomId, roomPasscode],
+  )
 
   useEffect(() => {
     let isCurrent = true
+    terminatedRef.current = false
 
     const handleServerEvent = (event) => {
       switch (event.type) {
@@ -58,9 +113,13 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
           if (event.room) {
             setRoom(event.room)
           }
+          if (event.participantID) {
+            setSelfParticipantID(event.participantID)
+          }
           setParticipants(event.participants ?? [])
           setAgents(event.agents ?? [])
           setMessages(event.messages ?? [])
+          setErrorMessage('')
           return
         case PARTICIPANT_JOINED_EVENT:
           if (event.participant) {
@@ -97,6 +156,22 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
               }
             }
           }
+          return
+        case ROOM_CLOSED_EVENT:
+          if (event.room) {
+            setRoom(event.room)
+          }
+          setThinkingAgents([])
+          closeCurrentSocket()
+          handleLiveTermination('closed', event.room || null)
+          return
+        case ROOM_ARCHIVED_EVENT:
+          if (event.room) {
+            setRoom(event.room)
+          }
+          setThinkingAgents([])
+          closeCurrentSocket()
+          handleLiveTermination('archived', event.room || null)
           return
         case ERROR_EVENT:
           setErrorMessage(event.error || '房间返回了一条错误消息。')
@@ -187,6 +262,9 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
         }
 
         socketRef.current = null
+        if (terminatedRef.current) {
+          return
+        }
         setConnectionState('disconnected')
       })
     }
@@ -195,15 +273,9 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
 
     return () => {
       isCurrent = false
-
-      const socket = socketRef.current
-      socketRef.current = null
-
-      if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-        socket.close()
-      }
+      closeCurrentSocket()
     }
-  }, [participantName, roomId, roomPasscode])
+  }, [closeCurrentSocket, handleLiveTermination, participantName, roomId, roomPasscode])
 
   useEffect(() => {
     const listEl = messageListRef.current
@@ -235,6 +307,41 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
     return true
   }
 
+  const sendRoomControlEvent = (payload) => {
+    const socket = socketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setErrorMessage('请在连接恢复后再操作会议。')
+      return false
+    }
+
+    socket.send(JSON.stringify(payload))
+    setErrorMessage('')
+    return true
+  }
+
+  const handleCloseRoom = () => {
+    if (!isOwner) {
+      return
+    }
+
+    if (!window.confirm('确认要关闭会议吗？关闭后只能只读查看历史。')) {
+      return
+    }
+
+    sendRoomControlEvent({ type: 'close_room' })
+  }
+
+  const handleTransferOwner = () => {
+    if (!isOwner || !transferTargetID) {
+      return
+    }
+
+    sendRoomControlEvent({
+      type: 'transfer_owner',
+      participantID: transferTargetID,
+    })
+  }
+
   const handleInsertMention = (mention) => {
     insertMentionRef.current?.(mention)
   }
@@ -260,7 +367,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
             <div className="chat-topbar-subtitle">
               <span className={`status-dot status-dot--${connectionState}`} />
               <span>{labelForConnectionState(connectionState)}</span>
-              <span>房间 ID：{roomId}</span>
+              <span>{`房间 ID：${roomId}`}</span>
               <span title={descriptionForDialogueMode(room.dialoguePolicy?.mode)}>
                 {`Agent 模式：${labelForDialogueMode(room.dialoguePolicy?.mode)}`}
               </span>
@@ -268,7 +375,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
           </div>
         </div>
         <div className="chat-topbar-actions">
-          <span className="chat-identity">以 {participantName} 加入</span>
+          <span className="chat-identity">{`以 ${participantName} 加入`}</span>
           <button className="button button--secondary button--compact" type="button" onClick={handleCopyRoomID}>
             {copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制房间 ID'}
           </button>
@@ -302,10 +409,64 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
               </div>
               <div className="context-item">
                 <span>参会角色</span>
-                <strong>{participants.length} 人 / {agents.length} 个 Agent</strong>
+                <strong>{`${participants.length} 人 / ${agents.length} 个 Agent`}</strong>
               </div>
             </div>
           </section>
+
+          <section className="sidebar-section meeting-owner-panel">
+            <div className="sidebar-header">
+              <h2>会议控制</h2>
+              {isOwner ? <span className="meeting-owner-badge">房主</span> : null}
+            </div>
+            <div className="context-list">
+              <div className="context-item">
+                <span>当前房主</span>
+                <strong>{ownerParticipant?.name || (isOwner ? participantName : '暂无')}</strong>
+              </div>
+            </div>
+            <p className="sidebar-note">
+              {isOwner
+                ? '你可以关闭会议，或把房主权限转交给其他在线参会者。'
+                : `当前由 ${ownerParticipant?.name || '其他成员'} 拥有关闭会议与转交权限。`}
+            </p>
+            {isOwner ? (
+              <div className="meeting-owner-actions">
+                <select
+                  className="text-input meeting-owner-select"
+                  value={transferTargetID}
+                  onChange={(event) => setTransferTargetID(event.target.value)}
+                  disabled={connectionState !== 'connected' || transferableParticipants.length === 0}
+                >
+                  <option value="">选择新的房主</option>
+                  {transferableParticipants.map((participant) => (
+                    <option key={participant.id} value={participant.id}>
+                      {participant.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="meeting-owner-action-row">
+                  <button
+                    className="button button--secondary button--compact"
+                    type="button"
+                    onClick={handleTransferOwner}
+                    disabled={connectionState !== 'connected' || !transferTargetID}
+                  >
+                    转交房主
+                  </button>
+                  <button
+                    className="button button--danger button--compact"
+                    type="button"
+                    onClick={handleCloseRoom}
+                    disabled={connectionState !== 'connected'}
+                  >
+                    关闭会议
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+
           <ParticipantList participants={participants} />
           <MeetingMinutesPanel
             agents={agents}
@@ -342,7 +503,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
               <h2>会议记录与决策流</h2>
             </div>
             <div className="conversation-toolbar">
-              <span>{messages.length} 条消息</span>
+              <span>{`${messages.length} 条消息`}</span>
               <span>{thinkingAgents.length > 0 ? `${thinkingAgents.length} 个 Agent 正在思考` : '等待讨论'}</span>
             </div>
           </div>
@@ -352,7 +513,12 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
             messages={messages}
             thinkingAgents={thinkingAgents}
           />
-          <MessageComposer agents={agents} disabled={connectionState !== 'connected'} onInsertMentionRef={insertMentionRef} onSend={handleSendMessage} />
+          <MessageComposer
+            agents={agents}
+            disabled={connectionState !== 'connected'}
+            onInsertMentionRef={insertMentionRef}
+            onSend={handleSendMessage}
+          />
         </section>
 
         <ResizeHandle

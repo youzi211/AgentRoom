@@ -222,6 +222,7 @@ func (s *MySQLStore) CreateRoom(ctx context.Context, input store.CreateRoomInput
 		HasPasscode:    input.PasscodeHash != "",
 		PasscodeHash:   input.PasscodeHash,
 		DialoguePolicy: input.DialoguePolicy.WithDefaults(),
+		Status:         model.RoomStatusActive,
 	}
 	return meta, input.Agents, nil
 }
@@ -265,7 +266,7 @@ func (s *MySQLStore) ListRooms(ctx context.Context, query store.ListRoomsQuery) 
 
 	q := s.db.WithContext(ctx).Model(&RoomModel{})
 	switch query.Status {
-	case model.RoomStatusActive, model.RoomStatusArchived:
+	case model.RoomStatusActive, model.RoomStatusClosed, model.RoomStatusArchived:
 		q = q.Where("status = ?", query.Status)
 	}
 
@@ -305,33 +306,41 @@ func (s *MySQLStore) ListRooms(ctx context.Context, query store.ListRoomsQuery) 
 	for i, r := range rooms {
 		stat := statByRoom[r.ID]
 		summaries[i] = model.RoomSummary{
-			ID:            r.ID,
-			Name:          r.Name,
-			Status:        r.Status,
-			HasPasscode:   r.PasscodeHash != "",
-			CreatedAt:     r.CreatedAt,
-			ArchivedAt:    r.ArchivedAt,
-			MessageCount:  stat.Total,
-			LastMessageAt: stat.LastAt,
+			ID:                  r.ID,
+			Name:                r.Name,
+			Status:              r.Status,
+			HasPasscode:         r.PasscodeHash != "",
+			CreatedAt:           r.CreatedAt,
+			OwnerParticipantID:  strPtrDeref(r.OwnerParticipantID),
+			ClosedAt:            r.ClosedAt,
+			ClosedReason:        r.ClosedReason,
+			AutoCloseDeadlineAt: r.AutoCloseDeadlineAt,
+			ArchivedAt:          r.ArchivedAt,
+			MessageCount:        stat.Total,
+			LastMessageAt:       stat.LastAt,
 		}
 	}
 	return summaries, nil
 }
 
-func (s *MySQLStore) SetRoomStatus(ctx context.Context, roomID string, status string, archivedAt *time.Time) error {
+func (s *MySQLStore) UpdateRoomLifecycle(ctx context.Context, input store.UpdateRoomLifecycleInput) error {
 	result := s.db.WithContext(ctx).
 		Model(&RoomModel{}).
-		Where("id = ?", roomID).
+		Where("id = ?", input.RoomID).
 		Updates(map[string]interface{}{
-			"status":      status,
-			"archived_at": archivedAt,
-			"updated_at":  time.Now().UTC(),
+			"status":                 input.Status,
+			"owner_participant_id":   nilIfEmpty(input.OwnerParticipantID),
+			"closed_at":              input.ClosedAt,
+			"closed_reason":          input.ClosedReason,
+			"auto_close_deadline_at": input.AutoCloseDeadlineAt,
+			"archived_at":            input.ArchivedAt,
+			"updated_at":             time.Now().UTC(),
 		})
 	if result.Error != nil {
-		return fmt.Errorf("set room status: %w", result.Error)
+		return fmt.Errorf("update room lifecycle: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("room %s not found", roomID)
+		return fmt.Errorf("room %s not found", input.RoomID)
 	}
 	return nil
 }
@@ -459,13 +468,7 @@ func (s *MySQLStore) AddMessage(ctx context.Context, message model.Message) (mod
 }
 
 func (s *MySQLStore) ListMessages(ctx context.Context, query store.ListMessagesQuery) ([]model.Message, error) {
-	limit := query.Limit
-	if limit <= 0 {
-		limit = 100
-	}
-	if limit > 500 {
-		limit = 500
-	}
+	limit := normalizedMessageLimit(query.Limit)
 
 	q := s.db.WithContext(ctx).
 		Where("room_id = ?", query.RoomID)
@@ -488,6 +491,49 @@ func (s *MySQLStore) ListMessages(ctx context.Context, query store.ListMessagesQ
 		messages[i] = m.toDomain()
 	}
 	return messages, nil
+}
+
+func (s *MySQLStore) ListMessagesPage(ctx context.Context, query store.ListMessagesQuery) (store.MessagePage, error) {
+	limit := normalizedMessageLimit(query.Limit)
+	base := s.db.WithContext(ctx).Where("room_id = ?", query.RoomID)
+
+	if query.Before != "" {
+		var cursor MessageModel
+		if err := s.db.WithContext(ctx).
+			Select("id, room_id, created_at").
+			Where("id = ?", query.Before).
+			First(&cursor).Error; err != nil {
+			return store.MessagePage{}, store.ErrInvalidMessageCursor
+		}
+		if cursor.RoomID != query.RoomID {
+			return store.MessagePage{}, store.ErrInvalidMessageCursor
+		}
+		base = base.Where("(created_at, id) < (?, ?)", cursor.CreatedAt, cursor.ID)
+	}
+
+	var models []MessageModel
+	if err := base.Order("created_at DESC, id DESC").Limit(limit + 1).Find(&models).Error; err != nil {
+		return store.MessagePage{}, fmt.Errorf("list messages page: %w", err)
+	}
+
+	hasMore := len(models) > limit
+	if hasMore {
+		models = models[:limit]
+	}
+
+	messages := make([]model.Message, len(models))
+	for i, m := range models {
+		messages[len(models)-1-i] = m.toDomain()
+	}
+
+	page := store.MessagePage{
+		Messages: messages,
+		HasMore:  hasMore,
+	}
+	if hasMore && len(messages) > 0 {
+		page.NextBefore = messages[0].ID
+	}
+	return page, nil
 }
 
 // ── Agent runs ───────────────────────────────────────────────────────
@@ -674,6 +720,16 @@ func normalizedRunLimit(limit int) int {
 	}
 	if limit > 100 {
 		return 100
+	}
+	return limit
+}
+
+func normalizedMessageLimit(limit int) int {
+	if limit <= 0 {
+		return 100
+	}
+	if limit > 500 {
+		return 500
 	}
 	return limit
 }
