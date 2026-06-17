@@ -126,6 +126,79 @@ func TestRunnerPromptIncludesStructuredMeetingContext(t *testing.T) {
 	}
 }
 
+func TestRunnerPromptLabelsKnowledgeSources(t *testing.T) {
+	llmClient := &recordingLLM{}
+	knowledge := &recordingKnowledgeProvider{
+		chunks: []model.KnowledgeChunk{
+			{
+				ID:           "room_chunk",
+				DocumentID:   "doc_room",
+				DocumentName: "roadmap.md",
+				Scope:        model.KnowledgeScopeRoom,
+				ScopeID:      "room_1",
+				ChunkIndex:   0,
+				Content:      "Room launch date is July.",
+			},
+			{
+				ID:           "agent_chunk",
+				DocumentID:   "doc_agent",
+				DocumentName: "qa-playbook.md",
+				Scope:        model.KnowledgeScopeAgent,
+				ScopeID:      "builder",
+				ChunkIndex:   1,
+				Content:      "Builder should highlight rollback risk.",
+			},
+		},
+	}
+	runner := agent.NewRunner(llmClient, &teststore.Store{}).WithKnowledge(knowledge)
+	now := time.Now().UTC()
+
+	room := &runtimeRoom{
+		meta: model.RoomMeta{
+			ID:             "room_1",
+			Name:           "Planning",
+			CreatedAt:      now,
+			DialoguePolicy: model.DefaultDialoguePolicy(),
+		},
+		participants: []model.Participant{{ID: "human_1", Name: "Alice", JoinedAt: now}},
+		agents: []model.Agent{
+			{
+				ID:           "builder",
+				Name:         "Builder",
+				Mention:      "@Builder",
+				Role:         "Backend Engineer",
+				Description:  "Turns requirements into backend changes.",
+				SystemPrompt: "You are a pragmatic builder.",
+				Enabled:      true,
+			},
+		},
+		messages: []model.Message{
+			{
+				ID:         "msg_human_1",
+				RoomID:     "room_1",
+				SenderID:   "human_1",
+				SenderName: "Alice",
+				SenderType: model.SenderTypeHuman,
+				Content:    "@Builder please summarize the launch risks.",
+				CreatedAt:  now,
+			},
+		},
+	}
+
+	runner.HandleHumanMessage(context.Background(), room, room.messages[0])
+
+	if len(llmClient.messages) != 2 {
+		t.Fatalf("expected system and user chat messages, got %#v", llmClient.messages)
+	}
+	userPrompt := llmClient.messages[1].Content
+	assertContainsAll(t, userPrompt,
+		"[room: roadmap.md #1]",
+		"Room launch date is July.",
+		"[agent: qa-playbook.md #2]",
+		"Builder should highlight rollback risk.",
+	)
+}
+
 func TestGuidedDialoguePromptTracksImmediateAndRootTriggers(t *testing.T) {
 	llmClient := &sequenceLLM{
 		responses: []string{

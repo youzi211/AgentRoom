@@ -19,7 +19,8 @@ It is built for teams that want a practical bridge between live discussion and A
 ## Why AgentRoom
 
 - **Live multi-agent meetings**: create rooms, choose the right participants, and explicitly trigger Agents with `@mentions`.
-- **Knowledge-aware responses**: attach Markdown knowledge to a room or to a specific Agent before the meeting starts.
+- **Knowledge-aware responses**: attach Markdown knowledge to a room or to a specific Agent before the meeting starts, with retrieved source chips shown under Agent replies.
+- **Role templates and role sets**: create Agents from predefined meeting roles, then use role-set shortcuts when starting a room.
 - **Two dialogue policies**: use `mention_fanout` for direct replies or `guided_dialogue` for bounded multi-turn collaboration.
 - **Persistent records**: store rooms, participants, messages, dialogue runs, agent runs, and knowledge metadata in MySQL.
 - **Focus and activity tracking**: surface extracted focus items and recent agent activity next to the live discussion.
@@ -46,6 +47,8 @@ The current repository already includes:
 - Automatic schema migration when `DB_AUTO_MIGRATE=true`.
 - OpenAI-compatible agent responses through `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`.
 - Room-level and agent-level Markdown knowledge upload APIs.
+- Deterministic knowledge provenance on Agent messages through compact source chips.
+- Static Agent role templates and meeting role-set shortcuts built on the existing Agent configuration flow.
 - WebSocket live room updates under `/api/rooms/:roomID/ws`.
 - Owner transfer and live room close events over WebSocket.
 - Agent activity history under `/api/rooms/:roomID/activity` plus live `agent_activity` events.

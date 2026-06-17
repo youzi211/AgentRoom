@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ type recordingLLM struct {
 
 func (c *recordingLLM) Complete(_ context.Context, messages []llm.ChatMessage) (string, error) {
 	c.messages = append([]llm.ChatMessage(nil), messages...)
-	return "基于知识库回答。", nil
+	return "Knowledge-backed answer.", nil
 }
 
 type runtimeRoom struct {
@@ -78,10 +79,10 @@ func TestRunnerIncludesRoomAndAgentKnowledgeInPrompt(t *testing.T) {
 	room := &runtimeRoom{
 		meta: model.RoomMeta{ID: "room_1", Name: "Planning", CreatedAt: time.Now().UTC()},
 		agents: []model.Agent{
-			{ID: "agent_1", Name: "产品经理", Mention: "@产品经理", Role: "Product Manager", SystemPrompt: "You are PM.", Enabled: true},
+			{ID: "agent_1", Name: "Product Manager", Mention: "@Product", Role: "Product Manager", SystemPrompt: "You are PM.", Enabled: true},
 		},
 		messages: []model.Message{
-			{ID: "msg_1", RoomID: "room_1", SenderID: "human_1", SenderName: "Alice", SenderType: model.SenderTypeHuman, Content: "@产品经理 这次发布有什么风险？", CreatedAt: time.Now().UTC()},
+			{ID: "msg_1", RoomID: "room_1", SenderID: "human_1", SenderName: "Alice", SenderType: model.SenderTypeHuman, Content: "@Product what are the launch risks?", CreatedAt: time.Now().UTC()},
 		},
 	}
 
@@ -96,6 +97,45 @@ func TestRunnerIncludesRoomAndAgentKnowledgeInPrompt(t *testing.T) {
 	}
 	if !strings.Contains(userPrompt, "Product agent should discuss roadmap risk.") {
 		t.Fatalf("expected agent knowledge in prompt, got %q", userPrompt)
+	}
+}
+
+func TestRunnerPersistsKnowledgeSourcesOnAgentMessage(t *testing.T) {
+	llmClient := &recordingLLM{}
+	store := &teststore.Store{
+		Chunks: []model.KnowledgeChunk{
+			{ID: "room_chunk", DocumentID: "doc_room", DocumentName: "roadmap.md", Scope: model.KnowledgeScopeRoom, ScopeID: "room_1", Content: "Room launch date is July."},
+			{ID: "agent_chunk", DocumentID: "doc_agent", DocumentName: "qa-playbook.md", Scope: model.KnowledgeScopeAgent, ScopeID: "agent_1", Content: "QA should highlight rollback risk."},
+			{ID: "agent_chunk_2", DocumentID: "doc_agent", DocumentName: "qa-playbook.md", Scope: model.KnowledgeScopeAgent, ScopeID: "agent_1", Content: "Duplicate document chunk."},
+		},
+	}
+	runner := agent.NewRunner(llmClient, store).WithKnowledge(testKnowledgeProvider{store: store})
+	room := &runtimeRoom{
+		meta: model.RoomMeta{ID: "room_1", Name: "Planning", CreatedAt: time.Now().UTC()},
+		agents: []model.Agent{
+			{ID: "agent_1", Name: "Product Manager", Mention: "@Product", Role: "Product Manager", SystemPrompt: "You are PM.", Enabled: true},
+		},
+		messages: []model.Message{
+			{ID: "msg_1", RoomID: "room_1", SenderID: "human_1", SenderName: "Alice", SenderType: model.SenderTypeHuman, Content: "@Product what are the launch risks?", CreatedAt: time.Now().UTC()},
+		},
+	}
+
+	runner.HandleHumanMessage(context.Background(), room, room.messages[0])
+
+	messages := store.RoomMessages["room_1"]
+	if len(messages) != 1 {
+		t.Fatalf("expected one persisted agent message, got %#v", messages)
+	}
+	got := messages[0]
+	if got.SenderType != model.SenderTypeAgent {
+		t.Fatalf("expected agent message, got %#v", got)
+	}
+	want := []model.MessageKnowledgeSource{
+		{DocumentID: "doc_room", DocumentName: "roadmap.md", Scope: model.KnowledgeScopeRoom},
+		{DocumentID: "doc_agent", DocumentName: "qa-playbook.md", Scope: model.KnowledgeScopeAgent},
+	}
+	if !reflect.DeepEqual(got.KnowledgeSources, want) {
+		t.Fatalf("expected knowledge sources %#v, got %#v", want, got.KnowledgeSources)
 	}
 }
 

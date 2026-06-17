@@ -900,6 +900,37 @@
   text-align: center;
 }
 
+.message-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.message-sources-label {
+  font-weight: 800;
+}
+
+.message-source-chip {
+  display: inline-flex;
+  max-width: 14rem;
+  min-height: 22px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(47, 102, 87, 0.16);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--accent-strong);
+  padding: 2px 8px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .typing-dot {
   display: inline-block;
   width: 5px;

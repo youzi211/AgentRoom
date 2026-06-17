@@ -132,26 +132,34 @@ type KnowledgeDocument struct {
 }
 
 type KnowledgeChunk struct {
-	ID         string    `json:"id"`
-	DocumentID string    `json:"documentId"`
-	Scope      string    `json:"scope"`
-	ScopeID    string    `json:"scopeId"`
-	ChunkIndex int       `json:"chunkIndex"`
-	Content    string    `json:"content"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID           string    `json:"id"`
+	DocumentID   string    `json:"documentId"`
+	DocumentName string    `json:"documentName,omitempty"`
+	Scope        string    `json:"scope"`
+	ScopeID      string    `json:"scopeId"`
+	ChunkIndex   int       `json:"chunkIndex"`
+	Content      string    `json:"content"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
+type MessageKnowledgeSource struct {
+	DocumentID   string `json:"documentId"`
+	DocumentName string `json:"documentName"`
+	Scope        string `json:"scope"`
 }
 
 type Message struct {
-	ID              string    `json:"id"`
-	RoomID          string    `json:"roomID"`
-	SenderID        string    `json:"senderID"`
-	SenderName      string    `json:"senderName"`
-	SenderType      string    `json:"senderType"`
-	Content         string    `json:"content"`
-	CreatedAt       time.Time `json:"createdAt"`
-	DialogueRunID   string    `json:"dialogueRunID,omitempty"`
-	TurnIndex       int       `json:"turnIndex,omitempty"`
-	ParentMessageID string    `json:"parentMessageID,omitempty"`
+	ID               string                   `json:"id"`
+	RoomID           string                   `json:"roomID"`
+	SenderID         string                   `json:"senderID"`
+	SenderName       string                   `json:"senderName"`
+	SenderType       string                   `json:"senderType"`
+	Content          string                   `json:"content"`
+	CreatedAt        time.Time                `json:"createdAt"`
+	DialogueRunID    string                   `json:"dialogueRunID,omitempty"`
+	TurnIndex        int                      `json:"turnIndex,omitempty"`
+	ParentMessageID  string                   `json:"parentMessageID,omitempty"`
+	KnowledgeSources []MessageKnowledgeSource `json:"knowledgeSources,omitempty"`
 }
 
 type FocusPoint struct {

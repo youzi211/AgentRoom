@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"agentroom/backend/internal/agent"
 	"agentroom/backend/internal/api/contracts"
 	"agentroom/backend/internal/service"
 	"agentroom/backend/internal/store"
@@ -33,6 +34,39 @@ func (s *Server) handleHealth(c *gin.Context) {
 
 func (s *Server) handleAgents(c *gin.Context) {
 	c.JSON(http.StatusOK, contracts.AgentsResponse{Agents: s.roomQueries.Agents()})
+}
+
+func (s *Server) handleAgentTemplates(c *gin.Context) {
+	templates := agent.RoleTemplates()
+	response := contracts.AgentTemplatesResponse{
+		Templates: make([]contracts.RoleTemplate, 0, len(templates)),
+	}
+	for _, template := range templates {
+		response.Templates = append(response.Templates, contracts.RoleTemplate{
+			ID:           template.ID,
+			Name:         template.Name,
+			Role:         template.Role,
+			Description:  template.Description,
+			SystemPrompt: template.SystemPrompt,
+		})
+	}
+	c.JSON(http.StatusOK, response)
+}
+
+func (s *Server) handleAgentRoleSets(c *gin.Context) {
+	roleSets := agent.RoleSets()
+	response := contracts.AgentRoleSetsResponse{
+		RoleSets: make([]contracts.RoleSet, 0, len(roleSets)),
+	}
+	for _, roleSet := range roleSets {
+		response.RoleSets = append(response.RoleSets, contracts.RoleSet{
+			ID:          roleSet.ID,
+			Name:        roleSet.Name,
+			Description: roleSet.Description,
+			TemplateIDs: append([]string(nil), roleSet.TemplateIDs...),
+		})
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 func (s *Server) handleUpdateAgent(c *gin.Context) {

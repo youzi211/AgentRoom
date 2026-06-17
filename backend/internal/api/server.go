@@ -123,6 +123,8 @@ func (s *Server) registerAPIRoutes(routes gin.IRoutes) {
 	routes.GET("/rooms/:roomID/minutes/history", s.requireAdmin, s.handleListMinutes)
 	routes.PUT("/rooms/:roomID/minutes", s.requireAdmin, s.handleSaveMinutes)
 	routes.GET("/agents", s.handleAgents)
+	routes.GET("/agent-templates", s.handleAgentTemplates)
+	routes.GET("/agent-role-sets", s.handleAgentRoleSets)
 	routes.POST("/agents", s.requireAdmin, s.handleCreateAgent)
 	routes.PUT("/agents/:agentID", s.requireAdmin, s.handleUpdateAgent)
 	routes.DELETE("/agents/:agentID", s.requireAdmin, s.handleDeleteAgent)

@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getAgents } from '../api/roomClient'
+import { getAgentRoleSets, getAgents } from '../api/roomClient'
+
+const TEMPLATE_AGENT_MATCHERS = {
+  product_manager: ['pm', '产品经理', 'Product Manager'],
+  architect: ['architect', '架构师', 'Architect'],
+  qa_reviewer: ['qa', '质量评审', 'QA Reviewer'],
+  risk_reviewer: ['risk', '风险评审', 'Risk Reviewer'],
+  meeting_scribe: ['secretary', '会议纪要', 'Meeting Scribe'],
+}
 
 function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOpenAgentAdmin }) {
   const [createDisplayName, setCreateDisplayName] = useState('')
@@ -10,6 +18,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
   const [dialogueMode, setDialogueMode] = useState('mention_fanout')
   const [joinPasscode, setJoinPasscode] = useState('')
   const [availableAgents, setAvailableAgents] = useState([])
+  const [roleSets, setRoleSets] = useState([])
   const [selectedAgentIds, setSelectedAgentIds] = useState(new Set())
 
   const trimmedCreateDisplayName = createDisplayName.trim()
@@ -27,12 +36,13 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
     let isCurrent = true
     const loadAgents = async () => {
       try {
-        const response = await getAgents()
+        const [response, roleSetResponse] = await Promise.all([getAgents(), getAgentRoleSets()])
         if (!isCurrent) {
           return
         }
         const enabledAgents = (response.agents ?? []).filter((agent) => agent.enabled !== false)
         setAvailableAgents(enabledAgents)
+        setRoleSets(roleSetResponse.roleSets ?? [])
         setSelectedAgentIds(new Set(enabledAgents.map((agent) => agent.id)))
       } catch {
         // Keep the room entry flow available even when the roster cannot be loaded.
@@ -62,6 +72,17 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
 
   const handleDeselectAll = () => {
     setSelectedAgentIds(new Set())
+  }
+
+  const handleApplyRoleSet = (roleSet) => {
+    const templateIDs = roleSet.templateIDs ?? []
+    const next = new Set()
+    for (const agent of availableAgents) {
+      if (templateIDs.some((templateID) => matchesTemplate(agent, templateID))) {
+        next.add(agent.id)
+      }
+    }
+    setSelectedAgentIds(next)
   }
 
   const handleCreateRoom = async (event) => {
@@ -212,6 +233,22 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
                     </button>
                   </div>
                 </div>
+                {roleSets.length > 0 ? (
+                  <div className="role-set-shortcuts" aria-label="推荐角色组">
+                    {roleSets.map((roleSet) => (
+                      <button
+                        className="role-set-button"
+                        type="button"
+                        key={roleSet.id}
+                        onClick={() => handleApplyRoleSet(roleSet)}
+                        disabled={isSubmitting}
+                      >
+                        <strong>{roleSet.name}</strong>
+                        <span>{roleSet.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="agent-chip-grid">
                   {availableAgents.map((agent) => {
                     const checked = selectedAgentIds.has(agent.id)
@@ -321,6 +358,11 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
       </div>
     </main>
   )
+}
+
+function matchesTemplate(agent, templateID) {
+  const matchers = TEMPLATE_AGENT_MATCHERS[templateID] ?? [templateID]
+  return matchers.some((matcher) => agent.id === matcher || agent.name === matcher || agent.role === matcher)
 }
 
 export default JoinScreen

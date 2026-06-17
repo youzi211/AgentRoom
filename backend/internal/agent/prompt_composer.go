@@ -186,12 +186,26 @@ func formatKnowledgeBlock(chunks []model.KnowledgeChunk) string {
 
 	for _, chunk := range chunks {
 		builder.WriteString("- [")
-		builder.WriteString(chunk.Scope)
+		builder.WriteString(formatKnowledgeSourceLabel(chunk))
 		builder.WriteString("] ")
 		builder.WriteString(chunk.Content)
 		builder.WriteString("\n")
 	}
 	return strings.TrimRight(builder.String(), "\n")
+}
+
+func formatKnowledgeSourceLabel(chunk model.KnowledgeChunk) string {
+	label := strings.TrimSpace(chunk.Scope)
+	documentName := strings.TrimSpace(chunk.DocumentName)
+	if documentName == "" {
+		return label
+	}
+
+	label += ": " + documentName
+	if chunk.ChunkIndex >= 0 {
+		label += fmt.Sprintf(" #%d", chunk.ChunkIndex+1)
+	}
+	return label
 }
 
 func fixedOutputContract() string {

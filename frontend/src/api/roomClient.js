@@ -158,6 +158,16 @@ export async function getAgents() {
   return parseResponse(response)
 }
 
+export async function getAgentTemplates() {
+  const response = await fetch(`${API_BASE_PATH}/agent-templates`)
+  return parseResponse(response)
+}
+
+export async function getAgentRoleSets() {
+  const response = await fetch(`${API_BASE_PATH}/agent-role-sets`)
+  return parseResponse(response)
+}
+
 export async function updateAgent(agentId, agent) {
   const encodedAgentId = encodeURIComponent(agentId)
   const response = await fetch(`${API_BASE_PATH}/agents/${encodedAgentId}`, {

@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"encoding/json"
 	"time"
 
 	"agentroom/backend/internal/model"
@@ -82,16 +83,17 @@ func (ParticipantModel) TableName() string { return "participants" }
 
 // MessageModel maps to the `messages` table.
 type MessageModel struct {
-	ID              string    `gorm:"primaryKey;size:64;index:idx_messages_room_created"`
-	RoomID          string    `gorm:"size:64;not null;index:idx_messages_room_created"`
-	SenderID        string    `gorm:"size:64;not null"`
-	SenderName      string    `gorm:"size:128;not null"`
-	SenderType      string    `gorm:"size:32;not null"`
-	Content         string    `gorm:"type:text;not null"`
-	DialogueRunID   string    `gorm:"column:dialogue_run_id;size:64;index:idx_messages_dialogue_run"`
-	TurnIndex       int       `gorm:"column:turn_index;not null;default:0"`
-	ParentMessageID string    `gorm:"column:parent_message_id;size:64"`
-	CreatedAt       time.Time `gorm:"not null;index:idx_messages_room_created"`
+	ID                   string    `gorm:"primaryKey;size:64;index:idx_messages_room_created"`
+	RoomID               string    `gorm:"size:64;not null;index:idx_messages_room_created"`
+	SenderID             string    `gorm:"size:64;not null"`
+	SenderName           string    `gorm:"size:128;not null"`
+	SenderType           string    `gorm:"size:32;not null"`
+	Content              string    `gorm:"type:text;not null"`
+	DialogueRunID        string    `gorm:"column:dialogue_run_id;size:64;index:idx_messages_dialogue_run"`
+	TurnIndex            int       `gorm:"column:turn_index;not null;default:0"`
+	ParentMessageID      string    `gorm:"column:parent_message_id;size:64"`
+	KnowledgeSourcesJSON string    `gorm:"column:knowledge_sources_json;type:text"`
+	CreatedAt            time.Time `gorm:"not null;index:idx_messages_room_created"`
 }
 
 func (MessageModel) TableName() string { return "messages" }
@@ -216,16 +218,17 @@ func participantToModel(input store.AddParticipantInput) ParticipantModel {
 
 func messageToModel(msg model.Message) MessageModel {
 	return MessageModel{
-		ID:              msg.ID,
-		RoomID:          msg.RoomID,
-		SenderID:        msg.SenderID,
-		SenderName:      msg.SenderName,
-		SenderType:      msg.SenderType,
-		Content:         msg.Content,
-		DialogueRunID:   msg.DialogueRunID,
-		TurnIndex:       msg.TurnIndex,
-		ParentMessageID: msg.ParentMessageID,
-		CreatedAt:       msg.CreatedAt,
+		ID:                   msg.ID,
+		RoomID:               msg.RoomID,
+		SenderID:             msg.SenderID,
+		SenderName:           msg.SenderName,
+		SenderType:           msg.SenderType,
+		Content:              msg.Content,
+		DialogueRunID:        msg.DialogueRunID,
+		TurnIndex:            msg.TurnIndex,
+		ParentMessageID:      msg.ParentMessageID,
+		KnowledgeSourcesJSON: encodeMessageKnowledgeSources(msg.KnowledgeSources),
+		CreatedAt:            msg.CreatedAt,
 	}
 }
 
@@ -324,16 +327,17 @@ func (m ParticipantModel) toDomain() model.Participant {
 
 func (m MessageModel) toDomain() model.Message {
 	return model.Message{
-		ID:              m.ID,
-		RoomID:          m.RoomID,
-		SenderID:        m.SenderID,
-		SenderName:      m.SenderName,
-		SenderType:      m.SenderType,
-		Content:         m.Content,
-		DialogueRunID:   m.DialogueRunID,
-		TurnIndex:       m.TurnIndex,
-		ParentMessageID: m.ParentMessageID,
-		CreatedAt:       m.CreatedAt,
+		ID:               m.ID,
+		RoomID:           m.RoomID,
+		SenderID:         m.SenderID,
+		SenderName:       m.SenderName,
+		SenderType:       m.SenderType,
+		Content:          m.Content,
+		DialogueRunID:    m.DialogueRunID,
+		TurnIndex:        m.TurnIndex,
+		ParentMessageID:  m.ParentMessageID,
+		KnowledgeSources: decodeMessageKnowledgeSources(m.KnowledgeSourcesJSON),
+		CreatedAt:        m.CreatedAt,
 	}
 }
 
@@ -448,4 +452,26 @@ func strPtrDeref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func encodeMessageKnowledgeSources(sources []model.MessageKnowledgeSource) string {
+	if len(sources) == 0 {
+		return ""
+	}
+	payload, err := json.Marshal(sources)
+	if err != nil {
+		return ""
+	}
+	return string(payload)
+}
+
+func decodeMessageKnowledgeSources(payload string) []model.MessageKnowledgeSource {
+	if payload == "" {
+		return nil
+	}
+	var sources []model.MessageKnowledgeSource
+	if err := json.Unmarshal([]byte(payload), &sources); err != nil {
+		return nil
+	}
+	return sources
 }

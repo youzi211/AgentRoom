@@ -4,7 +4,9 @@ import { test } from 'node:test'
 import {
   buildCreateRoomPayload,
   clearStoredAdminKey,
+  getAgentRoleSets,
   exportRoomMinutesMarkdown,
+  getAgentTemplates,
   getMessages,
   getRoom,
   getRoomActivity,
@@ -101,6 +103,48 @@ test('room client helpers build expected payloads and headers', async () => {
     assert.equal(captured.url, '/api/rooms/room%201/reopen')
     assert.equal(captured.options.method, 'POST')
     assert.equal(captured.options.headers['X-Admin-Key'], 'secret-admin')
+
+    globalThis.fetch = async (url, options = {}) => {
+      captured = { url, options }
+      return new Response(JSON.stringify({
+        templates: [
+          { id: 'product_manager', name: '产品经理', role: 'Product Manager', description: 'Clarifies scope.', systemPrompt: 'Prompt.' },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+
+    const templates = await getAgentTemplates()
+
+    assert.equal(captured.url, '/api/agent-templates')
+    assert.deepEqual(templates, {
+      templates: [
+        { id: 'product_manager', name: '产品经理', role: 'Product Manager', description: 'Clarifies scope.', systemPrompt: 'Prompt.' },
+      ],
+    })
+
+    globalThis.fetch = async (url, options = {}) => {
+      captured = { url, options }
+      return new Response(JSON.stringify({
+        roleSets: [
+          { id: 'product_review', name: '产品评审', description: 'Review product scope.', templateIDs: ['product_manager'] },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+
+    const roleSets = await getAgentRoleSets()
+
+    assert.equal(captured.url, '/api/agent-role-sets')
+    assert.deepEqual(roleSets, {
+      roleSets: [
+        { id: 'product_review', name: '产品评审', description: 'Review product scope.', templateIDs: ['product_manager'] },
+      ],
+    })
   } finally {
     clearStoredAdminKey()
     globalThis.fetch = originalFetch

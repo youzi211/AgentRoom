@@ -196,7 +196,7 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoo
 	}
 	r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "started", "", "", nil)
 
-	response, err := r.generateResponse(ctx, currentRoom, responder, trigger)
+	response, knowledgeChunks, err := r.generateResponse(ctx, currentRoom, responder, trigger)
 	now := time.Now().UTC()
 
 	if err != nil {
@@ -217,6 +217,7 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoo
 	}
 
 	agentMsg := currentRoom.NewAgentMessage(responder, response)
+	agentMsg.KnowledgeSources = knowledgeSourcesFromChunks(knowledgeChunks)
 	savedAgentMsg := r.persistAndBroadcast(ctx, currentRoom, agentMsg)
 
 	if finishErr := r.store.FinishAgentRun(ctx, runID, "succeeded", "", now); finishErr != nil {
@@ -273,12 +274,12 @@ func (r *Runner) persistAndBroadcast(ctx context.Context, currentRoom RuntimeRoo
 	return savedMsg
 }
 
-func (r *Runner) generateResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message) (string, error) {
+func (r *Runner) generateResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message) (string, []model.KnowledgeChunk, error) {
 	knowledgeChunks := r.searchKnowledge(ctx, currentRoom, responder, trigger)
 	promptContext := NewMentionPromptContext(currentRoom, currentRoom.RecentMessages(r.contextLimit), trigger, knowledgeChunks)
 	promptMessages, err := composePromptMessages(responder, promptContext)
 	if err != nil {
-		return "", err
+		return "", knowledgeChunks, err
 	}
 
 	requestCtx, cancel := context.WithTimeout(ctx, r.timeout)
@@ -286,15 +287,15 @@ func (r *Runner) generateResponse(ctx context.Context, currentRoom RuntimeRoom, 
 
 	response, err := r.client.Complete(requestCtx, promptMessages)
 	if err != nil {
-		return "", err
+		return "", knowledgeChunks, err
 	}
 
 	cleaned, err := StripThinkBlocks(response)
 	if err != nil {
-		return "", err
+		return "", knowledgeChunks, err
 	}
 
-	return cleaned, nil
+	return cleaned, knowledgeChunks, nil
 }
 
 func (r *Runner) searchKnowledge(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message) []model.KnowledgeChunk {
@@ -324,4 +325,29 @@ func shortReason(err error) string {
 		return "unknown error"
 	}
 	return message
+}
+
+func knowledgeSourcesFromChunks(chunks []model.KnowledgeChunk) []model.MessageKnowledgeSource {
+	if len(chunks) == 0 {
+		return nil
+	}
+
+	sources := make([]model.MessageKnowledgeSource, 0, len(chunks))
+	seen := make(map[string]struct{}, len(chunks))
+	for _, chunk := range chunks {
+		if chunk.DocumentID == "" && chunk.DocumentName == "" {
+			continue
+		}
+		key := chunk.Scope + "\x00" + chunk.DocumentID + "\x00" + chunk.DocumentName
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		sources = append(sources, model.MessageKnowledgeSource{
+			DocumentID:   chunk.DocumentID,
+			DocumentName: chunk.DocumentName,
+			Scope:        chunk.Scope,
+		})
+	}
+	return sources
 }

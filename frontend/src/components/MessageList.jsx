@@ -18,6 +18,7 @@ const MessageList = forwardRef(function MessageList({ currentParticipantName, me
       <ul className="message-list" ref={ref}>
         {messages.map((message) => {
           const messageRole = roleForMessage(message, currentParticipantName)
+          const knowledgeSources = messageRole === 'agent' ? formatKnowledgeSources(message.knowledgeSources) : []
 
           return (
             <li className={`message-row message-row--${messageRole}`} key={message.id}>
@@ -37,6 +38,16 @@ const MessageList = forwardRef(function MessageList({ currentParticipantName, me
                   </time>
                 </div>
                 <p className="message-content">{message.content}</p>
+                {knowledgeSources.length > 0 ? (
+                  <div className="message-sources" aria-label="知识来源">
+                    <span className="message-sources-label">参考：</span>
+                    {knowledgeSources.map((source) => (
+                      <span className="message-source-chip" key={source}>
+                        {source}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </article>
             </li>
           )
@@ -111,6 +122,22 @@ function formatMessageTime(value) {
     minute: '2-digit',
     hour12: false,
   }).format(date)
+}
+
+function formatKnowledgeSources(sources = []) {
+  const names = []
+  const seen = new Set()
+
+  for (const source of sources) {
+    const name = source?.documentName || source?.documentId
+    if (!name || seen.has(name)) {
+      continue
+    }
+    seen.add(name)
+    names.push(name)
+  }
+
+  return names
 }
 
 export default MessageList

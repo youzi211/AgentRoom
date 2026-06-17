@@ -429,13 +429,26 @@ func (s *Store) SearchKnowledgeChunks(_ context.Context, query store.SearchKnowl
 	result := make([]model.KnowledgeChunk, 0)
 	for _, chunk := range s.Chunks {
 		if chunk.Scope == query.Scope && chunk.ScopeID == query.ScopeID {
-			result = append(result, chunk)
+			result = append(result, s.withKnowledgeDocumentName(chunk))
 		}
 	}
 	if query.Limit > 0 && len(result) > query.Limit {
 		return result[:query.Limit], nil
 	}
 	return result, nil
+}
+
+func (s *Store) withKnowledgeDocumentName(chunk model.KnowledgeChunk) model.KnowledgeChunk {
+	if chunk.DocumentName != "" {
+		return chunk
+	}
+	for _, document := range s.Documents {
+		if document.ID == chunk.DocumentID {
+			chunk.DocumentName = document.FileName
+			return chunk
+		}
+	}
+	return chunk
 }
 
 func (s *Store) listMessages(query store.ListMessagesQuery, strictCursor bool) ([]model.Message, error) {

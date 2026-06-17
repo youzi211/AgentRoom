@@ -8,8 +8,17 @@ const frontendDockerfile = readFileSync(new URL('./frontend/Dockerfile', import.
 const nginxConfig = readFileSync(new URL('./frontend/nginx.conf', import.meta.url), 'utf8')
 const envExample = readFileSync(new URL('./.env.example', import.meta.url), 'utf8')
 const readme = readFileSync(new URL('./README.md', import.meta.url), 'utf8')
+const architectureDoc = readFileSync(new URL('./docs/ARCHITECTURE.md', import.meta.url), 'utf8')
+const requirementsDoc = readFileSync(new URL('./docs/agentroom-requirements.md', import.meta.url), 'utf8')
+const persistenceDoc = readFileSync(new URL('./docs/data-persistence-design.md', import.meta.url), 'utf8')
+const trustedWorkbenchPlan = readFileSync(
+  new URL('./docs/superpowers/plans/2026-06-17-agentroom-trusted-meeting-workbench-implementation.md', import.meta.url),
+  'utf8',
+)
 const dockerUpPowerShell = readFileSync(new URL('./scripts/docker-up.ps1', import.meta.url), 'utf8')
 const dockerUpShell = readFileSync(new URL('./scripts/docker-up.sh', import.meta.url), 'utf8')
+
+const mojibakeMarkers = /锛|绠|鎴|浼|鐨|鍙|鈥|�|閿|鐞|璇|悊/
 
 test('docker compose wires v0.2 runtime services and security env', () => {
   assert.match(compose, /^\s*mysql:\s*$/m)
@@ -87,4 +96,18 @@ test('server deploy docs and env example document the public origin flow', () =>
   assert.match(readme, /BACKEND_HOST_PORT=/)
   assert.match(readme, /FRONTEND_HOST_PORT=/)
   assert.match(readme, /bash \.\/scripts\/docker-up\.sh/)
+})
+
+test('product-facing docs are readable UTF-8', () => {
+  const docs = {
+    'README.md': readme,
+    'docs/ARCHITECTURE.md': architectureDoc,
+    'docs/agentroom-requirements.md': requirementsDoc,
+    'docs/data-persistence-design.md': persistenceDoc,
+    'docs/superpowers/plans/2026-06-17-agentroom-trusted-meeting-workbench-implementation.md': trustedWorkbenchPlan,
+  }
+
+  for (const [name, source] of Object.entries(docs)) {
+    assert.doesNotMatch(source, mojibakeMarkers, `${name} should not contain mojibake markers`)
+  }
 })

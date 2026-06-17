@@ -70,18 +70,28 @@ func (s *MySQLStore) SearchKnowledgeChunks(ctx context.Context, query store.Sear
 		limit = 20
 	}
 
-	var models []KnowledgeChunkModel
+	type knowledgeChunkSearchRow struct {
+		KnowledgeChunkModel
+		DocumentName string `gorm:"column:document_name"`
+	}
+
+	var rows []knowledgeChunkSearchRow
 	if err := s.db.WithContext(ctx).
-		Where("scope = ? AND scope_id = ?", query.Scope, query.ScopeID).
-		Order("created_at DESC, chunk_index ASC").
+		Table("knowledge_chunks AS c").
+		Select("c.*, d.file_name AS document_name").
+		Joins("JOIN knowledge_documents AS d ON d.id = c.document_id").
+		Where("c.scope = ? AND c.scope_id = ?", query.Scope, query.ScopeID).
+		Order("c.created_at DESC, c.chunk_index ASC").
 		Limit(limit).
-		Find(&models).Error; err != nil {
+		Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("search knowledge chunks: %w", err)
 	}
 
-	chunks := make([]model.KnowledgeChunk, len(models))
-	for i, m := range models {
-		chunks[i] = m.toDomain()
+	chunks := make([]model.KnowledgeChunk, len(rows))
+	for i, row := range rows {
+		chunk := row.KnowledgeChunkModel.toDomain()
+		chunk.DocumentName = row.DocumentName
+		chunks[i] = chunk
 	}
 	return chunks, nil
 }

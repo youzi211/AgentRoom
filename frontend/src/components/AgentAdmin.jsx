@@ -5,6 +5,7 @@ import {
   deleteKnowledgeDocument,
   getAgentKnowledge,
   getAgents,
+  getAgentTemplates,
   updateAgent,
   uploadAgentKnowledge,
 } from '../api/roomClient'
@@ -22,6 +23,8 @@ const CREATE_MODE = '__create__'
 
 function AgentAdmin({ onBack, embedded = false }) {
   const [agents, setAgents] = useState([])
+  const [agentTemplates, setAgentTemplates] = useState([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [selectedAgentId, setSelectedAgentId] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [isLoading, setIsLoading] = useState(true)
@@ -45,12 +48,15 @@ function AgentAdmin({ onBack, embedded = false }) {
       setIsLoading(true)
       setErrorMessage('')
       try {
-        const response = await getAgents()
+        const [response, templateResponse] = await Promise.all([getAgents(), getAgentTemplates()])
         if (!isCurrent) {
           return
         }
         const nextAgents = response.agents ?? []
+        const nextTemplates = templateResponse.templates ?? []
         setAgents(nextAgents)
+        setAgentTemplates(nextTemplates)
+        setSelectedTemplateId(nextTemplates[0]?.id || '')
         setSelectedAgentId((current) => current || nextAgents[0]?.id || '')
       } catch (error) {
         if (isCurrent) {
@@ -104,6 +110,23 @@ function AgentAdmin({ onBack, embedded = false }) {
 
   const handleCancelCreate = () => {
     setSelectedAgentId(agents[0]?.id || '')
+  }
+
+  const handleApplyTemplate = () => {
+    const template = agentTemplates.find((candidate) => candidate.id === selectedTemplateId)
+    if (!template) {
+      return
+    }
+    setSelectedAgentId(CREATE_MODE)
+    setForm({
+      name: template.name ?? '',
+      role: template.role ?? '',
+      description: template.description ?? '',
+      systemPrompt: template.systemPrompt ?? '',
+      enabled: true,
+    })
+    setShowSystemPrompt(false)
+    setNotice('已套用角色模板，可在保存前继续编辑。')
   }
 
   const handleSave = async (event) => {
@@ -294,6 +317,35 @@ function AgentAdmin({ onBack, embedded = false }) {
             <div className="panel-badge-group">
               {selectedAgent ? <span className="panel-badge">{selectedAgent.mention}</span> : null}
               {isCreating ? <span className="panel-badge">新建</span> : null}
+            </div>
+          </div>
+
+          <div className="agent-template-picker">
+            <div>
+              <label htmlFor="agent-template">从角色模板开始</label>
+              <p className="field-hint">模板只会预填表单，保存前仍可调整名称、职责和提示词。</p>
+            </div>
+            <div className="agent-template-controls">
+              <select
+                id="agent-template"
+                value={selectedTemplateId}
+                onChange={(event) => setSelectedTemplateId(event.target.value)}
+                disabled={isSaving || agentTemplates.length === 0}
+              >
+                {agentTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name} · {template.role}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="button button--secondary"
+                type="button"
+                onClick={handleApplyTemplate}
+                disabled={isSaving || agentTemplates.length === 0}
+              >
+                套用模板
+              </button>
             </div>
           </div>
 
