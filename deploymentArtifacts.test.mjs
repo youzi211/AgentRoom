@@ -19,6 +19,9 @@ test('docker compose wires v0.2 runtime services and security env', () => {
   assert.match(compose, /ALLOWED_ORIGINS:/)
   assert.match(compose, /VITE_ADMIN_API_KEY:/)
   assert.match(compose, /MYSQL_DSN:/)
+  assert.match(compose, /\$\{MYSQL_HOST_PORT:-3306\}:3306/)
+  assert.match(compose, /\$\{BACKEND_HOST_PORT:-8080\}:8080/)
+  assert.match(compose, /\$\{FRONTEND_HOST_PORT:-5173\}:80/)
 })
 
 test('backend and frontend images are buildable from local Dockerfiles', () => {
@@ -76,7 +79,12 @@ test('one-click shell bootstrap mirrors the PowerShell deployment flow', () => {
 
 test('server deploy docs and env example document the public origin flow', () => {
   assert.match(envExample, /^PUBLIC_ORIGIN=/m)
+  assert.match(envExample, /^BACKEND_HOST_PORT=8080/m)
+  assert.match(envExample, /^FRONTEND_HOST_PORT=5173/m)
+  assert.match(envExample, /^MYSQL_HOST_PORT=3306/m)
   assert.match(readme, /git clone /)
   assert.match(readme, /PUBLIC_ORIGIN=/)
+  assert.match(readme, /BACKEND_HOST_PORT=/)
+  assert.match(readme, /FRONTEND_HOST_PORT=/)
   assert.match(readme, /bash \.\/scripts\/docker-up\.sh/)
 })

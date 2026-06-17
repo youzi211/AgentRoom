@@ -102,6 +102,10 @@ cp .env.example .env
 # Optional but strongly recommended on a real server:
 # PUBLIC_ORIGIN=https://agentroom.example.com
 # PUBLIC_ORIGIN=http://your-server-ip:5173
+# Optional if 5173 / 8080 / 3306 are already occupied:
+# FRONTEND_HOST_PORT=5177
+# BACKEND_HOST_PORT=8654
+# MYSQL_HOST_PORT=13306
 bash ./scripts/docker-up.sh
 ```
 
@@ -127,6 +131,12 @@ For a real server deployment, set `PUBLIC_ORIGIN=` in `.env` before first startu
 - `PUBLIC_ORIGIN=http://203.0.113.10:5173`
 - `PUBLIC_ORIGIN=https://agentroom.example.com`
 - `PUBLIC_ORIGIN=https://agentroom.example.com,http://203.0.113.10:5173`
+
+If the server already has services bound to the default Docker ports, set these `.env` values before first startup:
+
+- `FRONTEND_HOST_PORT=5177`
+- `BACKEND_HOST_PORT=8654`
+- `MYSQL_HOST_PORT=13306`
 
 To stop the stack later:
 
@@ -219,6 +229,9 @@ Compose-only database bootstrap variables:
 | `MYSQL_USER` | Application database user created by the MySQL image. |
 | `MYSQL_PASSWORD` | Application database password. |
 | `MYSQL_ROOT_PASSWORD` | MySQL root password. |
+| `BACKEND_HOST_PORT` | Published backend port on the host. Default `8080`, container still listens on `8080`. |
+| `FRONTEND_HOST_PORT` | Published frontend port on the host. Default `5173`, container still listens on `80`. |
+| `MYSQL_HOST_PORT` | Published MySQL port on the host. Default `3306`, container still listens on `3306`. |
 | `VITE_ADMIN_API_KEY` | Frontend build-time admin key used by the internal management UI. |
 
 ## Deployment Notes
