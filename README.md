@@ -79,36 +79,74 @@ For container deployment:
 - Docker
 - Docker Compose v2
 
-## Quick Start With Docker Compose
+## One-Click Docker Startup
 
-Create a local environment file:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Edit `.env` and set at least:
-
-- `LLM_API_KEY`
-- `MYSQL_ROOT_PASSWORD`
-- `MYSQL_PASSWORD`
-
-The shipped `.env.example` already includes aligned local defaults for:
-
-- `ADMIN_API_KEY`
-- `VITE_ADMIN_API_KEY`
-- `ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173`
-
-Start the stack:
+PowerShell:
 
 ```powershell
-docker compose up --build
+powershell -ExecutionPolicy Bypass -File .\scripts\docker-up.ps1
 ```
 
-Open:
+Bash:
+
+```bash
+bash ./scripts/docker-up.sh
+```
+
+Server quick start after `git clone`:
+
+```bash
+git clone <your-repo-url>
+cd agentRoom_test
+cp .env.example .env
+# Optional but strongly recommended on a real server:
+# PUBLIC_ORIGIN=https://agentroom.example.com
+# PUBLIC_ORIGIN=http://your-server-ip:5173
+bash ./scripts/docker-up.sh
+```
+
+The startup scripts make local container deployment actually one-step:
+
+- copy `.env.example` to `.env` when the file is missing
+- replace shipped placeholder secrets with generated values for `ADMIN_API_KEY`, `VITE_ADMIN_API_KEY`, `MYSQL_PASSWORD`, and `MYSQL_ROOT_PASSWORD`
+- keep `VITE_ADMIN_API_KEY` aligned with `ADMIN_API_KEY`
+- clear the fake `LLM_API_KEY=your-api-key-here` placeholder so the stack still starts cleanly without a provider key
+- merge `PUBLIC_ORIGIN` into `ALLOWED_ORIGINS` so server-domain or server-IP access can open WebSocket rooms
+- extend `ALLOWED_ORIGINS` with the actual published frontend origin plus the host-accessible direct IP that Linux or WSL reports
+- validate `docker compose` before startup
+- run `docker compose up -d --build`
+- discover the real published frontend and backend ports from Docker before printing access URLs
+- wait for backend health and frontend availability before declaring success
+
+If Docker Desktop or the Docker daemon is not running, the scripts stop early with a clear error.
+
+`LLM_API_KEY` is optional for boot. When it is blank, human chat still works and agent replies stay disabled until you set a real provider key in `.env` and rerun the script.
+
+For a real server deployment, set `PUBLIC_ORIGIN=` in `.env` before first startup if browsers will open the site with a public IP or domain name. Example values:
+
+- `PUBLIC_ORIGIN=http://203.0.113.10:5173`
+- `PUBLIC_ORIGIN=https://agentroom.example.com`
+- `PUBLIC_ORIGIN=https://agentroom.example.com,http://203.0.113.10:5173`
+
+To stop the stack later:
+
+```powershell
+docker compose down
+```
+
+Open the exact URLs printed by the helper script. With the default compose ports that is:
 
 - Frontend: `http://localhost:5173`
 - Backend health: `http://localhost:8080/api/health`
+
+On WSL2, Windows `localhost` forwarding can be flaky on some machines. When that happens, the Bash startup script also prints:
+
+- `Frontend (direct IP): http://<wsl-ip>:5173`
+- `Backend health (direct IP): http://<wsl-ip>:8080/api/health`
+
+Use the printed direct-IP frontend URL from Windows. The script also whitelists that origin in `ALLOWED_ORIGINS`, so WebSocket room joins keep working when you open the app through the WSL IP instead of `localhost`.
+
+When the Bash script runs inside WSL, it also starts a tiny keepalive process by default so the WSL-hosted Docker daemon does not idle out and take the containers down with it. If you do not want that behavior for a given run, start with `KEEP_WSL_ALIVE=0 bash ./scripts/docker-up.sh`. To stop the keepalive later, run `pkill -f wsl-keepalive.sh` inside WSL and then shut WSL down when you are done.
 
 Compose starts three services:
 
@@ -123,6 +161,12 @@ agentroom:${MYSQL_PASSWORD}@tcp(mysql:3306)/agentroom?parseTime=true&charset=utf
 ```
 
 Keep the root `.env` file out of git. It is already ignored.
+
+Manual fallback if you do not want the helper scripts:
+
+```powershell
+docker compose up -d --build
+```
 
 ## Local Development
 
@@ -254,6 +298,7 @@ agentRoom_test/
 |-- backend/
 |-- frontend/
 |-- docs/
+|-- scripts/
 |-- docker-compose.yml
 |-- .env.example
 `-- README.md

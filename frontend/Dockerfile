@@ -4,6 +4,8 @@ WORKDIR /src/frontend
 
 ARG VITE_ADMIN_API_KEY=""
 ENV VITE_ADMIN_API_KEY=${VITE_ADMIN_API_KEY}
+ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+ENV NPM_CONFIG_REPLACE_REGISTRY_HOST=always
 
 COPY frontend/package*.json ./
 RUN npm ci

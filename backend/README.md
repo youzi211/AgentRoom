@@ -64,7 +64,13 @@ The server loads `../.env` when started from `backend/`, then reads environment 
 The root `docker-compose.yml` builds `backend/Dockerfile`, starts MySQL, waits for database health, injects a container-network `MYSQL_DSN`, and forwards the v0.2 security env vars (`ADMIN_API_KEY` and `ALLOWED_ORIGINS`) into the backend container.
 
 ```powershell
-docker compose up --build
+powershell -ExecutionPolicy Bypass -File .\scripts\docker-up.ps1
+```
+
+Manual fallback:
+
+```powershell
+docker compose up -d --build
 ```
 
 ## API Surface
