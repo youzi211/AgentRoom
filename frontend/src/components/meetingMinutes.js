@@ -48,6 +48,10 @@ export function buildLocalMeetingMinutesMarkdown({ room, roomId, participants = 
 
 export function downloadMarkdownFile(markdown, filename) {
   const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' })
+  downloadBlobFile(blob, filename)
+}
+
+export function downloadBlobFile(blob, filename) {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url

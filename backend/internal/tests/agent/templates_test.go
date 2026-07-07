@@ -1,6 +1,8 @@
 package agent_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"agentroom/backend/internal/agent"
@@ -41,5 +43,35 @@ func TestPredefinedAgentsDeriveFromRoleTemplates(t *testing.T) {
 	}
 	if agents[0].ID != "pm" || agents[2].ID != "qa" || agents[4].ID != "secretary" {
 		t.Fatalf("predefined agent ids should preserve runtime compatibility, got %#v", agents)
+	}
+}
+
+func TestLoadDeepAgentRegistryAgents(t *testing.T) {
+	registryPath := filepath.Join(t.TempDir(), "agents.json")
+	if err := os.WriteFile(registryPath, []byte(`{
+		"agents": [
+			{
+				"id": "research",
+				"name": "Research",
+				"mention": "@Research",
+				"role": "Deep Research",
+				"description": "Runs DeepAgent research.",
+				"systemPrompt": "Use the DeepAgent research graph."
+			}
+		]
+	}`), 0o644); err != nil {
+		t.Fatalf("write registry: %v", err)
+	}
+
+	agents, err := agent.LoadDeepAgentRegistryAgents(registryPath)
+	if err != nil {
+		t.Fatalf("load registry: %v", err)
+	}
+	if len(agents) != 1 {
+		t.Fatalf("expected one registry agent, got %#v", agents)
+	}
+	got := agents[0]
+	if got.ID != "research" || got.Name != "Research" || got.Mention != "@Research" || got.Runtime != "deepagent" || !got.Enabled {
+		t.Fatalf("unexpected registry agent: %#v", got)
 	}
 }

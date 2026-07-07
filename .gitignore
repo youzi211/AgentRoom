@@ -8,3 +8,8 @@ frontend/dist/
 .claude
 backend/server.exe
 .tmp/
+
+# Local dev-server and test runner artifacts
+.vite-dev-*.log
+.vite-dev-*.pid
+test-results/

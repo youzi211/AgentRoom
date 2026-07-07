@@ -136,8 +136,9 @@ func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom Runtime
 	r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "started", "", "", nil)
 
 	knowledgeChunks := r.searchKnowledge(ctx, currentRoom, responder, trigger)
-	promptContext := NewGuidedPromptContext(currentRoom, currentRoom.RecentMessages(r.contextLimit), responder, trigger, rootHumanTrigger, eligiblePeers, policy, turnIndex, knowledgeChunks)
-	promptMessages, err := composePromptMessages(responder, promptContext)
+	recentMessages := currentRoom.RecentMessages(r.contextLimit)
+	promptContext := NewGuidedPromptContext(currentRoom, recentMessages, responder, trigger, rootHumanTrigger, eligiblePeers, policy, turnIndex, knowledgeChunks)
+	runtime, err := r.runtimes.Resolve(responder)
 	if err != nil {
 		now := time.Now().UTC()
 		errText := shortReason(err)
@@ -148,14 +149,19 @@ func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom Runtime
 		return "", knowledgeChunks, err
 	}
 
-	requestCtx, cancel := context.WithTimeout(ctx, r.timeout)
-	defer cancel()
-
-	response, err := r.client.Complete(requestCtx, promptMessages)
+	response, err := runtime.Respond(ctx, AgentRuntimeRequest{
+		RunID:           runID,
+		Room:            currentRoom,
+		Agent:           responder,
+		Trigger:         trigger,
+		RecentMessages:  recentMessages,
+		KnowledgeChunks: knowledgeChunks,
+		PromptContext:   promptContext,
+	})
 	if err != nil {
 		now := time.Now().UTC()
 		status := "failed"
-		if errors.Is(requestCtx.Err(), context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			status = "timeout"
 		}
 		errText := shortReason(err)
@@ -166,22 +172,12 @@ func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom Runtime
 		return "", knowledgeChunks, err
 	}
 
-	cleaned, err := StripThinkBlocks(response)
-	if err != nil {
-		now := time.Now().UTC()
-		errText := shortReason(err)
-		if finishErr := r.store.FinishAgentRun(ctx, runID, "failed", errText, now); finishErr != nil {
-			r.logger.Error("finish agent run", "run_id", runID, "status", "failed", "error", finishErr)
-		}
-		r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", "failed", errText, &now)
-		return "", knowledgeChunks, err
-	}
 	now := time.Now().UTC()
 	if finishErr := r.store.FinishAgentRun(ctx, runID, "succeeded", "", now); finishErr != nil {
 		r.logger.Error("finish agent run", "run_id", runID, "status", "succeeded", "error", finishErr)
 	}
 	r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", "succeeded", "", &now)
-	return cleaned, knowledgeChunks, nil
+	return response.Content, knowledgeChunks, nil
 }
 
 func resolveGuidedCandidates(candidates []model.Agent, fullAgentByID map[string]model.Agent) []model.Agent {

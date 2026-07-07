@@ -58,6 +58,10 @@ func (q *RoomQueries) ListMessagesPage(ctx context.Context, currentRoom *room.Ro
 	return q.root.ListMessagesPage(ctx, currentRoom, limit, before)
 }
 
+func (q *RoomQueries) GetMessageArtifact(ctx context.Context, currentRoom *room.Room, messageID string, artifactID string) (model.MessageArtifact, error) {
+	return q.root.GetMessageArtifact(ctx, currentRoom, messageID, artifactID)
+}
+
 func (q *RoomQueries) ListRoomActivity(ctx context.Context, currentRoom *room.Room, limit int) (RoomActivity, error) {
 	return q.root.ListRoomActivity(ctx, currentRoom, limit)
 }
@@ -78,8 +82,8 @@ func (c *RoomCommands) UpdateAgent(ctx context.Context, agentID string, input Up
 	return c.root.UpdateAgent(ctx, agentID, input)
 }
 
-func (c *RoomCommands) CreateAgent(ctx context.Context, name, role, description, systemPrompt string, enabled bool) (model.Agent, error) {
-	return c.root.CreateAgent(ctx, name, role, description, systemPrompt, enabled)
+func (c *RoomCommands) CreateAgent(ctx context.Context, name, role, description, systemPrompt string, enabled bool, runtime string) (model.Agent, error) {
+	return c.root.CreateAgent(ctx, name, role, description, systemPrompt, enabled, runtime)
 }
 
 func (c *RoomCommands) DeleteAgent(ctx context.Context, agentID string) error {

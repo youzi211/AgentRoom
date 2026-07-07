@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   createRoomSocket,
   deleteKnowledgeDocument,
+  downloadMessageArtifact,
   exportRoomMinutesMarkdown,
   generateRoomMinutes,
   getRoom,
@@ -23,6 +24,7 @@ import ResizeHandle from './ResizeHandle'
 import { mergeActivityEvent, normalizeActivityPayload } from './agentActivity'
 import { buildParticipantJoinedNotice, mergeTimelineMessages } from './liveRoomNotices'
 import { nextRouteAfterLiveTermination } from './roomAccess'
+import { downloadBlobFile } from './meetingMinutes'
 import '../chat-room.css'
 
 const ROOM_SNAPSHOT_EVENT = 'room_snapshot'
@@ -356,6 +358,16 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
     insertMentionRef.current?.(mention)
   }
 
+  const handleDownloadArtifact = async (message, artifact) => {
+    try {
+      const { blob, fileName } = await downloadMessageArtifact(roomId, message.id, artifact.id, roomPasscode)
+      downloadBlobFile(blob, fileName || artifact.fileName || 'report.md')
+      setErrorMessage('')
+    } catch (error) {
+      setErrorMessage(error.message || '下载报告失败，请稍后重试。')
+    }
+  }
+
   const handleCopyRoomID = async () => {
     try {
       await navigator.clipboard.writeText(roomId)
@@ -521,6 +533,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
             ref={messageListRef}
             currentParticipantName={participantName}
             messages={visibleMessages}
+            onDownloadArtifact={handleDownloadArtifact}
             thinkingAgents={thinkingAgents}
           />
           <MessageComposer

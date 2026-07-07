@@ -41,6 +41,7 @@ type Store interface {
 
 	// Messages
 	AddMessage(ctx context.Context, message model.Message) (model.Message, error)
+	GetMessage(ctx context.Context, roomID string, messageID string) (model.Message, error)
 	ListMessages(ctx context.Context, query ListMessagesQuery) ([]model.Message, error)
 	ListMessagesPage(ctx context.Context, query ListMessagesQuery) (MessagePage, error)
 

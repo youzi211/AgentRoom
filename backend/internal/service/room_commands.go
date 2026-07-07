@@ -39,8 +39,8 @@ func (s *RoomService) ReopenRoom(ctx context.Context, roomID string) error {
 	return s.lifecycle.Reopen(ctx, currentRoom)
 }
 
-func (s *RoomService) CreateAgent(ctx context.Context, name, role, description, systemPrompt string, enabled bool) (model.Agent, error) {
-	return s.agents.CreateAgent(ctx, name, role, description, systemPrompt, enabled)
+func (s *RoomService) CreateAgent(ctx context.Context, name, role, description, systemPrompt string, enabled bool, runtime string) (model.Agent, error) {
+	return s.agents.CreateAgent(ctx, name, role, description, systemPrompt, enabled, runtime)
 }
 
 func (s *RoomService) UpdateAgent(ctx context.Context, agentID string, input UpdateAgentInput) (model.Agent, error) {

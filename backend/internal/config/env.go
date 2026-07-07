@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"errors"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 func LoadDotEnv(path string) error {
@@ -52,6 +54,14 @@ type SecurityConfig struct {
 	AllowedOrigins []string
 }
 
+type DeepAgentConfig struct {
+	Command  string
+	WorkDir  string
+	Config   string
+	Registry string
+	Timeout  time.Duration
+}
+
 // LoadDBConfig reads database configuration from environment variables.
 func LoadDBConfig() DBConfig {
 	return DBConfig{
@@ -65,6 +75,38 @@ func LoadSecurityConfig() SecurityConfig {
 	return SecurityConfig{
 		AdminAPIKey:    strings.TrimSpace(os.Getenv("ADMIN_API_KEY")),
 		AllowedOrigins: splitCommaList(os.Getenv("ALLOWED_ORIGINS")),
+	}
+}
+
+func LoadDeepAgentConfig() DeepAgentConfig {
+	command := strings.TrimSpace(os.Getenv("DEEPAGENT_COMMAND"))
+	if command == "" {
+		command = "uv"
+	}
+	workDir := strings.TrimSpace(os.Getenv("DEEPAGENT_WORKDIR"))
+	if workDir == "" {
+		workDir = "../deepagent"
+	}
+	configPath := strings.TrimSpace(os.Getenv("DEEPAGENT_CONFIG"))
+	if configPath == "" {
+		configPath = "deepagent.toml"
+	}
+	registryPath := strings.TrimSpace(os.Getenv("DEEPAGENT_REGISTRY"))
+	if registryPath == "" {
+		registryPath = "agents.json"
+	}
+	timeout := 5 * time.Minute
+	if raw := strings.TrimSpace(os.Getenv("DEEPAGENT_TIMEOUT_SECONDS")); raw != "" {
+		if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
+			timeout = time.Duration(seconds) * time.Second
+		}
+	}
+	return DeepAgentConfig{
+		Command:  command,
+		WorkDir:  workDir,
+		Config:   configPath,
+		Registry: registryPath,
+		Timeout:  timeout,
 	}
 }
 

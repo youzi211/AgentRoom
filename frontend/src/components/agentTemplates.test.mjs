@@ -24,3 +24,10 @@ test('AgentAdmin includes template picker styling hooks', () => {
   assert.match(source, /agent-template-picker/)
   assert.match(styles, /\.agent-template-picker/)
 })
+
+test('AgentAdmin shows runtime and source badges for registered agents', () => {
+  assert.match(source, /agent-runtime-badge/)
+  assert.match(source, /selectedAgent\.runtime/)
+  assert.match(source, /selectedAgent\?\.source/)
+  assert.match(styles, /\.agent-runtime-badge/)
+})

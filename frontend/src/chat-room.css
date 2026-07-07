@@ -900,6 +900,51 @@
   text-align: center;
 }
 
+.message-artifacts {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.message-artifact-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(47, 102, 87, 0.2);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: #243244;
+  padding: 9px 10px;
+  text-align: left;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.message-artifact-button:hover {
+  border-color: rgba(47, 102, 87, 0.42);
+  background: #eef8f2;
+}
+
+.message-artifact-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: #e8f4ee;
+  color: var(--accent);
+  padding: 3px 5px;
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+}
+
+.message-artifact-action {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 0.76rem;
+}
+
 .message-sources {
   display: flex;
   flex-wrap: wrap;

@@ -86,6 +86,8 @@ func AgentFromTemplate(template RoleTemplate) model.Agent {
 		Name:         template.Name,
 		Mention:      "@" + template.Name,
 		Role:         template.Role,
+		Runtime:      model.AgentRuntimeLLM,
+		Source:       model.AgentSourceBuiltin,
 		Description:  template.Description,
 		SystemPrompt: template.SystemPrompt,
 		Enabled:      true,

@@ -1,5 +1,43 @@
-import { useEffect, useMemo, useState } from 'react'
-import { getAgentRoleSets, getAgents } from '../api/roomClient'
+import { useEffect, useState } from 'react'
+import {
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Checkbox,
+  Group,
+  Paper,
+  PasswordInput,
+  SegmentedControl,
+  SimpleGrid,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+  UnstyledButton,
+} from '@mantine/core'
+import {
+  ArrowRight,
+  BarChart3,
+  BookOpen,
+  CalendarDays,
+  Check,
+  Copy,
+  Database,
+  Eye,
+  FileText,
+  Hash,
+  Lock,
+  LogIn,
+  MessageSquare,
+  Plus,
+  Settings,
+  ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
+  Users,
+} from 'lucide-react'
+import { getAgentRoleSets, getAgents, listRooms } from '../api/roomClient'
 
 const TEMPLATE_AGENT_MATCHERS = {
   product_manager: ['pm', '产品经理', 'Product Manager'],
@@ -9,6 +47,67 @@ const TEMPLATE_AGENT_MATCHERS = {
   meeting_scribe: ['secretary', '会议纪要', 'Meeting Scribe'],
 }
 
+const DIALOGUE_MODE_OPTIONS = [
+  {
+    label: (
+      <span className="entry-segment-label">
+        <Users size={16} />
+        <span>
+          <strong>多 Agent 协作</strong>
+          <small>多角色协同讨论与产出</small>
+        </span>
+      </span>
+    ),
+    value: 'mention_fanout',
+  },
+  {
+    label: (
+      <span className="entry-segment-label">
+        <MessageSquare size={16} />
+        <span>
+          <strong>单 Agent 对话</strong>
+          <small>与单一 Agent 深度对话</small>
+        </span>
+      </span>
+    ),
+    value: 'guided_dialogue',
+  },
+]
+
+const CAPABILITY_ITEMS = [
+  {
+    icon: Users,
+    title: '角色化 Agent 协作',
+    copy: '不同角色分工协作，专业高效',
+    tone: 'teal',
+  },
+  {
+    icon: BookOpen,
+    title: '知识与工具驱动',
+    copy: '连接知识来源，沉淀会议成果',
+    tone: 'blue',
+  },
+  {
+    icon: MessageSquare,
+    title: '实时对话与决策',
+    copy: '多方对话，快速达成共识',
+    tone: 'amber',
+  },
+  {
+    icon: ShieldCheck,
+    title: '安全可控',
+    copy: '企业级权限与数据保护',
+    tone: 'teal',
+  },
+]
+
+const ENTRY_STATS = [
+  { icon: Users, label: '进行中', value: '6', tone: 'teal' },
+  { icon: CalendarDays, label: '今日会议', value: '12', tone: 'blue' },
+  { icon: FileText, label: '知识来源', value: '24', tone: 'amber' },
+  { icon: Database, label: 'Agent 角色', value: '18', tone: 'teal' },
+]
+
 function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOpenAgentAdmin }) {
   const [createDisplayName, setCreateDisplayName] = useState('')
   const [joinDisplayName, setJoinDisplayName] = useState('')
@@ -17,9 +116,15 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
   const [createPasscode, setCreatePasscode] = useState('')
   const [dialogueMode, setDialogueMode] = useState('mention_fanout')
   const [joinPasscode, setJoinPasscode] = useState('')
+  const [showAdvancedCreate, setShowAdvancedCreate] = useState(false)
   const [availableAgents, setAvailableAgents] = useState([])
   const [roleSets, setRoleSets] = useState([])
   const [selectedAgentIds, setSelectedAgentIds] = useState(new Set())
+  const [recentRooms, setRecentRooms] = useState([])
+  const [recentRoomsState, setRecentRoomsState] = useState({
+    isLoading: true,
+    errorMessage: '',
+  })
 
   const trimmedCreateDisplayName = createDisplayName.trim()
   const trimmedJoinDisplayName = joinDisplayName.trim()
@@ -27,11 +132,6 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
   const trimmedRoomId = roomId.trim()
   const trimmedCreatePasscode = createPasscode.trim()
   const trimmedJoinPasscode = joinPasscode.trim()
-  const selectedAgents = useMemo(
-    () => availableAgents.filter((agent) => selectedAgentIds.has(agent.id)),
-    [availableAgents, selectedAgentIds],
-  )
-
   useEffect(() => {
     let isCurrent = true
     const loadAgents = async () => {
@@ -49,6 +149,34 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
       }
     }
     void loadAgents()
+    return () => {
+      isCurrent = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let isCurrent = true
+    const loadRecentRooms = async () => {
+      setRecentRoomsState({ isLoading: true, errorMessage: '' })
+      try {
+        const response = await listRooms({ status: 'active', limit: 3 })
+        if (!isCurrent) {
+          return
+        }
+        setRecentRooms(response?.rooms ?? [])
+        setRecentRoomsState({ isLoading: false, errorMessage: '' })
+      } catch (error) {
+        if (!isCurrent) {
+          return
+        }
+        setRecentRooms([])
+        setRecentRoomsState({
+          isLoading: false,
+          errorMessage: error.message || '会议列表暂时不可用。',
+        })
+      }
+    }
+    void loadRecentRooms()
     return () => {
       isCurrent = false
     }
@@ -113,250 +241,391 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
     })
   }
 
+  const handleJoinExistingRoom = async (roomItem) => {
+    if (!trimmedJoinDisplayName || !roomItem?.id) {
+      setRoomId(roomItem?.id || '')
+      return
+    }
+    await onJoinRoom({
+      displayName: trimmedJoinDisplayName,
+      roomId: roomItem.id,
+      passcode: trimmedJoinPasscode,
+    })
+  }
+
+  const handleCopyRoomId = (roomItem) => {
+    setRoomId(roomItem.id)
+    try {
+      void navigator.clipboard?.writeText(roomItem.id)
+    } catch {
+      // Clipboard can be unavailable in some browser contexts.
+    }
+  }
+
   return (
-    <main className="workbench workbench--entry">
-      <header className="app-bar">
-        <div className="brand-lockup">
-          <span className="brand-mark">AR</span>
-          <div>
-            <strong>AgentRoom</strong>
-            <span>人和 Agent 协作开会的工作台</span>
-          </div>
-        </div>
-        <nav className="app-nav" aria-label="主导航">
-          <span className="app-nav-item app-nav-item--active">会议入口</span>
-          <button className="app-nav-item" type="button" onClick={onOpenAgentAdmin}>
+    <main className="entry-dashboard">
+      <header className="entry-dashboard-header">
+        <Group className="entry-dashboard-brand" gap="sm" wrap="nowrap">
+          <span className="entry-brand-symbol" aria-hidden="true">
+            <Sparkles size={24} />
+          </span>
+          <strong>AgentRoom</strong>
+        </Group>
+        <nav className="entry-dashboard-nav" aria-label="主导航">
+          <span className="entry-dashboard-nav-item entry-dashboard-nav-item--active">
+            <BarChart3 size={17} />
+            会议入口
+          </span>
+          <button className="entry-dashboard-nav-item" type="button" onClick={onOpenAgentAdmin}>
+            <Settings size={17} />
             管理后台
           </button>
         </nav>
       </header>
 
-      <section className="entry-hero">
-        <div>
-          <p className="eyebrow">协作会议</p>
-          <h1>把角色 Agent 带进你的实时文本会议</h1>
-          <p className="section-copy">
-            创建房间、选择本次需要的 Agent，并把会议资料交给它们参考。讨论时用 `@角色名` 明确点名，让每个 Agent 在合适的时候参与。
-          </p>
-        </div>
-        <div className="entry-summary" aria-label="能力概览">
-          <span>{availableAgents.length} 个可用 Agent</span>
-          <span>Markdown 知识文件</span>
-          <span>实时会议</span>
-        </div>
-      </section>
+      {errorMessage ? (
+        <Alert className="entry-dashboard-alert" color="red" variant="light" radius="md">
+          {errorMessage}
+        </Alert>
+      ) : null}
 
-      {errorMessage ? <p className="banner banner--error">{errorMessage}</p> : null}
+      <div className="entry-dashboard-layout">
+        <aside className="entry-dashboard-aside">
+          <section className="entry-dashboard-hero">
+            <Title order={1}>AgentRoom</Title>
+            <Text className="entry-dashboard-subtitle">AI 会议工作台</Text>
+            <Text className="entry-dashboard-copy">
+              创建或加入会议室，与角色化 Agent 协同讨论，结合知识库与工具，高效完成会议目标。
+            </Text>
+          </section>
 
-      <div className="entry-grid">
-        <form className="panel panel--primary-flow" onSubmit={handleCreateRoom}>
-          <div className="panel-header panel-header--horizontal">
-            <div>
-              <p className="eyebrow eyebrow--subtle">推荐流程</p>
-              <h2>创建会议室</h2>
-              <p className="panel-copy">为新的讨论准备房间，并选择本次需要邀请的 Agent。</p>
-            </div>
-            <span className="panel-badge">主路径</span>
-          </div>
-
-          <div className="form-stack">
-            <div className="field-group">
-              <label htmlFor="create-display-name">你的显示名称</label>
-              <input
-                id="create-display-name"
-                autoFocus
-                type="text"
-                value={createDisplayName}
-                onChange={(event) => setCreateDisplayName(event.target.value)}
-                placeholder="例如：小明"
-                disabled={isSubmitting}
-                maxLength={40}
-              />
-              {!trimmedCreateDisplayName ? <p className="field-hint field-hint--warning">请输入名称后创建房间。</p> : null}
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="room-name">会议名称</label>
-              <input
-                id="room-name"
-                type="text"
-                value={roomName}
-                onChange={(event) => setRoomName(event.target.value)}
-                placeholder="例如：需求评审会"
-                disabled={isSubmitting}
-                maxLength={60}
-              />
-              <p className="field-hint">留空时会使用默认会议名称。</p>
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="create-passcode">房间口令</label>
-              <input
-                id="create-passcode"
-                type="password"
-                value={createPasscode}
-                onChange={(event) => setCreatePasscode(event.target.value)}
-                placeholder="可选，用于限制加入房间"
-                disabled={isSubmitting}
-                maxLength={80}
-              />
-              <p className="field-hint">如果留空，这个房间不需要口令。</p>
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="dialogue-mode">Agent 对话模式</label>
-              <select
-                id="dialogue-mode"
-                value={dialogueMode}
-                onChange={(event) => setDialogueMode(event.target.value)}
-                disabled={isSubmitting}
-              >
-                <option value="mention_fanout">点名单轮</option>
-                <option value="guided_dialogue">引导多轮</option>
-              </select>
-              <p className="field-hint">点名单轮会先让被 @ 的 Agent 回复；如果 Agent 明确 @ 了同伴，也会按策略继续接话。引导多轮允许受限的 Agent 持续接力讨论。</p>
-            </div>
-
-            {availableAgents.length > 0 ? (
-              <div className="agent-picker">
-                <div className="agent-picker-header">
+          <Stack className="entry-capability-list" gap={24}>
+            {CAPABILITY_ITEMS.map((item) => {
+              const Icon = item.icon
+              return (
+                <div className="entry-capability-item" key={item.title}>
+                  <span className={`entry-icon-bubble entry-icon-bubble--${item.tone}`}>
+                    <Icon size={22} />
+                  </span>
                   <div>
-                    <label>选择本次 Agent</label>
-                    <p>{selectedAgentIds.size === 0 ? '本次会议不邀请 Agent' : `已选择 ${selectedAgentIds.size}/${availableAgents.length} 个 Agent`}</p>
-                  </div>
-                  <div className="agent-select-actions">
-                    <button className="button button--ghost button--compact" type="button" onClick={handleSelectAll} disabled={isSubmitting}>
-                      全选
-                    </button>
-                    <button className="button button--ghost button--compact" type="button" onClick={handleDeselectAll} disabled={isSubmitting}>
-                      清空
-                    </button>
+                    <strong>{item.title}</strong>
+                    <span>{item.copy}</span>
                   </div>
                 </div>
-                {roleSets.length > 0 ? (
-                  <div className="role-set-shortcuts" aria-label="推荐角色组">
-                    {roleSets.map((roleSet) => (
-                      <button
-                        className="role-set-button"
-                        type="button"
-                        key={roleSet.id}
-                        onClick={() => handleApplyRoleSet(roleSet)}
-                        disabled={isSubmitting}
-                      >
-                        <strong>{roleSet.name}</strong>
-                        <span>{roleSet.description}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="agent-chip-grid">
-                  {availableAgents.map((agent) => {
-                    const checked = selectedAgentIds.has(agent.id)
-                    return (
-                      <label key={agent.id} className={`agent-chip${checked ? ' agent-chip--selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => handleAgentToggle(agent.id)}
-                          disabled={isSubmitting}
-                        />
-                        <span className="agent-chip-avatar">{agent.name.charAt(0).toUpperCase()}</span>
-                        <span>
-                          <strong>{agent.name}</strong>
-                          <small>{agent.role}</small>
-                        </span>
-                      </label>
-                    )
-                  })}
+              )
+            })}
+          </Stack>
+
+          <Paper className="entry-stats-card" withBorder radius="md" shadow="xs">
+            {ENTRY_STATS.map((item) => {
+              const Icon = item.icon
+              return (
+                <div className="entry-stat-item" key={item.label}>
+                  <Icon className={`entry-stat-icon entry-stat-icon--${item.tone}`} size={20} />
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
                 </div>
-              </div>
-            ) : null}
-          </div>
+              )
+            })}
+          </Paper>
+        </aside>
 
-          <div className="selected-agent-strip" aria-label="已选择 Agent">
-            {selectedAgents.length === 0 ? (
-              <span>未选择 Agent</span>
-            ) : (
-              selectedAgents.slice(0, 4).map((agent) => <span key={agent.id}>{agent.name}</span>)
-            )}
-            {selectedAgents.length > 4 ? <span>+{selectedAgents.length - 4}</span> : null}
-          </div>
-
-          <div className="button-row button-row--stack-end">
-            <span className="helper-text">创建后会自动进入会议室。</span>
-            <button className="button button--primary" type="submit" disabled={isSubmitting || !trimmedCreateDisplayName}>
-              {isSubmitting ? '正在创建...' : '创建房间'}
-            </button>
-          </div>
-        </form>
-
-        <form className="panel panel--secondary-flow" onSubmit={handleJoinRoom}>
-          <div className="panel-header panel-header--horizontal">
-            <div>
-              <p className="eyebrow eyebrow--subtle">已有房间</p>
-              <h2>加入会议室</h2>
-              <p className="panel-copy">输入房间 ID，以参会者身份进入已有讨论。</p>
-            </div>
-            <span className="panel-badge panel-badge--neutral">快捷加入</span>
-          </div>
-
-          <div className="form-stack">
-            <div className="field-group">
-              <label htmlFor="join-display-name">你的显示名称</label>
-              <input
-                id="join-display-name"
-                type="text"
-                value={joinDisplayName}
-                onChange={(event) => setJoinDisplayName(event.target.value)}
-                placeholder="例如：小明"
-                disabled={isSubmitting}
-                maxLength={40}
-              />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="room-id">房间 ID</label>
-              <input
-                id="room-id"
-                type="text"
-                value={roomId}
-                onChange={(event) => setRoomId(event.target.value)}
-                placeholder="room_123456"
-                disabled={isSubmitting}
-                maxLength={80}
-              />
-              <p className="field-hint">房间 ID 可从会议室右上角复制。</p>
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="join-passcode">房间口令</label>
-              <input
-                id="join-passcode"
-                type="password"
-                value={joinPasscode}
-                onChange={(event) => setJoinPasscode(event.target.value)}
-                placeholder="如果房间设置了口令，请输入"
-                disabled={isSubmitting}
-                maxLength={80}
-              />
-            </div>
-          </div>
-
-          <div className="button-row button-row--stack-end">
-            <span className={`helper-text${trimmedJoinDisplayName && trimmedRoomId ? '' : ' helper-text--attention'}`}>
-              {!trimmedJoinDisplayName ? '请先输入显示名称。' : trimmedRoomId ? '准备加入已有房间。' : '请输入房间 ID。'}
-            </span>
-            <button
-              className="button button--secondary"
-              type="submit"
-              disabled={isSubmitting || !trimmedJoinDisplayName || !trimmedRoomId}
+        <section className="entry-dashboard-main">
+          <div className="entry-dashboard-forms">
+            <Paper
+              component="form"
+              className="entry-panel entry-create-panel"
+              onSubmit={handleCreateRoom}
+              withBorder
+              radius="md"
+              shadow="xs"
             >
-              {isSubmitting ? '正在加入...' : '加入房间'}
-            </button>
+              <Stack gap="md" h="100%">
+                <Group align="center" gap="sm" mb={2}>
+                  <span className="entry-card-icon entry-card-icon--teal">
+                    <Plus size={20} />
+                  </span>
+                  <Title order={2}>创建会议室</Title>
+                </Group>
+
+                <TextInput
+                  id="create-display-name"
+                  autoFocus
+                  label="你的显示名称"
+                  leftSection={<Users size={17} />}
+                  value={createDisplayName}
+                  onChange={(event) => setCreateDisplayName(event.currentTarget.value)}
+                  placeholder="请输入你的显示名称"
+                  disabled={isSubmitting}
+                  maxLength={40}
+                />
+
+                <TextInput
+                  id="room-name"
+                  label="会议名称"
+                  leftSection={<CalendarDays size={17} />}
+                  value={roomName}
+                  onChange={(event) => setRoomName(event.currentTarget.value)}
+                  placeholder="请输入会议名称"
+                  disabled={isSubmitting}
+                  maxLength={60}
+                />
+
+                <Text className="entry-field-label">Agent 对话模式</Text>
+                <SegmentedControl
+                  id="dialogue-mode"
+                  className="entry-mode-control"
+                  value={dialogueMode}
+                  onChange={setDialogueMode}
+                  data={DIALOGUE_MODE_OPTIONS}
+                  disabled={isSubmitting}
+                  fullWidth
+                />
+
+                {showAdvancedCreate ? (
+                  <PasswordInput
+                    id="create-passcode"
+                    label="房间口令"
+                    leftSection={<Lock size={17} />}
+                    value={createPasscode}
+                    onChange={(event) => setCreatePasscode(event.currentTarget.value)}
+                    placeholder="可选，用于限制加入房间"
+                    disabled={isSubmitting}
+                    maxLength={80}
+                  />
+                ) : null}
+
+                <Box className="entry-agent-section">
+                  <Group align="center" justify="space-between" mb="xs">
+                    <Box>
+                      <Text component="label" className="entry-field-label">选择本次 Agent</Text>
+                      <Text size="sm" c="dimmed">
+                        {selectedAgentIds.size === 0
+                          ? '本次会议不邀请 Agent'
+                          : `已选择 ${selectedAgentIds.size}/${availableAgents.length} 个 Agent`}
+                      </Text>
+                    </Box>
+                    <Group className="agent-select-actions" gap={4}>
+                      <Button type="button" size="xs" variant="subtle" color="teal" onClick={handleSelectAll} disabled={isSubmitting}>
+                        全选
+                      </Button>
+                      <Button type="button" size="xs" variant="subtle" color="gray" onClick={handleDeselectAll} disabled={isSubmitting}>
+                        清空
+                      </Button>
+                    </Group>
+                  </Group>
+
+                  {roleSets.length > 0 ? (
+                    <div className="role-set-shortcuts entry-role-tabs" aria-label="推荐角色组">
+                      {roleSets.map((roleSet) => (
+                        <UnstyledButton
+                          className="role-set-button"
+                          type="button"
+                          key={roleSet.id}
+                          onClick={() => handleApplyRoleSet(roleSet)}
+                          disabled={isSubmitting}
+                        >
+                          <strong>{roleSet.name}</strong>
+                        </UnstyledButton>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {availableAgents.length > 0 ? (
+                    <SimpleGrid className="agent-chip-grid entry-agent-grid" cols={{ base: 1, sm: 2, lg: 3 }} spacing="xs">
+                      {availableAgents.map((agent) => {
+                        const checked = selectedAgentIds.has(agent.id)
+                        return (
+                          <Paper
+                            key={agent.id}
+                            component="label"
+                            className={`agent-chip entry-agent-chip${checked ? ' agent-chip--selected' : ''}`}
+                            withBorder
+                            radius="sm"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onChange={() => handleAgentToggle(agent.id)}
+                              disabled={isSubmitting}
+                              aria-label={`${agent.name} ${agent.role}`}
+                            />
+                            <span className="agent-chip-avatar">{agent.name.charAt(0).toUpperCase()}</span>
+                            <Box className="entry-agent-text">
+                              <Text component="strong">{agent.name}</Text>
+                              <Text component="small">{agent.role}</Text>
+                              <Badge className="agent-runtime-inline" size="xs" variant="light" color={agent.runtime === 'deepagent' ? 'blue' : 'gray'}>
+                                {agent.runtime || 'llm'}
+                              </Badge>
+                            </Box>
+                          </Paper>
+                        )
+                      })}
+                    </SimpleGrid>
+                  ) : (
+                    <Text className="entry-muted-state">暂无可用 Agent，仍可创建普通会议室。</Text>
+                  )}
+                </Box>
+
+                <Group className="entry-panel-footer" justify="space-between" align="center">
+                  <Button
+                    type="button"
+                    variant="default"
+                    leftSection={<SlidersHorizontal size={17} />}
+                    aria-expanded={showAdvancedCreate}
+                    onClick={() => setShowAdvancedCreate((current) => !current)}
+                  >
+                    高级设置
+                  </Button>
+                  <Button type="submit" color="teal" rightSection={<ArrowRight size={17} />} disabled={isSubmitting || !trimmedCreateDisplayName}>
+                    {isSubmitting ? '正在创建...' : '创建会议室'}
+                  </Button>
+                </Group>
+              </Stack>
+            </Paper>
+
+            <Paper
+              component="form"
+              className="entry-panel entry-join-panel"
+              onSubmit={handleJoinRoom}
+              withBorder
+              radius="md"
+              shadow="xs"
+            >
+              <Stack gap="lg" h="100%">
+                <Group align="center" gap="sm">
+                  <span className="entry-card-icon entry-card-icon--blue">
+                    <LogIn size={20} />
+                  </span>
+                  <Title order={2}>加入会议室</Title>
+                </Group>
+
+                <TextInput
+                  id="room-id"
+                  label="房间 ID"
+                  leftSection={<Hash size={17} />}
+                  value={roomId}
+                  onChange={(event) => setRoomId(event.currentTarget.value)}
+                  placeholder="请输入房间 ID"
+                  disabled={isSubmitting}
+                  maxLength={80}
+                />
+
+                <PasswordInput
+                  id="join-passcode"
+                  label="房间口令"
+                  leftSection={<Lock size={17} />}
+                  value={joinPasscode}
+                  onChange={(event) => setJoinPasscode(event.currentTarget.value)}
+                  placeholder="请输入房间口令"
+                  disabled={isSubmitting}
+                  maxLength={80}
+                />
+
+                <TextInput
+                  id="join-display-name"
+                  label="你的显示名称"
+                  leftSection={<Users size={17} />}
+                  value={joinDisplayName}
+                  onChange={(event) => setJoinDisplayName(event.currentTarget.value)}
+                  placeholder="请输入你的显示名称"
+                  disabled={isSubmitting}
+                  maxLength={40}
+                />
+
+                <Button
+                  type="submit"
+                  color="blue"
+                  size="md"
+                  leftSection={<LogIn size={17} />}
+                  disabled={isSubmitting || !trimmedJoinDisplayName || !trimmedRoomId}
+                  fullWidth
+                >
+                  {isSubmitting ? '正在加入...' : '加入会议室'}
+                </Button>
+
+                <Alert className="entry-join-help" color="blue" variant="light" radius="sm" icon={<Eye size={18} />}>
+                  如需向会议室发起申请或获取口令，请联系会议创建者或管理员。
+                </Alert>
+              </Stack>
+            </Paper>
           </div>
-        </form>
+
+          <Paper className="entry-existing-panel" withBorder radius="md" shadow="xs">
+            <Group className="entry-existing-title" justify="space-between" align="center">
+              <Group gap="xs">
+                <Database size={18} />
+                <Title order={2}>已有房间</Title>
+              </Group>
+              <Badge variant="light" color="teal">{recentRooms.length}</Badge>
+            </Group>
+
+            <ExistingRoomsTable
+              isLoading={recentRoomsState.isLoading}
+              errorMessage={recentRoomsState.errorMessage}
+              onCopyRoomId={handleCopyRoomId}
+              onJoinRoom={handleJoinExistingRoom}
+              rooms={recentRooms}
+              canJoin={Boolean(trimmedJoinDisplayName)}
+            />
+          </Paper>
+        </section>
       </div>
     </main>
+  )
+}
+
+function ExistingRoomsTable({ canJoin, errorMessage, isLoading, onCopyRoomId, onJoinRoom, rooms }) {
+  if (isLoading) {
+    return <Text className="entry-muted-state">正在加载已有房间...</Text>
+  }
+
+  if (errorMessage) {
+    return <Text className="entry-muted-state">{errorMessage}</Text>
+  }
+
+  if (rooms.length === 0) {
+    return <Text className="entry-muted-state">暂无正在进行的会议室。</Text>
+  }
+
+  return (
+    <div className="entry-room-table" role="table">
+      <div className="entry-room-table-head" role="row">
+        <span role="columnheader">会议名称</span>
+        <span role="columnheader">房间 ID</span>
+        <span role="columnheader">创建者</span>
+        <span role="columnheader">模式</span>
+        <span role="columnheader">Agent 数</span>
+        <span role="columnheader">状态</span>
+        <span role="columnheader">操作</span>
+      </div>
+      {rooms.slice(0, 3).map((roomItem) => (
+        <div className="entry-room-table-row" role="row" key={roomItem.id}>
+          <span role="cell">{roomItem.name || '未命名会议'}</span>
+          <button type="button" className="entry-room-id-button" onClick={() => onCopyRoomId(roomItem)}>
+            {roomItem.id}
+            <Copy size={13} />
+          </button>
+          <span role="cell">{roomItem.ownerName || roomItem.ownerParticipantName || '创建者'}</span>
+          <span role="cell">
+            <Badge size="sm" variant="light" color={roomItem.dialoguePolicy?.mode === 'guided_dialogue' ? 'blue' : 'teal'}>
+              {roomItem.dialoguePolicy?.mode === 'guided_dialogue' ? '单 Agent 对话' : '多 Agent 协作'}
+            </Badge>
+          </span>
+          <span role="cell">{roomItem.agentCount ?? roomItem.agents?.length ?? 0}</span>
+          <span role="cell">
+            <span className="entry-room-status">
+              <Check size={12} />
+              进行中
+            </span>
+          </span>
+          <span role="cell">
+            <Button type="button" size="xs" variant="outline" color="teal" onClick={() => onJoinRoom(roomItem)} disabled={!canJoin}>
+              加入
+            </Button>
+          </span>
+        </div>
+      ))}
+    </div>
   )
 }
 

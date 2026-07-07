@@ -1,11 +1,19 @@
 package model
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 const (
 	SenderTypeHuman  = "human"
 	SenderTypeAgent  = "agent"
 	SenderTypeSystem = "system"
+)
+
+const (
+	AgentRuntimeLLM       = "llm"
+	AgentRuntimeDeepAgent = "deepagent"
 )
 
 const (
@@ -105,6 +113,8 @@ type Agent struct {
 	Name         string `json:"name"`
 	Mention      string `json:"mention"`
 	Role         string `json:"role"`
+	Runtime      string `json:"runtime"`
+	Source       string `json:"source"`
 	Description  string `json:"description"`
 	Enabled      bool   `json:"enabled"`
 	SystemPrompt string `json:"-"`
@@ -115,6 +125,8 @@ type AgentConfig struct {
 	Name         string `json:"name"`
 	Mention      string `json:"mention"`
 	Role         string `json:"role"`
+	Runtime      string `json:"runtime"`
+	Source       string `json:"source"`
 	Description  string `json:"description"`
 	Enabled      bool   `json:"enabled"`
 	SystemPrompt string `json:"systemPrompt"`
@@ -148,6 +160,15 @@ type MessageKnowledgeSource struct {
 	Scope        string `json:"scope"`
 }
 
+type MessageArtifact struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Title    string `json:"title"`
+	FileName string `json:"fileName"`
+	MIMEType string `json:"mimeType"`
+	Content  string `json:"-"`
+}
+
 type Message struct {
 	ID               string                   `json:"id"`
 	RoomID           string                   `json:"roomID"`
@@ -160,6 +181,7 @@ type Message struct {
 	TurnIndex        int                      `json:"turnIndex,omitempty"`
 	ParentMessageID  string                   `json:"parentMessageID,omitempty"`
 	KnowledgeSources []MessageKnowledgeSource `json:"knowledgeSources,omitempty"`
+	Artifacts        []MessageArtifact        `json:"artifacts,omitempty"`
 }
 
 type FocusPoint struct {
@@ -171,6 +193,7 @@ type FocusPoint struct {
 
 func (a Agent) Public() Agent {
 	a.SystemPrompt = ""
+	a.Runtime = NormalizeAgentRuntime(a.Runtime)
 	return a
 }
 
@@ -180,8 +203,44 @@ func (a Agent) Config() AgentConfig {
 		Name:         a.Name,
 		Mention:      a.Mention,
 		Role:         a.Role,
+		Runtime:      NormalizeAgentRuntime(a.Runtime),
+		Source:       NormalizeAgentSource(a.Source),
 		Description:  a.Description,
 		Enabled:      a.Enabled,
 		SystemPrompt: a.SystemPrompt,
+	}
+}
+
+const (
+	AgentSourceBuiltin   = "builtin"
+	AgentSourceDeepAgent = "deepagent"
+)
+
+func NormalizeAgentSource(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case AgentSourceDeepAgent:
+		return AgentSourceDeepAgent
+	default:
+		return AgentSourceBuiltin
+	}
+}
+
+func NormalizeAgentRuntime(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", AgentRuntimeLLM:
+		return AgentRuntimeLLM
+	case AgentRuntimeDeepAgent:
+		return AgentRuntimeDeepAgent
+	default:
+		return strings.ToLower(strings.TrimSpace(value))
+	}
+}
+
+func IsValidAgentRuntime(value string) bool {
+	switch NormalizeAgentRuntime(value) {
+	case AgentRuntimeLLM, AgentRuntimeDeepAgent:
+		return true
+	default:
+		return false
 	}
 }

@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -13,21 +14,41 @@ import (
 
 func (s *MySQLStore) SeedAgents(ctx context.Context, agents []model.Agent) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var count int64
-		if err := tx.Model(&AgentModel{}).Count(&count).Error; err != nil {
-			return fmt.Errorf("count agents: %w", err)
+		var existing []AgentModel
+		if err := tx.Model(&AgentModel{}).Find(&existing).Error; err != nil {
+			return fmt.Errorf("list existing agents: %w", err)
 		}
-		if count > 0 {
-			return nil
+		existingIDs := make(map[string]struct{}, len(existing))
+		existingMentions := make(map[string]struct{}, len(existing))
+		for _, agent := range existing {
+			existingIDs[agent.ID] = struct{}{}
+			if mention := strings.ToLower(strings.TrimSpace(agent.Mention)); mention != "" {
+				existingMentions[mention] = struct{}{}
+			}
 		}
 
 		now := time.Now().UTC()
-		for i, a := range agents {
-			m := agentToModel(a, i)
+		sortOrder := len(existing)
+		for _, a := range agents {
+			if _, ok := existingIDs[a.ID]; ok {
+				continue
+			}
+			mention := strings.ToLower(strings.TrimSpace(a.Mention))
+			if mention != "" {
+				if _, ok := existingMentions[mention]; ok {
+					continue
+				}
+			}
+			m := agentToModel(a, sortOrder)
 			m.CreatedAt = now
 			m.UpdatedAt = now
 			if err := tx.Create(&m).Error; err != nil {
 				return fmt.Errorf("insert agent %s: %w", a.ID, err)
+			}
+			sortOrder++
+			existingIDs[a.ID] = struct{}{}
+			if mention != "" {
+				existingMentions[mention] = struct{}{}
 			}
 		}
 		return nil
@@ -92,6 +113,8 @@ func (s *MySQLStore) UpdateAgent(ctx context.Context, a model.Agent) (model.Agen
 	existing.Name = a.Name
 	existing.Mention = a.Mention
 	existing.Role = a.Role
+	existing.Runtime = model.NormalizeAgentRuntime(a.Runtime)
+	existing.Source = model.NormalizeAgentSource(a.Source)
 	existing.Description = a.Description
 	existing.SystemPrompt = a.SystemPrompt
 	existing.Enabled = a.Enabled

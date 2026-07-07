@@ -73,6 +73,11 @@ function withAdminKey(headers = {}) {
   }
 }
 
+function filenameFromContentDisposition(value = '') {
+  const match = value.match(/filename="?([^";]+)"?/i)
+  return match?.[1] || ''
+}
+
 export async function createRoom(name, agentIds, passcode = '', dialogueMode = 'mention_fanout') {
   const response = await fetch(`${API_BASE_PATH}/rooms`, {
     method: 'POST',
@@ -151,6 +156,30 @@ export async function exportRoomMinutesMarkdown(roomId, passcode = '') {
   }
 
   return response.text()
+}
+
+export async function downloadMessageArtifact(roomId, messageId, artifactId, passcode = '') {
+  const encodedRoomId = encodeURIComponent(roomId)
+  const encodedMessageId = encodeURIComponent(messageId)
+  const encodedArtifactId = encodeURIComponent(artifactId)
+  const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/messages/${encodedMessageId}/artifacts/${encodedArtifactId}`, {
+    headers: withAdminKey(withRoomPasscode({}, passcode)),
+  })
+
+  if (!response.ok) {
+    let message = '下载报告失败，请稍后重试。'
+    const contentType = response.headers.get('content-type') ?? ''
+    if (contentType.includes('application/json')) {
+      const payload = await response.json()
+      message = payload?.error ?? message
+    }
+    throw new Error(message)
+  }
+
+  return {
+    blob: await response.blob(),
+    fileName: filenameFromContentDisposition(response.headers.get('content-disposition')) || 'report.md',
+  }
 }
 
 export async function getAgents() {

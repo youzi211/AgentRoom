@@ -53,6 +53,11 @@ The server loads `../.env` when started from `backend/`, then reads environment 
 | `LLM_BASE_URL` | No | `https://api.openai.com` | Base URL for the `langchaingo` OpenAI-compatible chat API client. |
 | `LLM_API_KEY` | No | _empty_ | API key for agent responses. If empty, human chat still works and agent calls return room-visible system messages. |
 | `LLM_MODEL` | No | `gpt-4o-mini` | Chat-completions model name. |
+| `DEEPAGENT_COMMAND` | No | `uv` | Command used by the `deepagent` agent runtime adapter. |
+| `DEEPAGENT_WORKDIR` | No | `../deepagent` | Working directory for the DeepAgent uv project when backend starts from `backend/`. |
+| `DEEPAGENT_CONFIG` | No | `deepagent.toml` | DeepAgent config file path, resolved relative to `DEEPAGENT_WORKDIR` unless absolute. |
+| `DEEPAGENT_REGISTRY` | No | `agents.json` | DeepAgent agent registry file, resolved relative to `DEEPAGENT_WORKDIR`. Missing files are ignored. |
+| `DEEPAGENT_TIMEOUT_SECONDS` | No | `300` | Timeout for one DeepAgent runtime invocation. |
 | `LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, or `error`. |
 | `LOG_FORMAT` | No | `text` | Use `json` for container logs. |
 | `LOG_ADD_SOURCE` | No | `false` | Include source file information in logs when `true`. |
@@ -108,6 +113,8 @@ Legacy non-`/api` routes are still registered for compatibility.
 `GET /api/rooms/:roomID/messages` is cursor-paginated. It accepts `limit` plus an optional `before` cursor and returns `{ messages, hasMore, nextBefore }`.
 
 `GET /api/rooms/:roomID/minutes.md` is now a pure read endpoint. It downloads the latest persisted minutes and returns `404` when no saved minutes exist.
+
+Agents include `runtime` and `source` fields. Existing agents default to `llm`/`builtin`; DeepAgent agents are registered from `deepagent/agents.json`, use `runtime=deepagent`, and invoke the sibling `deepagent/` uv project to return a Markdown research report.
 
 Room lifecycle semantics:
 

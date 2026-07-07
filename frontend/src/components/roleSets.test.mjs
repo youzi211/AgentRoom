@@ -25,3 +25,9 @@ test('role-set shortcut controls have styles', () => {
   assert.match(source, /role-set-shortcuts/)
   assert.match(styles, /\.role-set-shortcuts/)
 })
+
+test('JoinScreen shows each selectable agent runtime', () => {
+  assert.match(source, /agent-runtime-inline/)
+  assert.match(source, /agent\.runtime/)
+  assert.match(styles, /\.agent-runtime-inline/)
+})

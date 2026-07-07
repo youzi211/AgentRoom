@@ -29,9 +29,9 @@ type RuntimeRoom interface {
 }
 
 type Runner struct {
-	client       llm.Client
 	store        runnerStore
 	knowledge    KnowledgeProvider
+	runtimes     *RuntimeRegistry
 	logger       *slog.Logger
 	contextLimit int
 	timeout      time.Duration
@@ -52,17 +52,23 @@ type KnowledgeProvider interface {
 }
 
 func NewRunner(client llm.Client, s runnerStore) *Runner {
+	timeout := 45 * time.Second
 	return &Runner{
-		client:       client,
 		store:        s,
+		runtimes:     NewRuntimeRegistry(NewLLMAgentRuntime(client, timeout)),
 		logger:       logging.Component("agent_runner"),
 		contextLimit: 30,
-		timeout:      45 * time.Second,
+		timeout:      timeout,
 	}
 }
 
 func (r *Runner) WithKnowledge(provider KnowledgeProvider) *Runner {
 	r.knowledge = provider
+	return r
+}
+
+func (r *Runner) WithRuntimeRegistry(registry *RuntimeRegistry) *Runner {
+	r.runtimes = registry
 	return r
 }
 
@@ -196,7 +202,7 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoo
 	}
 	r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "started", "", "", nil)
 
-	response, knowledgeChunks, err := r.generateResponse(ctx, currentRoom, responder, trigger)
+	response, knowledgeChunks, err := r.generateResponse(ctx, currentRoom, responder, trigger, runID)
 	now := time.Now().UTC()
 
 	if err != nil {
@@ -216,8 +222,9 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoo
 		return model.Message{}, false
 	}
 
-	agentMsg := currentRoom.NewAgentMessage(responder, response)
+	agentMsg := currentRoom.NewAgentMessage(responder, response.Content)
 	agentMsg.KnowledgeSources = knowledgeSourcesFromChunks(knowledgeChunks)
+	agentMsg.Artifacts = messageArtifactsFromRuntime(response.Artifacts)
 	savedAgentMsg := r.persistAndBroadcast(ctx, currentRoom, agentMsg)
 
 	if finishErr := r.store.FinishAgentRun(ctx, runID, "succeeded", "", now); finishErr != nil {
@@ -274,28 +281,27 @@ func (r *Runner) persistAndBroadcast(ctx context.Context, currentRoom RuntimeRoo
 	return savedMsg
 }
 
-func (r *Runner) generateResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message) (string, []model.KnowledgeChunk, error) {
+func (r *Runner) generateResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message, runID string) (AgentRuntimeResponse, []model.KnowledgeChunk, error) {
 	knowledgeChunks := r.searchKnowledge(ctx, currentRoom, responder, trigger)
-	promptContext := NewMentionPromptContext(currentRoom, currentRoom.RecentMessages(r.contextLimit), trigger, knowledgeChunks)
-	promptMessages, err := composePromptMessages(responder, promptContext)
+	recentMessages := currentRoom.RecentMessages(r.contextLimit)
+	promptContext := NewMentionPromptContext(currentRoom, recentMessages, trigger, knowledgeChunks)
+	runtime, err := r.runtimes.Resolve(responder)
 	if err != nil {
-		return "", knowledgeChunks, err
+		return AgentRuntimeResponse{}, knowledgeChunks, err
 	}
-
-	requestCtx, cancel := context.WithTimeout(ctx, r.timeout)
-	defer cancel()
-
-	response, err := r.client.Complete(requestCtx, promptMessages)
+	response, err := runtime.Respond(ctx, AgentRuntimeRequest{
+		RunID:           runID,
+		Room:            currentRoom,
+		Agent:           responder,
+		Trigger:         trigger,
+		RecentMessages:  recentMessages,
+		KnowledgeChunks: knowledgeChunks,
+		PromptContext:   promptContext,
+	})
 	if err != nil {
-		return "", knowledgeChunks, err
+		return AgentRuntimeResponse{}, knowledgeChunks, err
 	}
-
-	cleaned, err := StripThinkBlocks(response)
-	if err != nil {
-		return "", knowledgeChunks, err
-	}
-
-	return cleaned, knowledgeChunks, nil
+	return response, knowledgeChunks, nil
 }
 
 func (r *Runner) searchKnowledge(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message) []model.KnowledgeChunk {
@@ -350,4 +356,31 @@ func knowledgeSourcesFromChunks(chunks []model.KnowledgeChunk) []model.MessageKn
 		})
 	}
 	return sources
+}
+
+func messageArtifactsFromRuntime(artifacts []AgentRuntimeArtifact) []model.MessageArtifact {
+	if len(artifacts) == 0 {
+		return nil
+	}
+
+	result := make([]model.MessageArtifact, 0, len(artifacts))
+	for i, artifact := range artifacts {
+		id := strings.TrimSpace(artifact.ID)
+		if id == "" {
+			id = fmt.Sprintf("artifact_%d", i+1)
+		}
+		fileName := strings.TrimSpace(artifact.FileName)
+		if fileName == "" {
+			fileName = id
+		}
+		result = append(result, model.MessageArtifact{
+			ID:       id,
+			Type:     strings.TrimSpace(artifact.Type),
+			Title:    strings.TrimSpace(artifact.Title),
+			FileName: fileName,
+			MIMEType: strings.TrimSpace(artifact.MIMEType),
+			Content:  artifact.Content,
+		})
+	}
+	return result
 }

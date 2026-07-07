@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"agentroom/backend/internal/api"
+	"agentroom/backend/internal/model"
 )
 
 func createRoomForTest(t *testing.T, server *api.Server, name string) string {
@@ -137,5 +139,45 @@ func TestSaveAndListMinutesHistory(t *testing.T) {
 	}
 	if len(payload.Minutes) != 1 || payload.Minutes[0].Version != 1 || payload.Minutes[0].Source != "manual" {
 		t.Fatalf("expected one manual v1 minutes, got %+v", payload.Minutes)
+	}
+}
+
+func TestDownloadMessageArtifactReturnsPersistedReport(t *testing.T) {
+	server, _, backingStore := newActivityTestServer(t, api.Config{AdminAPIKey: "secret"})
+	roomID := createRoomForTest(t, server, "Research room")
+	report := "# Report\n\n- parameter counts"
+	backingStore.RoomMessages[roomID] = append(backingStore.RoomMessages[roomID], model.Message{
+		ID:         "msg_report",
+		RoomID:     roomID,
+		SenderID:   "research",
+		SenderName: "Research",
+		SenderType: model.SenderTypeAgent,
+		Content:    "Research report is ready.",
+		CreatedAt:  time.Now().UTC(),
+		Artifacts: []model.MessageArtifact{
+			{
+				ID:       "report",
+				Type:     "markdown_report",
+				Title:    "DeepAgent Research Report",
+				FileName: "research-report.md",
+				MIMEType: "text/markdown",
+				Content:  report,
+			},
+		},
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/api/rooms/"+roomID+"/messages/msg_report/artifacts/report", nil)
+	request.Header.Set("X-Admin-Key", "secret")
+	response := httptest.NewRecorder()
+	server.Routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected artifact download 200, got %d body=%s", response.Code, response.Body.String())
+	}
+	if body := response.Body.String(); body != report {
+		t.Fatalf("expected report body %q, got %q", report, body)
+	}
+	if disposition := response.Header().Get("Content-Disposition"); disposition != "attachment; filename=\"research-report.md\"" {
+		t.Fatalf("expected attachment filename, got %q", disposition)
 	}
 }

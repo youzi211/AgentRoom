@@ -27,7 +27,7 @@ const mojibakeMarkers = [
 ]
 
 const expectedReadableSnippets = [
-  ['components/JoinScreen.jsx', ['人和 Agent 协作开会的工作台', '创建会议室', '加入会议室']],
+  ['components/JoinScreen.jsx', ['AI 会议工作台', '角色化 Agent 协作', '创建会议室', '加入会议室', '已有房间']],
   ['components/ChatRoom.jsx', ['会议上下文', '实时讨论', '会议控制']],
   ['components/AgentAdmin.jsx', ['管理 Agent', '角色模板', '专属知识库']],
   ['components/MessageList.jsx', ['开始一次协作会议', '系统', '成员']],

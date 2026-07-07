@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"agentroom/backend/internal/model"
@@ -77,6 +78,22 @@ func (s *RoomService) ListMessagesPage(ctx context.Context, currentRoom *room.Ro
 		HasMore:    page.HasMore,
 		NextBefore: page.NextBefore,
 	}, nil
+}
+
+func (s *RoomService) GetMessageArtifact(ctx context.Context, currentRoom *room.Room, messageID string, artifactID string) (model.MessageArtifact, error) {
+	message, err := s.store.GetMessage(ctx, currentRoom.Info().ID, messageID)
+	if err != nil {
+		if errors.Is(err, store.ErrMessageNotFound) {
+			return model.MessageArtifact{}, ErrMessageNotFound
+		}
+		return model.MessageArtifact{}, err
+	}
+	for _, artifact := range message.Artifacts {
+		if artifact.ID == artifactID {
+			return artifact, nil
+		}
+	}
+	return model.MessageArtifact{}, ErrMessageArtifactNotFound
 }
 
 func (s *RoomService) ListRoomActivity(ctx context.Context, currentRoom *room.Room, limit int) (RoomActivity, error) {

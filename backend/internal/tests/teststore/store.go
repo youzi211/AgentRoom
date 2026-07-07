@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"agentroom/backend/internal/model"
@@ -11,29 +12,52 @@ import (
 )
 
 type Store struct {
-	Agents             []model.Agent
-	Rooms              map[string]model.RoomMeta
-	RoomAgents         map[string][]model.Agent
-	RoomMessages       map[string][]model.Message
-	ActiveParticipants map[string][]model.Participant
-	AgentRuns          []store.AgentRun
-	DialogueRuns       []store.DialogueRun
-	Documents          []model.KnowledgeDocument
-	Chunks             []model.KnowledgeChunk
-	Minutes            []model.MeetingMinutes
-	UpdateAgentErr     error
-	DeleteAgentErr     error
-	ListRoomAgentsErr  error
-	ListMessagesErr    error
+	Agents              []model.Agent
+	Rooms               map[string]model.RoomMeta
+	RoomAgents          map[string][]model.Agent
+	RoomMessages        map[string][]model.Message
+	ActiveParticipants  map[string][]model.Participant
+	AgentRuns           []store.AgentRun
+	DialogueRuns        []store.DialogueRun
+	Documents           []model.KnowledgeDocument
+	Chunks              []model.KnowledgeChunk
+	Minutes             []model.MeetingMinutes
+	UpdateAgentErr      error
+	DeleteAgentErr      error
+	ListRoomAgentsErr   error
+	ListMessagesErr     error
 	ListParticipantsErr error
-	DeleteDocumentErr  error
+	DeleteDocumentErr   error
 }
 
 func (s *Store) Ping(context.Context) error { return nil }
 func (s *Store) Close() error               { return nil }
 
 func (s *Store) SeedAgents(_ context.Context, agents []model.Agent) error {
-	s.Agents = append([]model.Agent(nil), agents...)
+	existingIDs := make(map[string]struct{}, len(s.Agents))
+	existingMentions := make(map[string]struct{}, len(s.Agents))
+	for _, agent := range s.Agents {
+		existingIDs[agent.ID] = struct{}{}
+		if mention := strings.ToLower(strings.TrimSpace(agent.Mention)); mention != "" {
+			existingMentions[mention] = struct{}{}
+		}
+	}
+	for _, agent := range agents {
+		if _, ok := existingIDs[agent.ID]; ok {
+			continue
+		}
+		mention := strings.ToLower(strings.TrimSpace(agent.Mention))
+		if mention != "" {
+			if _, ok := existingMentions[mention]; ok {
+				continue
+			}
+		}
+		s.Agents = append(s.Agents, agent)
+		existingIDs[agent.ID] = struct{}{}
+		if mention != "" {
+			existingMentions[mention] = struct{}{}
+		}
+	}
 	return nil
 }
 
@@ -287,6 +311,16 @@ func (s *Store) AddMessage(_ context.Context, message model.Message) (model.Mess
 	s.RoomMessages[message.RoomID] = append(s.RoomMessages[message.RoomID], message)
 	sortMessages(s.RoomMessages[message.RoomID])
 	return message, nil
+}
+
+func (s *Store) GetMessage(_ context.Context, roomID string, messageID string) (model.Message, error) {
+	s.ensureMaps()
+	for _, message := range s.RoomMessages[roomID] {
+		if message.ID == messageID {
+			return message, nil
+		}
+	}
+	return model.Message{}, fmt.Errorf("%w: %s", store.ErrMessageNotFound, messageID)
 }
 
 func (s *Store) ListMessages(_ context.Context, query store.ListMessagesQuery) ([]model.Message, error) {

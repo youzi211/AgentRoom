@@ -18,6 +18,8 @@ type AgentModel struct {
 	Name         string    `gorm:"size:128;not null"`
 	Mention      string    `gorm:"size:128;uniqueIndex:uk_agents_mention;not null"`
 	Role         string    `gorm:"size:128;not null"`
+	Runtime      string    `gorm:"size:32;not null;default:'llm'"`
+	Source       string    `gorm:"size:32;not null;default:'builtin'"`
 	Description  string    `gorm:"type:text;not null"`
 	SystemPrompt string    `gorm:"column:system_prompt;type:text;not null"`
 	Enabled      bool      `gorm:"not null;default:true"`
@@ -59,6 +61,8 @@ type RoomAgentModel struct {
 	Name         string    `gorm:"size:128;not null"`
 	Mention      string    `gorm:"size:128;not null;uniqueIndex:idx_room_agents_mention"`
 	Role         string    `gorm:"size:128;not null"`
+	Runtime      string    `gorm:"size:32;not null;default:'llm'"`
+	Source       string    `gorm:"size:32;not null;default:'builtin'"`
 	Description  string    `gorm:"type:text;not null"`
 	SystemPrompt string    `gorm:"column:system_prompt;type:text;not null"`
 	Enabled      bool      `gorm:"not null;default:true"`
@@ -93,6 +97,7 @@ type MessageModel struct {
 	TurnIndex            int       `gorm:"column:turn_index;not null;default:0"`
 	ParentMessageID      string    `gorm:"column:parent_message_id;size:64"`
 	KnowledgeSourcesJSON string    `gorm:"column:knowledge_sources_json;type:text"`
+	ArtifactsJSON        string    `gorm:"column:artifacts_json;type:mediumtext"`
 	CreatedAt            time.Time `gorm:"not null;index:idx_messages_room_created"`
 }
 
@@ -181,6 +186,8 @@ func agentToModel(a model.Agent, sortOrder int) AgentModel {
 		Name:         a.Name,
 		Mention:      a.Mention,
 		Role:         a.Role,
+		Runtime:      model.NormalizeAgentRuntime(a.Runtime),
+		Source:       model.NormalizeAgentSource(a.Source),
 		Description:  a.Description,
 		SystemPrompt: a.SystemPrompt,
 		Enabled:      a.Enabled,
@@ -195,6 +202,8 @@ func roomAgentToModel(roomID string, a model.Agent, sortOrder int) RoomAgentMode
 		Name:         a.Name,
 		Mention:      a.Mention,
 		Role:         a.Role,
+		Runtime:      model.NormalizeAgentRuntime(a.Runtime),
+		Source:       model.NormalizeAgentSource(a.Source),
 		Description:  a.Description,
 		SystemPrompt: a.SystemPrompt,
 		Enabled:      a.Enabled,
@@ -228,6 +237,7 @@ func messageToModel(msg model.Message) MessageModel {
 		TurnIndex:            msg.TurnIndex,
 		ParentMessageID:      msg.ParentMessageID,
 		KnowledgeSourcesJSON: encodeMessageKnowledgeSources(msg.KnowledgeSources),
+		ArtifactsJSON:        encodeMessageArtifacts(msg.Artifacts),
 		CreatedAt:            msg.CreatedAt,
 	}
 }
@@ -299,6 +309,8 @@ func (m AgentModel) toDomain() model.Agent {
 		Name:         m.Name,
 		Mention:      m.Mention,
 		Role:         m.Role,
+		Runtime:      model.NormalizeAgentRuntime(m.Runtime),
+		Source:       model.NormalizeAgentSource(m.Source),
 		Description:  m.Description,
 		SystemPrompt: m.SystemPrompt,
 		Enabled:      m.Enabled,
@@ -311,6 +323,8 @@ func (m RoomAgentModel) toDomain() model.Agent {
 		Name:         m.Name,
 		Mention:      m.Mention,
 		Role:         m.Role,
+		Runtime:      model.NormalizeAgentRuntime(m.Runtime),
+		Source:       model.NormalizeAgentSource(m.Source),
 		Description:  m.Description,
 		SystemPrompt: m.SystemPrompt,
 		Enabled:      m.Enabled,
@@ -337,6 +351,7 @@ func (m MessageModel) toDomain() model.Message {
 		TurnIndex:        m.TurnIndex,
 		ParentMessageID:  m.ParentMessageID,
 		KnowledgeSources: decodeMessageKnowledgeSources(m.KnowledgeSourcesJSON),
+		Artifacts:        decodeMessageArtifacts(m.ArtifactsJSON),
 		CreatedAt:        m.CreatedAt,
 	}
 }
@@ -474,4 +489,68 @@ func decodeMessageKnowledgeSources(payload string) []model.MessageKnowledgeSourc
 		return nil
 	}
 	return sources
+}
+
+func encodeMessageArtifacts(artifacts []model.MessageArtifact) string {
+	if len(artifacts) == 0 {
+		return ""
+	}
+	payload, err := json.Marshal(messageArtifactPayloadsFromDomain(artifacts))
+	if err != nil {
+		return ""
+	}
+	return string(payload)
+}
+
+func decodeMessageArtifacts(payload string) []model.MessageArtifact {
+	if payload == "" {
+		return nil
+	}
+	var artifacts []messageArtifactPayload
+	if err := json.Unmarshal([]byte(payload), &artifacts); err != nil {
+		return nil
+	}
+	return messageArtifactPayloadsToDomain(artifacts)
+}
+
+type messageArtifactPayload struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Title    string `json:"title"`
+	FileName string `json:"fileName"`
+	MIMEType string `json:"mimeType"`
+	Content  string `json:"content"`
+}
+
+func messageArtifactPayloadsFromDomain(artifacts []model.MessageArtifact) []messageArtifactPayload {
+	result := make([]messageArtifactPayload, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		result = append(result, messageArtifactPayload{
+			ID:       artifact.ID,
+			Type:     artifact.Type,
+			Title:    artifact.Title,
+			FileName: artifact.FileName,
+			MIMEType: artifact.MIMEType,
+			Content:  artifact.Content,
+		})
+	}
+	return result
+}
+
+func messageArtifactPayloadsToDomain(artifacts []messageArtifactPayload) []model.MessageArtifact {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	result := make([]model.MessageArtifact, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		result = append(result, model.MessageArtifact{
+			ID:       artifact.ID,
+			Type:     artifact.Type,
+			Title:    artifact.Title,
+			FileName: artifact.FileName,
+			MIMEType: artifact.MIMEType,
+			Content:  artifact.Content,
+		})
+	}
+	return result
 }

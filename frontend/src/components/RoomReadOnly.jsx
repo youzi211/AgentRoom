@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { exportRoomMinutesMarkdown, getMessages } from '../api/roomClient'
+import { downloadMessageArtifact, exportRoomMinutesMarkdown, getMessages } from '../api/roomClient'
 import MessageList from './MessageList'
-import { downloadMarkdownFile, minutesFilename } from './meetingMinutes'
+import { downloadBlobFile, downloadMarkdownFile, minutesFilename } from './meetingMinutes'
 
 function RoomReadOnly({ room, roomPasscode = '', onBackHome }) {
   const [messages, setMessages] = useState([])
@@ -85,6 +85,16 @@ function RoomReadOnly({ room, roomPasscode = '', onBackHome }) {
       setMinutesNotice('会议纪要已经开始下载。')
     } catch (error) {
       setMinutesNotice(error.message || '导出会议纪要失败，请稍后重试。')
+    }
+  }
+
+  const handleDownloadArtifact = async (message, artifact) => {
+    try {
+      const { blob, fileName } = await downloadMessageArtifact(room.id, message.id, artifact.id, roomPasscode)
+      downloadBlobFile(blob, fileName || artifact.fileName || 'report.md')
+      setErrorMessage('')
+    } catch (error) {
+      setErrorMessage(error.message || '下载报告失败，请稍后重试。')
     }
   }
 
@@ -176,7 +186,7 @@ function RoomReadOnly({ room, roomPasscode = '', onBackHome }) {
             <p className="sidebar-empty">这个会议还没有消息记录。</p>
           ) : (
             <div className="room-history-list">
-              <MessageList currentParticipantName="" messages={messages} />
+              <MessageList currentParticipantName="" messages={messages} onDownloadArtifact={handleDownloadArtifact} />
             </div>
           )}
         </section>

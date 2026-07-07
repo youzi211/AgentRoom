@@ -6,12 +6,26 @@ import (
 
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/store"
+	"gorm.io/gorm"
 )
 
 func (s *MySQLStore) AddMessage(ctx context.Context, message model.Message) (model.Message, error) {
 	m := messageToModel(message)
 	if err := s.db.WithContext(ctx).Create(&m).Error; err != nil {
 		return model.Message{}, fmt.Errorf("insert message: %w", err)
+	}
+	return m.toDomain(), nil
+}
+
+func (s *MySQLStore) GetMessage(ctx context.Context, roomID string, messageID string) (model.Message, error) {
+	var m MessageModel
+	if err := s.db.WithContext(ctx).
+		Where("room_id = ? AND id = ?", roomID, messageID).
+		First(&m).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return model.Message{}, fmt.Errorf("%w: %s", store.ErrMessageNotFound, messageID)
+		}
+		return model.Message{}, fmt.Errorf("get message: %w", err)
 	}
 	return m.toDomain(), nil
 }

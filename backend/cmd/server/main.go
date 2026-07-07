@@ -35,6 +35,7 @@ func main() {
 
 	dbConfig := config.LoadDBConfig()
 	securityConfig := config.LoadSecurityConfig()
+	deepAgentConfig := config.LoadDeepAgentConfig()
 	if dbConfig.DSN == "" {
 		fatal(logger, "MYSQL_DSN is required. Set it in .env or environment variables.", nil)
 	}
@@ -58,8 +59,17 @@ func main() {
 		logger.Info("database migrations applied")
 	}
 
-	if err := store.SeedAgents(ctx, agent.PredefinedAgents()); err != nil {
+	deepAgentRegistryPath := filepath.Join(deepAgentConfig.WorkDir, deepAgentConfig.Registry)
+	deepAgentAgents, err := agent.LoadDeepAgentRegistryAgents(deepAgentRegistryPath)
+	if err != nil {
+		fatal(logger, "load deepagent registry", err)
+	}
+	agentDefinitions := agent.MergeAgentDefinitions(agent.PredefinedAgents(), deepAgentAgents)
+	if err := store.SeedAgents(ctx, agentDefinitions); err != nil {
 		fatal(logger, "seed agents", err)
+	}
+	if len(deepAgentAgents) > 0 {
+		logger.Info("loaded deepagent registry agents", "count", len(deepAgentAgents), "path", deepAgentRegistryPath)
 	}
 
 	agents, err := store.ListAgents(ctx)
@@ -72,6 +82,15 @@ func main() {
 	manager := room.NewManager(store, agentService.ResolveForRoom)
 	llmClient := llm.NewClientFromEnv()
 	runner := agent.NewRunner(llmClient, store).WithKnowledge(knowledgeService)
+	runner.WithRuntimeRegistry(agent.NewRuntimeRegistry(
+		agent.NewLLMAgentRuntime(llmClient, 45*time.Second),
+		agent.NewDeepAgentRuntime(agent.DeepAgentRuntimeConfig{
+			Command: deepAgentConfig.Command,
+			WorkDir: deepAgentConfig.WorkDir,
+			Config:  deepAgentConfig.Config,
+			Timeout: deepAgentConfig.Timeout,
+		}),
+	))
 	focusService := service.NewFocusService(llmClient)
 	minutesService := service.NewMinutesService(llmClient)
 	roomService := service.NewRoomService(manager, agentService, knowledgeService, runner, focusService, store).WithMinutes(minutesService)

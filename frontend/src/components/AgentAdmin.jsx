@@ -9,6 +9,7 @@ import {
   updateAgent,
   uploadAgentKnowledge,
 } from '../api/roomClient'
+import { LogIn, Settings, Sparkles } from 'lucide-react'
 import KnowledgePanel from './KnowledgePanel'
 
 const EMPTY_FORM = {
@@ -208,17 +209,20 @@ function AgentAdmin({ onBack, embedded = false }) {
   return (
     <main className={containerClass}>
       {embedded ? null : (
-        <header className="app-bar">
-          <div className="brand-lockup">
-            <span className="brand-mark">AR</span>
-            <div>
-              <strong>Agent 管理</strong>
-              <span>配置会议室里的预定义角色</span>
-            </div>
+        <header className="entry-dashboard-header admin-dashboard-header">
+          <div className="entry-dashboard-brand admin-dashboard-brand">
+            <span className="entry-brand-symbol" aria-hidden="true">
+              <Sparkles size={24} />
+            </span>
+            <strong>AgentRoom</strong>
           </div>
-          <nav className="app-nav" aria-label="管理导航">
-            <span className="app-nav-item app-nav-item--active">Agent 配置</span>
-            <button className="app-nav-item" type="button" onClick={onBack}>
+          <nav className="entry-dashboard-nav admin-dashboard-nav" aria-label="管理导航">
+            <span className="entry-dashboard-nav-item entry-dashboard-nav-item--active">
+              <Settings size={17} />
+              Agent 配置
+            </span>
+            <button className="entry-dashboard-nav-item" type="button" onClick={onBack}>
+              <LogIn size={17} />
               会议入口
             </button>
           </nav>
@@ -288,6 +292,10 @@ function AgentAdmin({ onBack, embedded = false }) {
                     onClick={() => setSelectedAgentId(agent.id)}
                   >
                     <span className="admin-agent-name">{agent.name}</span>
+                    <span className={`agent-runtime-badge agent-runtime-badge--${agent.runtime || 'llm'}`}>
+                      {agent.source ? `${agent.source} · ` : ''}
+                      {agent.runtime || 'llm'}
+                    </span>
                     <span className={`agent-state ${agent.enabled === false ? 'agent-state--off' : ''}`}>
                       {agent.enabled === false ? '停用' : '启用'}
                     </span>
@@ -316,6 +324,8 @@ function AgentAdmin({ onBack, embedded = false }) {
             </div>
             <div className="panel-badge-group">
               {selectedAgent ? <span className="panel-badge">{selectedAgent.mention}</span> : null}
+              {selectedAgent ? <span className="panel-badge">{selectedAgent.runtime || 'llm'}</span> : null}
+              {selectedAgent?.source ? <span className="panel-badge">{selectedAgent.source}</span> : null}
               {isCreating ? <span className="panel-badge">新建</span> : null}
             </div>
           </div>

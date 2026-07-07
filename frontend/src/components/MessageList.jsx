@@ -1,6 +1,6 @@
 import { forwardRef } from 'react'
 
-const MessageList = forwardRef(function MessageList({ currentParticipantName, messages, thinkingAgents = [] }, ref) {
+const MessageList = forwardRef(function MessageList({ currentParticipantName, messages, onDownloadArtifact, thinkingAgents = [] }, ref) {
   if (messages.length === 0 && thinkingAgents.length === 0) {
     return (
       <section className="message-panel message-panel--empty">
@@ -38,6 +38,22 @@ const MessageList = forwardRef(function MessageList({ currentParticipantName, me
                   </time>
                 </div>
                 <p className="message-content">{message.content}</p>
+                {message.artifacts?.length > 0 ? (
+                  <div className="message-artifacts" aria-label="报告文件">
+                    {message.artifacts.map((artifact) => (
+                      <button
+                        className="message-artifact-button"
+                        key={artifact.id}
+                        type="button"
+                        onClick={() => onDownloadArtifact?.(message, artifact)}
+                      >
+                        <span className="message-artifact-icon" aria-hidden="true">MD</span>
+                        <span>{artifact.title || artifact.fileName || '下载报告'}</span>
+                        <span className="message-artifact-action">下载报告</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 {knowledgeSources.length > 0 ? (
                   <div className="message-sources" aria-label="知识来源">
                     <span className="message-sources-label">参考：</span>

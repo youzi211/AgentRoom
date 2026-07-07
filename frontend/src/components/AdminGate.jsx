@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { clearStoredAdminKey, getStoredAdminKey, setStoredAdminKey, verifyAdminKey } from '../api/roomClient'
+import { LogIn, Settings, Sparkles } from 'lucide-react'
 
 // AdminGate guards the admin console. It verifies the stored admin key against
 // the backend before rendering children. When the backend has no ADMIN_API_KEY
@@ -56,23 +57,27 @@ function AdminGate({ children, onBackHome }) {
   }
 
   return (
-    <main className="workbench workbench--entry">
-      <header className="app-bar">
-        <div className="brand-lockup">
-          <span className="brand-mark">AR</span>
-          <div>
-            <strong>管理后台</strong>
-            <span>会议记录与 Agent 管理</span>
-          </div>
+    <main className="entry-dashboard admin-dashboard">
+      <header className="entry-dashboard-header admin-dashboard-header">
+        <div className="entry-dashboard-brand admin-dashboard-brand">
+          <span className="entry-brand-symbol" aria-hidden="true">
+            <Sparkles size={24} />
+          </span>
+          <strong>AgentRoom</strong>
         </div>
-        <nav className="app-nav" aria-label="主导航">
-          <button className="app-nav-item" type="button" onClick={onBackHome}>
+        <nav className="entry-dashboard-nav admin-dashboard-nav" aria-label="主导航">
+          <span className="entry-dashboard-nav-item entry-dashboard-nav-item--active">
+            <Settings size={17} />
+            管理后台
+          </span>
+          <button className="entry-dashboard-nav-item" type="button" onClick={onBackHome}>
+            <LogIn size={17} />
             会议入口
           </button>
         </nav>
       </header>
 
-      <section className="entry-grid entry-grid--single">
+      <section className="admin-gate-layout">
         <form className="panel panel--primary-flow" onSubmit={handleSubmit}>
           <div className="panel-header">
             <h2>进入管理后台</h2>

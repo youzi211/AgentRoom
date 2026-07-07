@@ -4,6 +4,7 @@ import "errors"
 
 var (
 	ErrInvalidMessageCursor       = errors.New("invalid message cursor")
+	ErrMessageNotFound            = errors.New("message not found")
 	ErrAgentNotFound              = errors.New("agent not found")
 	ErrRoomNotFound               = errors.New("room not found")
 	ErrParticipantNotFound        = errors.New("participant not found")

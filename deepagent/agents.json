@@ -1,0 +1,13 @@
+{
+  "agents": [
+    {
+      "id": "research",
+      "name": "Research",
+      "mention": "@Research",
+      "role": "Deep Research",
+      "description": "使用 DeepAgent 执行深度研究，并返回 Markdown 报告。",
+      "systemPrompt": "Use DeepAgent's internal coordinator and research subagent to produce sourced Markdown reports.",
+      "enabled": true
+    }
+  ]
+}

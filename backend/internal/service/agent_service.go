@@ -16,6 +16,7 @@ import (
 type UpdateAgentInput struct {
 	Name         string
 	Role         string
+	Runtime      string
 	Description  string
 	SystemPrompt string
 	Enabled      *bool
@@ -101,6 +102,9 @@ func (s *AgentService) UpdateAgent(ctx context.Context, agentID string, input Up
 	if current == nil {
 		return model.Agent{}, ErrAgentNotFound
 	}
+	if runtime := strings.TrimSpace(input.Runtime); runtime != "" && !model.IsValidAgentRuntime(runtime) {
+		return model.Agent{}, ErrInvalidAgentRuntime
+	}
 
 	updated := applyAgentUpdate(*current, input)
 	if hasAgentMentionConflict(s.agents, updated.ID, updated.Mention) {
@@ -120,10 +124,14 @@ func (s *AgentService) UpdateAgent(ctx context.Context, agentID string, input Up
 	return result, nil
 }
 
-func (s *AgentService) CreateAgent(ctx context.Context, name, role, description, systemPrompt string, enabled bool) (model.Agent, error) {
+func (s *AgentService) CreateAgent(ctx context.Context, name, role, description, systemPrompt string, enabled bool, runtime string) (model.Agent, error) {
 	trimmedName := strings.TrimSpace(name)
 	if trimmedName == "" {
 		return model.Agent{}, fmt.Errorf("agent name is required")
+	}
+	normalizedRuntime := model.NormalizeAgentRuntime(runtime)
+	if !model.IsValidAgentRuntime(normalizedRuntime) {
+		return model.Agent{}, ErrInvalidAgentRuntime
 	}
 	mention := "@" + trimmedName
 
@@ -139,6 +147,8 @@ func (s *AgentService) CreateAgent(ctx context.Context, name, role, description,
 		Name:         trimmedName,
 		Mention:      mention,
 		Role:         strings.TrimSpace(role),
+		Runtime:      normalizedRuntime,
+		Source:       model.AgentSourceBuiltin,
 		Description:  strings.TrimSpace(description),
 		SystemPrompt: strings.TrimSpace(systemPrompt),
 		Enabled:      enabled,
@@ -178,6 +188,9 @@ func applyAgentUpdate(current model.Agent, input UpdateAgentInput) model.Agent {
 	}
 	if role := strings.TrimSpace(input.Role); role != "" {
 		current.Role = role
+	}
+	if runtime := strings.TrimSpace(input.Runtime); runtime != "" {
+		current.Runtime = model.NormalizeAgentRuntime(runtime)
 	}
 	if description := strings.TrimSpace(input.Description); description != "" {
 		current.Description = description

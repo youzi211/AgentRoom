@@ -85,6 +85,7 @@ func (s *Server) handleUpdateAgent(c *gin.Context) {
 	updated, err := s.roomCommands.UpdateAgent(c.Request.Context(), agentID, service.UpdateAgentInput{
 		Name:         request.Name,
 		Role:         request.Role,
+		Runtime:      request.Runtime,
 		Description:  request.Description,
 		SystemPrompt: request.SystemPrompt,
 		Enabled:      request.Enabled,
@@ -92,6 +93,10 @@ func (s *Server) handleUpdateAgent(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, service.ErrAgentNotFound) {
 			writeError(c, http.StatusNotFound, "agent not found")
+			return
+		}
+		if errors.Is(err, service.ErrInvalidAgentRuntime) {
+			writeError(c, http.StatusBadRequest, "invalid agent runtime")
 			return
 		}
 		if errors.Is(err, service.ErrAgentMentionExists) {
@@ -129,10 +134,14 @@ func (s *Server) handleCreateAgent(c *gin.Context) {
 		enabled = *request.Enabled
 	}
 
-	created, err := s.roomCommands.CreateAgent(c.Request.Context(), name, request.Role, request.Description, request.SystemPrompt, enabled)
+	created, err := s.roomCommands.CreateAgent(c.Request.Context(), name, request.Role, request.Description, request.SystemPrompt, enabled, request.Runtime)
 	if err != nil {
 		if errors.Is(err, service.ErrAgentMentionExists) {
 			writeError(c, http.StatusConflict, "agent name already exists")
+			return
+		}
+		if errors.Is(err, service.ErrInvalidAgentRuntime) {
+			writeError(c, http.StatusBadRequest, "invalid agent runtime")
 			return
 		}
 		s.logger.Error("create agent", "agent_name", name, "error", err)
@@ -267,6 +276,43 @@ func (s *Server) handleGetMessages(c *gin.Context) {
 		HasMore:    page.HasMore,
 		NextBefore: page.NextBefore,
 	})
+}
+
+func (s *Server) handleDownloadMessageArtifact(c *gin.Context) {
+	currentRoom, ok := s.getRoomForRead(c)
+	if !ok {
+		return
+	}
+
+	messageID := strings.TrimSpace(c.Param("messageID"))
+	artifactID := strings.TrimSpace(c.Param("artifactID"))
+	if messageID == "" || artifactID == "" {
+		writeError(c, http.StatusBadRequest, "missing message artifact id")
+		return
+	}
+
+	artifact, err := s.roomQueries.GetMessageArtifact(c.Request.Context(), currentRoom, messageID, artifactID)
+	if err != nil {
+		if errors.Is(err, service.ErrMessageNotFound) || errors.Is(err, service.ErrMessageArtifactNotFound) {
+			writeError(c, http.StatusNotFound, "message artifact not found")
+			return
+		}
+		s.logger.Error("download message artifact", "room_id", currentRoom.Info().ID, "message_id", messageID, "artifact_id", artifactID, "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to download message artifact")
+		return
+	}
+	if strings.TrimSpace(artifact.Content) == "" {
+		writeError(c, http.StatusNotFound, "message artifact not found")
+		return
+	}
+
+	contentType := strings.TrimSpace(artifact.MIMEType)
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	c.Header("Content-Type", contentType+"; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", artifactDownloadFilename(artifact)))
+	c.String(http.StatusOK, artifact.Content)
 }
 
 func (s *Server) handleGetRoomActivity(c *gin.Context) {

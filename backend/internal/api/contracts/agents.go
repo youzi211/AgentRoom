@@ -5,6 +5,7 @@ import "agentroom/backend/internal/model"
 type UpdateAgentRequest struct {
 	Name         string `json:"name"`
 	Role         string `json:"role"`
+	Runtime      string `json:"runtime"`
 	Description  string `json:"description"`
 	SystemPrompt string `json:"systemPrompt"`
 	Enabled      *bool  `json:"enabled"`
@@ -13,6 +14,7 @@ type UpdateAgentRequest struct {
 type CreateAgentRequest struct {
 	Name         string `json:"name"`
 	Role         string `json:"role"`
+	Runtime      string `json:"runtime"`
 	Description  string `json:"description"`
 	SystemPrompt string `json:"systemPrompt"`
 	Enabled      *bool  `json:"enabled"`

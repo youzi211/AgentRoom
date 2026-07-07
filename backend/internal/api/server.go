@@ -36,6 +36,7 @@ type RoomQueryService interface {
 	ListRooms(ctx context.Context, query service.ListRoomsInput) ([]model.RoomSummary, error)
 	ListAgentKnowledge(ctx context.Context, agentID string) ([]model.KnowledgeDocument, error)
 	ListMessagesPage(ctx context.Context, currentRoom *room.Room, limit int, before string) (service.MessagePage, error)
+	GetMessageArtifact(ctx context.Context, currentRoom *room.Room, messageID string, artifactID string) (model.MessageArtifact, error)
 	ListRoomActivity(ctx context.Context, currentRoom *room.Room, limit int) (service.RoomActivity, error)
 	LatestPersistedMinutesMarkdown(ctx context.Context, currentRoom *room.Room) (string, bool, error)
 	ListMinutes(ctx context.Context, currentRoom *room.Room) ([]model.MeetingMinutes, error)
@@ -44,7 +45,7 @@ type RoomQueryService interface {
 
 type RoomCommandService interface {
 	UpdateAgent(ctx context.Context, agentID string, input service.UpdateAgentInput) (model.Agent, error)
-	CreateAgent(ctx context.Context, name, role, description, systemPrompt string, enabled bool) (model.Agent, error)
+	CreateAgent(ctx context.Context, name, role, description, systemPrompt string, enabled bool, runtime string) (model.Agent, error)
 	DeleteAgent(ctx context.Context, agentID string) error
 	UploadAgentKnowledge(ctx context.Context, agentID string, fileName string, content []byte) (model.KnowledgeDocument, error)
 	CreateRoom(ctx context.Context, name string, agentIDs []string, passcode string, dialoguePolicy model.DialoguePolicy) (*room.Room, error)
@@ -133,6 +134,7 @@ func (s *Server) registerAPIRoutes(routes gin.IRoutes) {
 	routes.POST("/rooms", s.handleCreateRoom)
 	routes.GET("/rooms/:roomID", s.handleGetRoom)
 	routes.GET("/rooms/:roomID/messages", s.handleGetMessages)
+	routes.GET("/rooms/:roomID/messages/:messageID/artifacts/:artifactID", s.handleDownloadMessageArtifact)
 	routes.GET("/rooms/:roomID/activity", s.handleGetRoomActivity)
 	routes.GET("/rooms/:roomID/knowledge", s.handleListRoomKnowledge)
 	routes.POST("/rooms/:roomID/knowledge", s.requireAdmin, s.handleUploadRoomKnowledge)

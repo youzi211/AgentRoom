@@ -72,3 +72,29 @@ func TestGetRoomFailsAndDoesNotCachePartialSnapshotWhenMessageLoadFails(t *testi
 		t.Fatalf("expected recovered load to include persisted agents, got %#v", currentRoom.Agents())
 	}
 }
+
+func TestManagerPreservesAgentRuntimeInRoomSnapshot(t *testing.T) {
+	agents := []model.Agent{
+		{ID: "research", Name: "Research", Mention: "@Research", Runtime: model.AgentRuntimeDeepAgent, Enabled: true},
+	}
+	backingStore := &teststore.Store{}
+	manager := room.NewManager(backingStore, func([]string) []model.Agent {
+		return append([]model.Agent(nil), agents...)
+	})
+
+	created, err := manager.CreateRoom(context.Background(), "Research room", nil, "", model.DefaultDialoguePolicy())
+	if err != nil {
+		t.Fatalf("create room: %v", err)
+	}
+	roomID := created.Info().ID
+
+	manager = room.NewManager(backingStore, func([]string) []model.Agent { return nil })
+	loaded, ok := manager.GetRoom(context.Background(), roomID)
+	if !ok {
+		t.Fatal("expected persisted room to load")
+	}
+	loadedAgents := loaded.AgentsWithPrompts()
+	if len(loadedAgents) != 1 || loadedAgents[0].Runtime != model.AgentRuntimeDeepAgent {
+		t.Fatalf("expected deepagent runtime to survive room snapshot, got %#v", loadedAgents)
+	}
+}

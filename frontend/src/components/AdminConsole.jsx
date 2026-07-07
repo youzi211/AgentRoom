@@ -1,5 +1,6 @@
 import { clearStoredAdminKey } from '../api/roomClient'
 import { ADMIN_SECTIONS } from '../routing'
+import { BarChart3, LogIn, LogOut, Sparkles, Users } from 'lucide-react'
 import AgentAdmin from './AgentAdmin'
 import MeetingAdmin from './MeetingAdmin'
 
@@ -17,40 +18,45 @@ function AdminConsole({ section, onNavigateSection, onBackHome, onSignOut }) {
   }
 
   return (
-    <main className="workbench workbench--admin">
-      <header className="app-bar">
-        <div className="brand-lockup">
-          <span className="brand-mark">AR</span>
-          <div>
-            <strong>管理后台</strong>
-            <span>会议记录与 Agent 管理</span>
-          </div>
+    <main className="entry-dashboard admin-dashboard">
+      <header className="entry-dashboard-header admin-dashboard-header">
+        <div className="entry-dashboard-brand admin-dashboard-brand">
+          <span className="entry-brand-symbol" aria-hidden="true">
+            <Sparkles size={24} />
+          </span>
+          <strong>AgentRoom</strong>
         </div>
-        <nav className="app-nav" aria-label="管理导航">
+        <nav className="entry-dashboard-nav admin-dashboard-nav" aria-label="管理导航">
           <button
             type="button"
-            className={`app-nav-item${activeSection === ADMIN_SECTIONS.meetings ? ' app-nav-item--active' : ''}`}
+            className={`entry-dashboard-nav-item${activeSection === ADMIN_SECTIONS.meetings ? ' entry-dashboard-nav-item--active' : ''}`}
             onClick={() => onNavigateSection(ADMIN_SECTIONS.meetings)}
           >
+            <BarChart3 size={17} />
             会议管理
           </button>
           <button
             type="button"
-            className={`app-nav-item${activeSection === ADMIN_SECTIONS.agents ? ' app-nav-item--active' : ''}`}
+            className={`entry-dashboard-nav-item${activeSection === ADMIN_SECTIONS.agents ? ' entry-dashboard-nav-item--active' : ''}`}
             onClick={() => onNavigateSection(ADMIN_SECTIONS.agents)}
           >
+            <Users size={17} />
             Agent 管理
           </button>
-          <button className="app-nav-item" type="button" onClick={onBackHome}>
+          <button className="entry-dashboard-nav-item" type="button" onClick={onBackHome}>
+            <LogIn size={17} />
             会议入口
           </button>
-          <button className="app-nav-item" type="button" onClick={handleSignOut}>
+          <button className="entry-dashboard-nav-item" type="button" onClick={handleSignOut}>
+            <LogOut size={17} />
             退出后台
           </button>
         </nav>
       </header>
 
-      {activeSection === ADMIN_SECTIONS.agents ? <AgentAdmin embedded onBack={onBackHome} /> : <MeetingAdmin />}
+      <div className="admin-dashboard-layout">
+        {activeSection === ADMIN_SECTIONS.agents ? <AgentAdmin embedded onBack={onBackHome} /> : <MeetingAdmin />}
+      </div>
     </main>
   )
 }

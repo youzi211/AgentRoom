@@ -41,6 +41,7 @@ type roomStore interface {
 	AddParticipant(ctx context.Context, input store.AddParticipantInput) (model.Participant, error)
 	MarkParticipantLeft(ctx context.Context, participantID string, leftAt time.Time) error
 	AddMessage(ctx context.Context, message model.Message) (model.Message, error)
+	GetMessage(ctx context.Context, roomID string, messageID string) (model.Message, error)
 	ListMessages(ctx context.Context, query store.ListMessagesQuery) ([]model.Message, error)
 	ListMessagesPage(ctx context.Context, query store.ListMessagesQuery) (store.MessagePage, error)
 	ListAgentRuns(ctx context.Context, query store.ListRunsQuery) ([]store.AgentRun, error)

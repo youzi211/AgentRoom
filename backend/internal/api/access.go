@@ -159,3 +159,34 @@ func minutesFilename(roomInfo model.RoomMeta) string {
 	}
 	return base + "-minutes.md"
 }
+
+func artifactDownloadFilename(artifact model.MessageArtifact) string {
+	base := strings.TrimSpace(artifact.FileName)
+	if base == "" {
+		base = strings.TrimSpace(artifact.Title)
+	}
+	if base == "" {
+		base = strings.TrimSpace(artifact.ID)
+	}
+	base = strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r
+		case r >= '0' && r <= '9':
+			return r
+		case r == '-' || r == '_' || r == '.':
+			return r
+		case r == ' ':
+			return '-'
+		default:
+			return '-'
+		}
+	}, base)
+	base = strings.Trim(base, "-")
+	if base == "" {
+		base = "artifact"
+	}
+	return base
+}
