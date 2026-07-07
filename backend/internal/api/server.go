@@ -118,6 +118,7 @@ func (s *Server) registerAPIRoutes(routes gin.IRoutes) {
 	routes.GET("/health", s.handleHealth)
 	routes.GET("/admin/verify", s.requireAdmin, s.handleAdminVerify)
 	routes.GET("/rooms", s.requireAdmin, s.handleListRooms)
+	routes.GET("/recent-rooms", s.handleListRecentRooms)
 	routes.POST("/rooms/:roomID/archive", s.requireAdmin, s.handleArchiveRoom)
 	routes.POST("/rooms/:roomID/reopen", s.requireAdmin, s.handleReopenRoom)
 	routes.POST("/rooms/:roomID/restore", s.requireAdmin, s.handleRestoreRoom)

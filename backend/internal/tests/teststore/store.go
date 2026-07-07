@@ -191,6 +191,8 @@ func (s *Store) ListRooms(_ context.Context, query store.ListRoomsQuery) ([]mode
 			Status:              status,
 			HasPasscode:         meta.PasscodeHash != "",
 			CreatedAt:           meta.CreatedAt,
+			DialoguePolicy:      meta.DialoguePolicy.WithDefaults(),
+			AgentCount:          len(s.RoomAgents[meta.ID]),
 			OwnerParticipantID:  meta.OwnerParticipantID,
 			ClosedAt:            cloneTimePtr(meta.ClosedAt),
 			ClosedReason:        meta.ClosedReason,

@@ -305,6 +305,16 @@ export async function listRooms({ status = '', limit, offset } = {}) {
   return parseResponse(response)
 }
 
+export async function listRecentRooms({ limit } = {}) {
+  const params = new URLSearchParams()
+  if (limit) {
+    params.set('limit', String(limit))
+  }
+  const query = params.toString()
+  const response = await fetch(`${API_BASE_PATH}/recent-rooms${query ? `?${query}` : ''}`)
+  return parseResponse(response)
+}
+
 export async function archiveRoom(roomId) {
   const encodedRoomId = encodeURIComponent(roomId)
   const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/archive`, {

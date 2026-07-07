@@ -75,7 +75,7 @@ func (r *Runner) handleGuidedDialogue(ctx context.Context, currentRoom RuntimeRo
 			break
 		}
 
-		normalized := normalizeGeneratedContent(response)
+		normalized := normalizeGeneratedContent(response.Content)
 		if normalized == "" {
 			status = model.DialogueRunStatusStoppedEmpty
 			break
@@ -85,11 +85,12 @@ func (r *Runner) handleGuidedDialogue(ctx context.Context, currentRoom RuntimeRo
 			break
 		}
 
-		agentMessage := currentRoom.NewAgentMessage(responder, response)
+		agentMessage := currentRoom.NewAgentMessage(responder, response.Content)
 		agentMessage.DialogueRunID = runID
 		agentMessage.TurnIndex = turnCount + 1
 		agentMessage.ParentMessageID = parentMessage.ID
 		agentMessage.KnowledgeSources = knowledgeSourcesFromChunks(knowledgeChunks)
+		agentMessage.Artifacts = messageArtifactsFromRuntime(response.Artifacts)
 		r.persistAndBroadcast(ctx, currentRoom, agentMessage)
 
 		turnCount++
@@ -102,7 +103,7 @@ func (r *Runner) handleGuidedDialogue(ctx context.Context, currentRoom RuntimeRo
 			continue
 		}
 
-		nextCandidates := resolveGuidedCandidates(DetectMentions(response, currentRoom.Agents()), fullAgentByID)
+		nextCandidates := resolveGuidedCandidates(DetectMentions(response.Content, currentRoom.Agents()), fullAgentByID)
 		pending = appendUniqueDialogueCandidates(pending, nextCandidates)
 	}
 
@@ -119,7 +120,7 @@ func (r *Runner) handleGuidedDialogue(ctx context.Context, currentRoom RuntimeRo
 	r.broadcastDialogueRunActivity(currentRoom, dialogueRun, "finished", status, turnCount, &completedAt)
 }
 
-func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message, rootHumanTrigger model.Message, eligiblePeers []model.Agent, policy model.DialoguePolicy, turnIndex int) (string, []model.KnowledgeChunk, error) {
+func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message, rootHumanTrigger model.Message, eligiblePeers []model.Agent, policy model.DialoguePolicy, turnIndex int) (AgentRuntimeResponse, []model.KnowledgeChunk, error) {
 	runID := model.NewID("run")
 	roomInfo := currentRoom.Info()
 	agentRun := store.AgentRun{
@@ -146,7 +147,7 @@ func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom Runtime
 			r.logger.Error("finish agent run", "run_id", runID, "status", "failed", "error", finishErr)
 		}
 		r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", "failed", errText, &now)
-		return "", knowledgeChunks, err
+		return AgentRuntimeResponse{}, knowledgeChunks, err
 	}
 
 	response, err := runtime.Respond(ctx, AgentRuntimeRequest{
@@ -169,7 +170,7 @@ func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom Runtime
 			r.logger.Error("finish agent run", "run_id", runID, "status", status, "error", finishErr)
 		}
 		r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", status, errText, &now)
-		return "", knowledgeChunks, err
+		return AgentRuntimeResponse{}, knowledgeChunks, err
 	}
 
 	now := time.Now().UTC()
@@ -177,7 +178,7 @@ func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom Runtime
 		r.logger.Error("finish agent run", "run_id", runID, "status", "succeeded", "error", finishErr)
 	}
 	r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", "succeeded", "", &now)
-	return response.Content, knowledgeChunks, nil
+	return response, knowledgeChunks, nil
 }
 
 func resolveGuidedCandidates(candidates []model.Agent, fullAgentByID map[string]model.Agent) []model.Agent {

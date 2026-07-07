@@ -156,6 +156,10 @@ func (s *MySQLStore) ListRooms(ctx context.Context, query store.ListRoomsQuery) 
 		Total  int
 		LastAt *time.Time
 	}
+	type agentStat struct {
+		RoomID string
+		Total  int
+	}
 
 	var stats []messageStat
 	if err := s.db.WithContext(ctx).
@@ -172,6 +176,20 @@ func (s *MySQLStore) ListRooms(ctx context.Context, query store.ListRoomsQuery) 
 		statByRoom[stat.RoomID] = stat
 	}
 
+	var agentStats []agentStat
+	if err := s.db.WithContext(ctx).
+		Model(&RoomAgentModel{}).
+		Select("room_id AS room_id, COUNT(*) AS total").
+		Where("room_id IN ?", roomIDs).
+		Group("room_id").
+		Scan(&agentStats).Error; err != nil {
+		return nil, fmt.Errorf("aggregate room agents: %w", err)
+	}
+	agentCountByRoom := make(map[string]int, len(agentStats))
+	for _, stat := range agentStats {
+		agentCountByRoom[stat.RoomID] = stat.Total
+	}
+
 	summaries := make([]model.RoomSummary, len(rooms))
 	for i, r := range rooms {
 		stat := statByRoom[r.ID]
@@ -181,6 +199,8 @@ func (s *MySQLStore) ListRooms(ctx context.Context, query store.ListRoomsQuery) 
 			Status:              r.Status,
 			HasPasscode:         r.PasscodeHash != "",
 			CreatedAt:           r.CreatedAt,
+			DialoguePolicy:      r.toDomain().DialoguePolicy,
+			AgentCount:          agentCountByRoom[r.ID],
 			OwnerParticipantID:  strPtrDeref(r.OwnerParticipantID),
 			ClosedAt:            r.ClosedAt,
 			ClosedReason:        r.ClosedReason,

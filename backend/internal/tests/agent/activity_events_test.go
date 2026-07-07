@@ -125,6 +125,52 @@ func TestAgentRunUsesRegisteredDeepAgentRuntime(t *testing.T) {
 	}
 }
 
+func TestGuidedDialoguePreservesDeepAgentRuntimeArtifacts(t *testing.T) {
+	llmClient := &sequenceLLM{responses: []string{"this must not be called"}}
+	store := &teststore.Store{}
+	deepRuntime := agent.NewDeepAgentRuntime(agent.DeepAgentRuntimeConfig{
+		Command: os.Args[0],
+		Args:    []string{"-test.run=TestDeepAgentRuntimeHelperProcess", "--"},
+		Env:     []string{"AGENTROOM_DEEPAGENT_HELPER=1"},
+		WorkDir: t.TempDir(),
+		Config:  "deepagent.toml",
+		Timeout: 5 * time.Second,
+	})
+	runner := agent.NewRunner(llmClient, store).
+		WithRuntimeRegistry(agent.NewRuntimeRegistry(agent.NewLLMAgentRuntime(llmClient, 45*time.Second), deepRuntime))
+	room := newDialogueRuntimeRoom(model.DialoguePolicy{
+		Mode:                      model.DialogueModeGuided,
+		MaxAutonomousTurns:        1,
+		MaxTurnsPerAgent:          1,
+		AllowSelfFollowup:         false,
+		AllowAgentToAgentMentions: true,
+		ResponseStrategy:          model.DialogueResponseStrategyMentionedFirst,
+	}, []model.Agent{
+		{
+			ID:           "research",
+			Name:         "Research",
+			Mention:      "@Research",
+			Role:         "Research",
+			Runtime:      model.AgentRuntimeDeepAgent,
+			SystemPrompt: "Research deeply.",
+			Enabled:      true,
+		},
+	})
+
+	trigger := room.newHumanMessage("Alice", "@Research current model parameter counts")
+	room.AppendMessage(trigger)
+
+	runner.HandleHumanMessage(context.Background(), room, trigger)
+
+	messages := room.agentMessages()
+	if len(messages) != 1 {
+		t.Fatalf("expected one guided dialogue agent message, got %#v", messages)
+	}
+	if len(messages[0].Artifacts) != 1 || messages[0].Artifacts[0].ID != "report" || !strings.Contains(messages[0].Artifacts[0].Content, "# Report") {
+		t.Fatalf("expected guided dialogue report artifact, got %#v", messages[0].Artifacts)
+	}
+}
+
 func TestDialogueActivityEventsWrapGuidedDialogueRun(t *testing.T) {
 	llmClient := &sequenceLLM{responses: []string{"Guided reply."}}
 	runner := agent.NewRunner(llmClient, &teststore.Store{})

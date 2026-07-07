@@ -14,6 +14,7 @@ import (
 
 	"agentroom/backend/internal/agent"
 	"agentroom/backend/internal/api/contracts"
+	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/service"
 	"agentroom/backend/internal/store"
 )
@@ -416,6 +417,41 @@ func (s *Server) handleListRooms(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, contracts.ListRoomsResponse{Rooms: rooms})
+}
+
+func (s *Server) handleListRecentRooms(c *gin.Context) {
+	query := service.ListRoomsInput{
+		Status: model.RoomStatusActive,
+		Limit:  3,
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			query.Limit = parsed
+			if query.Limit > 10 {
+				query.Limit = 10
+			}
+		}
+	}
+
+	rooms, err := s.roomQueries.ListRooms(c.Request.Context(), query)
+	if err != nil {
+		s.logger.Error("list recent rooms", "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to list recent rooms")
+		return
+	}
+	publicRooms := make([]contracts.PublicRoomSummary, 0, len(rooms))
+	for _, room := range rooms {
+		publicRooms = append(publicRooms, contracts.PublicRoomSummary{
+			ID:             room.ID,
+			Name:           room.Name,
+			Status:         room.Status,
+			HasPasscode:    room.HasPasscode,
+			CreatedAt:      room.CreatedAt,
+			DialoguePolicy: room.DialoguePolicy.WithDefaults(),
+			AgentCount:     room.AgentCount,
+		})
+	}
+	c.JSON(http.StatusOK, contracts.ListRecentRoomsResponse{Rooms: publicRooms})
 }
 
 func (s *Server) handleArchiveRoom(c *gin.Context) {

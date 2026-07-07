@@ -37,7 +37,7 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react'
-import { getAgentRoleSets, getAgents, listRooms } from '../api/roomClient'
+import { getAgentRoleSets, getAgents, listRecentRooms } from '../api/roomClient'
 
 const TEMPLATE_AGENT_MATCHERS = {
   product_manager: ['pm', '产品经理', 'Product Manager'],
@@ -159,7 +159,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
     const loadRecentRooms = async () => {
       setRecentRoomsState({ isLoading: true, errorMessage: '' })
       try {
-        const response = await listRooms({ status: 'active', limit: 3 })
+        const response = await listRecentRooms({ limit: 3 })
         if (!isCurrent) {
           return
         }
@@ -605,7 +605,7 @@ function ExistingRoomsTable({ canJoin, errorMessage, isLoading, onCopyRoomId, on
             {roomItem.id}
             <Copy size={13} />
           </button>
-          <span role="cell">{roomItem.ownerName || roomItem.ownerParticipantName || '创建者'}</span>
+          <span role="cell">{roomItem.hasPasscode ? '需要口令' : '公开加入'}</span>
           <span role="cell">
             <Badge size="sm" variant="light" color={roomItem.dialoguePolicy?.mode === 'guided_dialogue' ? 'blue' : 'teal'}>
               {roomItem.dialoguePolicy?.mode === 'guided_dialogue' ? '单 Agent 对话' : '多 Agent 协作'}

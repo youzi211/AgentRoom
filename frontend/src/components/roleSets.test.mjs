@@ -31,3 +31,15 @@ test('JoinScreen shows each selectable agent runtime', () => {
   assert.match(source, /agent\.runtime/)
   assert.match(styles, /\.agent-runtime-inline/)
 })
+
+test('JoinScreen uses public recent room summaries', () => {
+  assert.match(apiSource, /export async function listRecentRooms/)
+  assert.match(apiSource, /\/recent-rooms/)
+  assert.doesNotMatch(source, /listRooms/)
+  assert.match(source, /listRecentRooms\(\{ limit: 3 \}\)/)
+  assert.match(source, /roomItem\.hasPasscode/)
+  assert.match(source, /roomItem\.dialoguePolicy\?\.mode/)
+  assert.match(source, /roomItem\.agentCount/)
+  assert.doesNotMatch(source, /ownerName/)
+  assert.doesNotMatch(source, /ownerParticipantName/)
+})

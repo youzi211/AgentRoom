@@ -13,6 +13,7 @@ func TestLoadDeepAgentConfigDefaults(t *testing.T) {
 	t.Setenv("DEEPAGENT_CONFIG", "")
 	t.Setenv("DEEPAGENT_REGISTRY", "")
 	t.Setenv("DEEPAGENT_TIMEOUT_SECONDS", "")
+	t.Setenv("DEEPAGENT_CONCURRENCY", "")
 
 	got := config.LoadDeepAgentConfig()
 	if got.Command != "uv" {
@@ -30,6 +31,9 @@ func TestLoadDeepAgentConfigDefaults(t *testing.T) {
 	if got.Timeout != 5*time.Minute {
 		t.Fatalf("expected default timeout 5 minutes, got %#v", got)
 	}
+	if got.Concurrency != 1 {
+		t.Fatalf("expected default concurrency 1, got %#v", got)
+	}
 }
 
 func TestLoadDeepAgentConfigFromEnv(t *testing.T) {
@@ -38,9 +42,10 @@ func TestLoadDeepAgentConfigFromEnv(t *testing.T) {
 	t.Setenv("DEEPAGENT_CONFIG", "custom.toml")
 	t.Setenv("DEEPAGENT_REGISTRY", "custom-agents.json")
 	t.Setenv("DEEPAGENT_TIMEOUT_SECONDS", "42")
+	t.Setenv("DEEPAGENT_CONCURRENCY", "3")
 
 	got := config.LoadDeepAgentConfig()
-	if got.Command != "python" || got.WorkDir != "../runtime" || got.Config != "custom.toml" || got.Registry != "custom-agents.json" || got.Timeout != 42*time.Second {
+	if got.Command != "python" || got.WorkDir != "../runtime" || got.Config != "custom.toml" || got.Registry != "custom-agents.json" || got.Timeout != 42*time.Second || got.Concurrency != 3 {
 		t.Fatalf("unexpected deepagent config: %#v", got)
 	}
 }

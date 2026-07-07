@@ -85,10 +85,11 @@ func main() {
 	runner.WithRuntimeRegistry(agent.NewRuntimeRegistry(
 		agent.NewLLMAgentRuntime(llmClient, 45*time.Second),
 		agent.NewDeepAgentRuntime(agent.DeepAgentRuntimeConfig{
-			Command: deepAgentConfig.Command,
-			WorkDir: deepAgentConfig.WorkDir,
-			Config:  deepAgentConfig.Config,
-			Timeout: deepAgentConfig.Timeout,
+			Command:     deepAgentConfig.Command,
+			WorkDir:     deepAgentConfig.WorkDir,
+			Config:      deepAgentConfig.Config,
+			Timeout:     deepAgentConfig.Timeout,
+			Concurrency: deepAgentConfig.Concurrency,
 		}),
 	))
 	focusService := service.NewFocusService(llmClient)

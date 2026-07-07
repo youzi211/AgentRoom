@@ -89,6 +89,72 @@ func TestDeepAgentRuntimeReturnsCommandFailure(t *testing.T) {
 	}
 }
 
+func TestDeepAgentRuntimeSeparatesQuestionFromCLIOptions(t *testing.T) {
+	workDir := t.TempDir()
+	runtime := agent.NewDeepAgentRuntime(agent.DeepAgentRuntimeConfig{
+		Command: os.Args[0],
+		Args:    []string{"-test.run=TestDeepAgentRuntimeHelperProcess", "--"},
+		Env:     []string{"AGENTROOM_DEEPAGENT_HELPER=1", "AGENTROOM_DEEPAGENT_REQUIRE_QUESTION_SEPARATOR=1"},
+		WorkDir: workDir,
+		Config:  "deepagent.toml",
+		Timeout: 5 * time.Second,
+	})
+
+	response, err := runtime.Respond(context.Background(), agent.AgentRuntimeRequest{
+		RunID:   "run_option_question",
+		Agent:   model.Agent{Runtime: model.AgentRuntimeDeepAgent},
+		Trigger: model.Message{Content: "--offline-smoke should be a question"},
+	})
+	if err != nil {
+		t.Fatalf("expected option-like question to be positional, got %v", err)
+	}
+	if len(response.Artifacts) != 1 || response.Artifacts[0].Content != "# Report\n\nQuestion: --offline-smoke should be a question" {
+		t.Fatalf("expected option-like question in report, got %#v", response.Artifacts)
+	}
+}
+
+func TestDeepAgentRuntimeConcurrencyLimitWaitsAndHonorsCancellation(t *testing.T) {
+	workDir := t.TempDir()
+	runtime := agent.NewDeepAgentRuntime(agent.DeepAgentRuntimeConfig{
+		Command:     os.Args[0],
+		Args:        []string{"-test.run=TestDeepAgentRuntimeHelperProcess", "--"},
+		Env:         []string{"AGENTROOM_DEEPAGENT_HELPER=1", "AGENTROOM_DEEPAGENT_HOLD=1"},
+		WorkDir:     workDir,
+		Config:      "deepagent.toml",
+		Timeout:     5 * time.Second,
+		Concurrency: 1,
+	})
+
+	firstStarted := make(chan error, 1)
+	firstDone := make(chan error, 1)
+	go func() {
+		firstStarted <- nil
+		_, err := runtime.Respond(context.Background(), agent.AgentRuntimeRequest{
+			RunID:   "run_hold",
+			Trigger: model.Message{Content: "hold the runtime"},
+		})
+		firstDone <- err
+	}()
+	<-firstStarted
+	time.Sleep(200 * time.Millisecond)
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err := runtime.Respond(waitCtx, agent.AgentRuntimeRequest{
+		RunID:   "run_waiter",
+		Trigger: model.Message{Content: "must not start"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Fatalf("expected waiting call to honor context deadline, got %v", err)
+	}
+	if err := <-firstDone; err != nil {
+		t.Fatalf("expected first deepagent call to complete, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(workDir, "runs", "run_waiter", "report.md")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected canceled waiter not to start subprocess, stat err=%v", statErr)
+	}
+}
+
 func TestDeepAgentRuntimeHelperProcess(t *testing.T) {
 	if os.Getenv("AGENTROOM_DEEPAGENT_HELPER") != "1" {
 		return
@@ -98,12 +164,25 @@ func TestDeepAgentRuntimeHelperProcess(t *testing.T) {
 	for i, arg := range args {
 		if arg == "--" {
 			separator = i
+			break
 		}
 	}
 	if separator == -1 {
 		os.Exit(2)
 	}
 	cliArgs := args[separator+1:]
+	if os.Getenv("AGENTROOM_DEEPAGENT_REQUIRE_QUESTION_SEPARATOR") == "1" {
+		foundQuestionSeparator := false
+		for _, arg := range cliArgs {
+			if arg == "--" {
+				foundQuestionSeparator = true
+				break
+			}
+		}
+		if !foundQuestionSeparator {
+			os.Exit(8)
+		}
+	}
 	for _, arg := range cliArgs {
 		if arg == "--fail" {
 			_, _ = os.Stderr.WriteString("simulated deepagent failure")
@@ -121,9 +200,17 @@ func TestDeepAgentRuntimeHelperProcess(t *testing.T) {
 			}
 		case "--config":
 			i++
+		case "--":
+			if i+1 < len(cliArgs) {
+				question = cliArgs[i+1]
+				i = len(cliArgs)
+			}
 		default:
 			question = cliArgs[i]
 		}
+	}
+	if os.Getenv("AGENTROOM_DEEPAGENT_HOLD") == "1" {
+		time.Sleep(500 * time.Millisecond)
 	}
 	if runID == "" {
 		os.Exit(3)
@@ -138,4 +225,3 @@ func TestDeepAgentRuntimeHelperProcess(t *testing.T) {
 	}
 	os.Exit(0)
 }
-

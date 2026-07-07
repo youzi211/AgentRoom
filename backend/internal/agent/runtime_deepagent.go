@@ -14,16 +14,18 @@ import (
 )
 
 type DeepAgentRuntimeConfig struct {
-	Command string
-	Args    []string
-	Env     []string
-	WorkDir string
-	Config  string
-	Timeout time.Duration
+	Command     string
+	Args        []string
+	Env         []string
+	WorkDir     string
+	Config      string
+	Timeout     time.Duration
+	Concurrency int
 }
 
 type DeepAgentRuntime struct {
 	config DeepAgentRuntimeConfig
+	sem    chan struct{}
 }
 
 func NewDeepAgentRuntime(config DeepAgentRuntimeConfig) *DeepAgentRuntime {
@@ -36,7 +38,13 @@ func NewDeepAgentRuntime(config DeepAgentRuntimeConfig) *DeepAgentRuntime {
 	if config.Timeout <= 0 {
 		config.Timeout = 5 * time.Minute
 	}
-	return &DeepAgentRuntime{config: config}
+	if config.Concurrency <= 0 {
+		config.Concurrency = 1
+	}
+	return &DeepAgentRuntime{
+		config: config,
+		sem:    make(chan struct{}, config.Concurrency),
+	}
 }
 
 func (r *DeepAgentRuntime) Name() string {
@@ -60,7 +68,7 @@ func (r *DeepAgentRuntime) Respond(ctx context.Context, request AgentRuntimeRequ
 	if strings.TrimSpace(r.config.Config) != "" {
 		args = append(args, "--config", r.config.Config)
 	}
-	args = append(args, "--run-id", runID, question)
+	args = append(args, "--run-id", runID, "--", question)
 
 	cmd := exec.CommandContext(requestCtx, r.config.Command, args...)
 	if strings.TrimSpace(r.config.WorkDir) != "" {
@@ -72,6 +80,11 @@ func (r *DeepAgentRuntime) Respond(ctx context.Context, request AgentRuntimeRequ
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
+
+	if err := r.acquire(requestCtx); err != nil {
+		return AgentRuntimeResponse{}, err
+	}
+	defer r.release()
 
 	if err := cmd.Run(); err != nil {
 		return AgentRuntimeResponse{}, fmt.Errorf("deepagent command failed: %w: %s", err, shortCommandOutput(output.String()))
@@ -105,6 +118,19 @@ func (r *DeepAgentRuntime) Respond(ctx context.Context, request AgentRuntimeRequ
 			"run_id":  runID,
 		},
 	}, nil
+}
+
+func (r *DeepAgentRuntime) acquire(ctx context.Context) error {
+	select {
+	case r.sem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (r *DeepAgentRuntime) release() {
+	<-r.sem
 }
 
 func deepAgentQuestion(agent model.Agent, trigger model.Message) string {

@@ -66,12 +66,26 @@ type DialogueRunActivity struct {
 }
 
 type GenerateMinutesResponse struct {
-	Markdown string               `json:"markdown"`
+	Markdown string                `json:"markdown"`
 	Minutes  *model.MeetingMinutes `json:"minutes,omitempty"`
 }
 
 type ListRoomsResponse struct {
 	Rooms []model.RoomSummary `json:"rooms"`
+}
+
+type PublicRoomSummary struct {
+	ID             string               `json:"id"`
+	Name           string               `json:"name"`
+	Status         string               `json:"status"`
+	HasPasscode    bool                 `json:"hasPasscode"`
+	CreatedAt      time.Time            `json:"createdAt"`
+	DialoguePolicy model.DialoguePolicy `json:"dialoguePolicy"`
+	AgentCount     int                  `json:"agentCount"`
+}
+
+type ListRecentRoomsResponse struct {
+	Rooms []PublicRoomSummary `json:"rooms"`
 }
 
 type MinutesHistoryResponse struct {

@@ -55,11 +55,12 @@ type SecurityConfig struct {
 }
 
 type DeepAgentConfig struct {
-	Command  string
-	WorkDir  string
-	Config   string
-	Registry string
-	Timeout  time.Duration
+	Command     string
+	WorkDir     string
+	Config      string
+	Registry    string
+	Timeout     time.Duration
+	Concurrency int
 }
 
 // LoadDBConfig reads database configuration from environment variables.
@@ -101,12 +102,19 @@ func LoadDeepAgentConfig() DeepAgentConfig {
 			timeout = time.Duration(seconds) * time.Second
 		}
 	}
+	concurrency := 1
+	if raw := strings.TrimSpace(os.Getenv("DEEPAGENT_CONCURRENCY")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			concurrency = parsed
+		}
+	}
 	return DeepAgentConfig{
-		Command:  command,
-		WorkDir:  workDir,
-		Config:   configPath,
-		Registry: registryPath,
-		Timeout:  timeout,
+		Command:     command,
+		WorkDir:     workDir,
+		Config:      configPath,
+		Registry:    registryPath,
+		Timeout:     timeout,
+		Concurrency: concurrency,
 	}
 }
 
