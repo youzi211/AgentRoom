@@ -37,6 +37,8 @@ Local dev requires a reachable MySQL 8 and `MYSQL_DSN` (with `parseTime=true`) p
 
 ## Architecture
 
+Start with [`docs/architecture/README.md`](docs/architecture/README.md) for the current architecture map, then open the linked backend, runtime/model, data/realtime, or frontend/deployment guide for the area you are changing.
+
 The backend is layered; understanding the wiring in `backend/cmd/server/main.go` is the fastest way in — it constructs every component and shows the dependency direction:
 
 ```
@@ -72,3 +74,4 @@ Agent runs are recorded in the store (`AgentRun` rows: running → succeeded/fai
 - **Tests are consolidated under `backend/internal/tests/**`** mirroring the package being tested (e.g. `tests/service/`, `tests/agent/`), not co-located with source. Favor black-box tests through exported APIs; shared in-memory doubles live in `tests/teststore/`. Frontend tests are `*.test.mjs` next to what they cover.
 - When changing MySQL schema/migrations, env vars, or LLM config, update `README.md` and the relevant `docs/`.
 - Commit subjects are short and intent-first (explain *why*, not just what moved).
+- Commit messages must be written in Chinese.

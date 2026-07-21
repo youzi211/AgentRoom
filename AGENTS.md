@@ -6,7 +6,7 @@
 - `backend/internal/tests/`: consolidated Go test suites. Add new backend tests under the matching area, for example `backend/internal/tests/service/`.
 - `backend/internal/tests/teststore/`: shared in-memory test doubles for backend tests.
 - `frontend/src/`: React + Vite app. UI lives in `components/`, API helpers in `api/`, shared routing in `routing.js`.
-- `docs/`: architecture and product notes. Update these when behavior or deployment assumptions change.
+- `docs/`: architecture and product notes. Start with `docs/architecture/README.md`; update the relevant architecture guide when behavior or deployment assumptions change.
 
 ## Build, Test, and Development Commands
 - `go -C backend run ./cmd/server`: start the backend locally.
@@ -32,6 +32,7 @@
 
 ## Commit & Pull Request Guidelines
 - Recent history uses short, intent-first subjects, for example `Capture the next dialogue layer...` and `Decouple AgentRoom from the raw OpenAI SDK...`.
+- Commit messages must be written in Chinese.
 - Keep commit titles concise and explain why the change exists, not just what moved.
 - PRs should include: scope summary, affected paths, verification commands run, and screenshots for UI changes.
 - Call out schema, env, or deployment changes explicitly so reviewers can test safely.
