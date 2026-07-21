@@ -75,3 +75,6 @@ Agent runs are recorded in the store (`AgentRun` rows: running → succeeded/fai
 - When changing MySQL schema/migrations, env vars, or LLM config, update `README.md` and the relevant `docs/`.
 - Commit subjects are short and intent-first (explain *why*, not just what moved).
 - Commit messages must be written in Chinese.
+- I must not develop directly on `main`; I must create a short-lived task branch and merge it only after review and verification.
+- Branch names should start with the change type. When I create a branch, I must prefix it with `claude/`, for example `claude/feat/user-registration` or `claude/fix/payment-callback`.
+- Commit messages must follow `<type>: <Chinese description>` and remain short and intent-first. Use `feat`, `fix`, `refactor`, `docs`, or `chore`, for example `feat: 添加用户注册` and `fix: 修复支付回调错误`.
