@@ -40,6 +40,7 @@ type Runner struct {
 type runnerStore interface {
 	AddMessage(ctx context.Context, message model.Message) (model.Message, error)
 	CreateAgentRun(ctx context.Context, run store.AgentRun) error
+	CommitAgentRunSuccess(ctx context.Context, input store.CommitAgentRunSuccessInput) (model.Message, error)
 	FinishAgentRun(ctx context.Context, runID string, status string, errText string, completedAt time.Time) error
 	ListAgentRuns(ctx context.Context, query store.ListRunsQuery) ([]store.AgentRun, error)
 	CreateDialogueRun(ctx context.Context, run store.DialogueRun) error
@@ -70,6 +71,13 @@ func (r *Runner) WithKnowledge(provider KnowledgeProvider) *Runner {
 func (r *Runner) WithRuntimeRegistry(registry *RuntimeRegistry) *Runner {
 	r.runtimes = registry
 	return r
+}
+
+func (r *Runner) CancelRoom(roomID string) int {
+	if r == nil || r.runtimes == nil {
+		return 0
+	}
+	return r.runtimes.CancelRoom(roomID)
 }
 
 func (r *Runner) HandleHumanMessage(ctx context.Context, currentRoom RuntimeRoom, message model.Message) {
@@ -196,9 +204,14 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoo
 		TriggerMessageID: trigger.ID,
 		Status:           "running",
 		StartedAt:        time.Now().UTC(),
+		ModelProfileID:   responder.ModelProfileID,
+		ModelSource:      modelSourceForAgent(responder),
 	}
 	if err := r.store.CreateAgentRun(ctx, agentRun); err != nil {
 		r.logger.Error("create agent run", "room_id", roomInfo.ID, "agent_id", responder.ID, "error", err)
+		content := fmt.Sprintf("Agent %s could not start: run persistence failed", responder.Name)
+		r.persistAndBroadcast(ctx, currentRoom, currentRoom.NewSystemMessage(content))
+		return model.Message{}, false
 	}
 	r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "started", "", "", nil)
 
@@ -206,16 +219,16 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoo
 	now := time.Now().UTC()
 
 	if err != nil {
-		status := "failed"
-		if ctx.Err() == context.DeadlineExceeded {
-			status = "timeout"
-		}
+		terminalCtx, cancelTerminal := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancelTerminal()
+		r.recordModelAudit(terminalCtx, runID, response.Metadata)
+		status := agentRunFailureStatus(ctx, err)
 		errText := shortReason(err)
 		content := fmt.Sprintf("Agent %s failed to respond: %s", responder.Name, errText)
 		sysMsg := currentRoom.NewSystemMessage(content)
-		r.persistAndBroadcast(ctx, currentRoom, sysMsg)
+		r.persistAndBroadcast(terminalCtx, currentRoom, sysMsg)
 
-		if finishErr := r.store.FinishAgentRun(ctx, runID, status, errText, now); finishErr != nil {
+		if finishErr := r.store.FinishAgentRun(terminalCtx, runID, status, errText, now); finishErr != nil {
 			r.logger.Error("finish agent run", "run_id", runID, "status", status, "error", finishErr)
 		}
 		r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", status, errText, &now)
@@ -223,15 +236,64 @@ func (r *Runner) handleAgentResponse(ctx context.Context, currentRoom RuntimeRoo
 	}
 
 	agentMsg := currentRoom.NewAgentMessage(responder, response.Content)
-	agentMsg.KnowledgeSources = knowledgeSourcesFromChunks(knowledgeChunks)
+	agentMsg.KnowledgeSources = knowledgeSourcesForResponse(response, knowledgeChunks)
 	agentMsg.Artifacts = messageArtifactsFromRuntime(response.Artifacts)
-	savedAgentMsg := r.persistAndBroadcast(ctx, currentRoom, agentMsg)
-
-	if finishErr := r.store.FinishAgentRun(ctx, runID, "succeeded", "", now); finishErr != nil {
-		r.logger.Error("finish agent run", "run_id", runID, "status", "succeeded", "error", finishErr)
+	savedAgentMsg, commitErr := r.store.CommitAgentRunSuccess(ctx, commitAgentRunSuccessInput(runID, agentMsg, response.Metadata, now))
+	if commitErr != nil {
+		terminalCtx, cancelTerminal := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancelTerminal()
+		errText := shortReason(commitErr)
+		r.logger.Error("commit successful agent run", "run_id", runID, "error", commitErr)
+		r.persistAndBroadcast(terminalCtx, currentRoom, currentRoom.NewSystemMessage(fmt.Sprintf("Agent %s response could not be saved", responder.Name)))
+		if finishErr := r.store.FinishAgentRun(terminalCtx, runID, "failed", errText, now); finishErr != nil && !errors.Is(finishErr, store.ErrAgentRunAlreadyFinished) {
+			r.logger.Error("finish agent run after commit failure", "run_id", runID, "error", finishErr)
+		}
+		r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", "failed", errText, &now)
+		return model.Message{}, false
 	}
+	currentRoom.AppendMessage(savedAgentMsg)
+	currentRoom.Broadcaster().BroadcastMessage(savedAgentMsg)
 	r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", "succeeded", "", &now)
 	return savedAgentMsg, true
+}
+
+func commitAgentRunSuccessInput(runID string, message model.Message, metadata map[string]string, completedAt time.Time) store.CommitAgentRunSuccessInput {
+	return store.CommitAgentRunSuccessInput{
+		RunID: runID, Message: message, CompletedAt: completedAt,
+		ModelProfileID: metadata["model_profile_id"], ModelSource: metadata["model_source"], ModelName: metadata["model_name"],
+	}
+}
+
+func agentRunFailureStatus(ctx context.Context, err error) string {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return "timeout"
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+		return "canceled"
+	}
+	return "failed"
+}
+
+func modelSourceForAgent(agent model.Agent) string {
+	if agent.ModelProfileID != "" {
+		return "database"
+	}
+	return ""
+}
+
+func (r *Runner) recordModelAudit(ctx context.Context, runID string, metadata map[string]string) {
+	if len(metadata) == 0 || metadata["model_source"] == "" {
+		return
+	}
+	auditStore, ok := r.store.(interface {
+		UpdateAgentRunModel(context.Context, string, string, string, string) error
+	})
+	if !ok {
+		return
+	}
+	if err := auditStore.UpdateAgentRunModel(ctx, runID, metadata["model_profile_id"], metadata["model_source"], metadata["model_name"]); err != nil {
+		r.logger.Error("update agent run model audit", "run_id", runID, "error", err)
+	}
 }
 
 func (r *Runner) broadcastAgentRunActivity(currentRoom RuntimeRoom, run store.AgentRun, responder model.Agent, phase string, status string, errText string, completedAt *time.Time) {
@@ -250,6 +312,27 @@ func (r *Runner) broadcastAgentRunActivity(currentRoom RuntimeRoom, run store.Ag
 			CreatedAt:        run.StartedAt,
 			CompletedAt:      completedAt,
 		},
+	})
+}
+
+func (r *Runner) runtimeEventObserver(currentRoom RuntimeRoom, responder model.Agent, runID string) AgentEventObserver {
+	return AgentEventObserverFunc(func(_ context.Context, event AgentRuntimeEvent) {
+		currentRoom.Broadcaster().BroadcastEvent(realtime.Event{
+			Type: realtime.EventTypeAgentActivity,
+			Activity: &realtime.Activity{
+				Kind:         "agent_runtime",
+				Phase:        event.Kind,
+				RuntimeEvent: event.Kind,
+				ID:           runID,
+				RoomID:       currentRoom.Info().ID,
+				AgentID:      responder.ID,
+				AgentName:    responder.Name,
+				ModelName:    event.ModelName,
+				ToolName:     event.ToolName,
+				ErrorText:    event.Failure,
+				CreatedAt:    event.OccurredAt,
+			},
+		})
 	})
 }
 
@@ -291,13 +374,14 @@ func (r *Runner) generateResponse(ctx context.Context, currentRoom RuntimeRoom, 
 	}
 	response, err := runtime.Respond(ctx, AgentRuntimeRequest{
 		RunID:           runID,
+		TraceID:         runID,
 		Room:            currentRoom,
 		Agent:           responder,
 		Trigger:         trigger,
 		RecentMessages:  recentMessages,
 		KnowledgeChunks: knowledgeChunks,
 		PromptContext:   promptContext,
-	})
+	}, r.runtimeEventObserver(currentRoom, responder, runID))
 	if err != nil {
 		return AgentRuntimeResponse{}, knowledgeChunks, err
 	}
@@ -356,6 +440,13 @@ func knowledgeSourcesFromChunks(chunks []model.KnowledgeChunk) []model.MessageKn
 		})
 	}
 	return sources
+}
+
+func knowledgeSourcesForResponse(response AgentRuntimeResponse, fallback []model.KnowledgeChunk) []model.MessageKnowledgeSource {
+	if response.KnowledgeSources != nil {
+		return append([]model.MessageKnowledgeSource(nil), response.KnowledgeSources...)
+	}
+	return knowledgeSourcesFromChunks(fallback)
 }
 
 func messageArtifactsFromRuntime(artifacts []AgentRuntimeArtifact) []model.MessageArtifact {

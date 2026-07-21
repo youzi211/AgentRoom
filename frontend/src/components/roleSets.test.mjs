@@ -43,3 +43,15 @@ test('JoinScreen uses public recent room summaries', () => {
   assert.doesNotMatch(source, /ownerName/)
   assert.doesNotMatch(source, /ownerParticipantName/)
 })
+
+test('JoinScreen uses public entry summary instead of fake stat values', () => {
+  assert.match(apiSource, /export async function getEntrySummary/)
+  assert.match(apiSource, /\/entry-summary/)
+  assert.match(source, /getEntrySummary/)
+  assert.match(source, /entrySummary/)
+  assert.match(source, /formatEntryStatValue/)
+  assert.doesNotMatch(source, /value: '6'/)
+  assert.doesNotMatch(source, /value: '12'/)
+  assert.doesNotMatch(source, /value: '24'/)
+  assert.doesNotMatch(source, /value: '18'/)
+})

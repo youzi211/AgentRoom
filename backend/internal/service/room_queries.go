@@ -33,6 +33,39 @@ func (s *RoomService) ListRooms(ctx context.Context, query ListRoomsInput) ([]mo
 	})
 }
 
+type EntrySummaryInput struct {
+	Now time.Time
+}
+
+type EntrySummary struct {
+	ActiveRooms        int
+	TodayRooms         int
+	KnowledgeDocuments int
+	EnabledAgents      int
+}
+
+func (s *RoomService) EntrySummary(ctx context.Context, input EntrySummaryInput) (EntrySummary, error) {
+	now := input.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	localNow := now.In(time.Local)
+	todayStart := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, time.Local)
+	raw, err := s.store.EntrySummary(ctx, store.EntrySummaryQuery{
+		TodayStart: todayStart,
+		Tomorrow:   todayStart.AddDate(0, 0, 1),
+	})
+	if err != nil {
+		return EntrySummary{}, err
+	}
+	return EntrySummary{
+		ActiveRooms:        raw.ActiveRooms,
+		TodayRooms:         raw.TodayRooms,
+		KnowledgeDocuments: raw.KnowledgeDocuments,
+		EnabledAgents:      raw.EnabledAgents,
+	}, nil
+}
+
 func (s *RoomService) Agents() []model.AgentConfig {
 	return s.agents.Agents()
 }

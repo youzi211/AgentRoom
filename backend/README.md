@@ -1,6 +1,6 @@
 # AgentRoom Backend
 
-The backend is the Go service behind AgentRoom. It exposes the HTTP API, WebSocket room transport, MySQL persistence, Markdown knowledge upload, focus extraction, and OpenAI-compatible agent execution.
+The backend is AgentRoom's Go control plane. It exposes HTTP/WebSocket APIs, owns room and dialogue orchestration, resolves model Profiles, commits messages and run state to MySQL, and calls the Python Agent Runtime over gRPC when remote transport is enabled.
 
 Rooms support two dialogue modes:
 
@@ -53,7 +53,10 @@ The server loads `../.env` when started from `backend/`, then reads environment 
 | `LLM_BASE_URL` | No | `https://api.openai.com` | Base URL for the `langchaingo` OpenAI-compatible chat API client. |
 | `LLM_API_KEY` | No | _empty_ | API key for agent responses. If empty, human chat still works and agent calls return room-visible system messages. |
 | `LLM_MODEL` | No | `gpt-4o-mini` | Chat-completions model name. |
-| `DEEPAGENT_COMMAND` | No | `uv` | Command used by the `deepagent` agent runtime adapter. |
+| `AGENT_RUNTIME_TRANSPORT` | No | `local` | Explicit `local` or `grpc` Agent execution. No automatic fallback occurs. |
+| `AGENT_RUNTIME_GRPC_ADDRESS` | For `grpc` | `127.0.0.1:50051` | Long-lived Python Runtime connection target. |
+| `AGENT_RUNTIME_GRPC_INSECURE` | No | `false` | Explicit plaintext development mode; use CA/server identity in production. |
+| `DEEPAGENT_COMMAND` | Local rollback only | `uv` | Legacy command used only by the local DeepAgent adapter. |
 | `DEEPAGENT_WORKDIR` | No | `../deepagent` | Working directory for the DeepAgent uv project when backend starts from `backend/`. |
 | `DEEPAGENT_CONFIG` | No | `deepagent.toml` | DeepAgent config file path, resolved relative to `DEEPAGENT_WORKDIR` unless absolute. |
 | `DEEPAGENT_REGISTRY` | No | `agents.json` | DeepAgent agent registry file, resolved relative to `DEEPAGENT_WORKDIR`. Missing files are ignored. |
@@ -66,7 +69,7 @@ The server loads `../.env` when started from `backend/`, then reads environment 
 
 ## Docker
 
-The root `docker-compose.yml` builds `backend/Dockerfile`, starts MySQL, waits for database health, injects a container-network `MYSQL_DSN`, and forwards the v0.2 security env vars (`ADMIN_API_KEY` and `ALLOWED_ORIGINS`) into the backend container.
+The root `docker-compose.yml` starts MySQL, the Go backend, the internal Python `agent-runtime`, and the frontend. Compose waits for MySQL and gRPC health, then uses `/api/ready` to verify both backend dependencies.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\docker-up.ps1
@@ -83,6 +86,7 @@ docker compose up -d --build
 Primary routes are exposed under `/api`:
 
 - `GET /api/health`
+- `GET /api/ready`
 - `GET /api/agents`
 - `POST /api/agents`
 - `PUT /api/agents/:agentID`
@@ -114,7 +118,7 @@ Legacy non-`/api` routes are still registered for compatibility.
 
 `GET /api/rooms/:roomID/minutes.md` is now a pure read endpoint. It downloads the latest persisted minutes and returns `404` when no saved minutes exist.
 
-Agents include `runtime` and `source` fields. Existing agents default to `llm`/`builtin`; DeepAgent agents are registered from `deepagent/agents.json`, use `runtime=deepagent`, and invoke the sibling `deepagent/` uv project to return a Markdown research report.
+Agents include `runtime` and `source` fields. Existing agents default to `llm`/`builtin`; DeepAgent agents use `runtime=deepagent`. In `grpc` mode both ordinary LLM and DeepAgent turns execute in the long-running Python service and return a unified event stream.
 
 Room lifecycle semantics:
 

@@ -39,6 +39,31 @@ function New-RandomToken {
   return $builder.ToString()
 }
 
+function New-ModelConfigEncryptionKey {
+  $bytes = New-Object byte[] 32
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($bytes)
+  } finally {
+    if ($null -ne $rng) {
+      $rng.Dispose()
+    }
+  }
+
+  return [Convert]::ToBase64String($bytes)
+}
+
+function Test-ModelConfigEncryptionKey {
+  param([string]$Value)
+
+  try {
+    $bytes = [Convert]::FromBase64String($Value)
+    return $bytes.Length -eq 32
+  } catch {
+    return $false
+  }
+}
+
 function Get-EnvValue {
   param(
     [string[]]$Lines,
@@ -328,6 +353,14 @@ try {
   }
   $envLines = Set-EnvValue -Lines $envLines -Key 'MYSQL_ROOT_PASSWORD' -Value $mysqlRootPassword
 
+  $modelConfigEncryptionKey = Get-EnvValue -Lines $envLines -Key 'MODEL_CONFIG_ENCRYPTION_KEY'
+  if (Needs-Randomization -Value $modelConfigEncryptionKey -Placeholders @('generate_me_base64_32_bytes')) {
+    $modelConfigEncryptionKey = New-ModelConfigEncryptionKey
+  } elseif (-not (Test-ModelConfigEncryptionKey -Value $modelConfigEncryptionKey)) {
+    throw 'MODEL_CONFIG_ENCRYPTION_KEY must be base64 encoding of exactly 32 bytes. The existing value was not replaced.'
+  }
+  $envLines = Set-EnvValue -Lines $envLines -Key 'MODEL_CONFIG_ENCRYPTION_KEY' -Value $modelConfigEncryptionKey
+
   $llmApiKey = Get-EnvValue -Lines $envLines -Key 'LLM_API_KEY'
   if ($llmApiKey -eq 'your-api-key-here') {
     $envLines = Set-EnvValue -Lines $envLines -Key 'LLM_API_KEY' -Value ''
@@ -369,7 +402,7 @@ try {
   $backendPort = Get-BackendPublishedPort
   $frontendPort = Get-FrontendPublishedPort
   $frontendUrl = "http://127.0.0.1:$frontendPort"
-  $backendHealthUrl = "http://127.0.0.1:$backendPort/api/health"
+  $backendHealthUrl = "http://127.0.0.1:$backendPort/api/ready"
 
   $currentAllowedOrigins = (Get-EnvValue -Lines $envLines -Key 'ALLOWED_ORIGINS').Trim()
   $updatedAllowedOrigins = Append-CsvUnique -Csv $currentAllowedOrigins -Item "http://localhost:$frontendPort"
@@ -392,8 +425,10 @@ try {
 
   $finalLlmApiKey = Get-EnvValue -Lines (Get-Content $envPath) -Key 'LLM_API_KEY'
   if ([string]::IsNullOrWhiteSpace($finalLlmApiKey)) {
-    Write-Note 'LLM_API_KEY is blank. Human chat will work, but agent replies stay disabled until you set a real key and rerun this script.'
+    Write-Note 'LLM_API_KEY is blank. Configure a Go model Profile in the admin UI; this variable is only a migration fallback.'
   }
+
+  Write-Note 'Back up MODEL_CONFIG_ENCRYPTION_KEY from .env in your secret manager. Losing or changing it makes saved model API keys undecryptable.'
 
   Write-Host ''
   Write-Host 'AgentRoom is ready.' -ForegroundColor Green

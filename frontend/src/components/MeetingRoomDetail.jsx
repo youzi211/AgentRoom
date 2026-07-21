@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Alert, Badge, Button, Group, Modal, Paper, Stack, Text, Title } from '@mantine/core'
 import { downloadMessageArtifact, exportRoomMinutesMarkdown, getMessages, getRoom } from '../api/roomClient'
 import MessageList from './MessageList'
 import MinutesHistory from './MinutesHistory'
@@ -128,29 +129,27 @@ function MeetingRoomDetail({ busyRoomId = '', onClose, onRoomAction, room }) {
 
   return (
     <>
-      <div className="delete-confirm-overlay delete-confirm-overlay--scrollable" role="dialog" aria-modal="true">
-        <section className="meeting-detail-card">
-          <div className="panel-header panel-header--horizontal">
-            <div>
-              <p className="eyebrow">会议详情</p>
-              <h2>{detailRoom.name}</h2>
-              <p className="panel-copy">查看会议概览、完整消息历史和纪要操作。</p>
-            </div>
-            <button className="button button--ghost button--compact" type="button" onClick={onClose}>
-              关闭
-            </button>
-          </div>
+      <Modal
+        opened
+        onClose={onClose}
+        title={`会议详情 / ${detailRoom.name}`}
+        size="90%"
+        centered
+        classNames={{ content: 'delete-confirm-overlay--scrollable' }}
+      >
+        <Stack gap="md">
+          <Text className="panel-copy">查看会议概览、完整消息历史和纪要操作。</Text>
 
-          {errorMessage ? <p className="banner banner--error">{errorMessage}</p> : null}
-          {minutesNotice ? <p className="banner banner--success">{minutesNotice}</p> : null}
+          {errorMessage ? <Alert color="red" variant="light">{errorMessage}</Alert> : null}
+          {minutesNotice ? <Alert color="teal" variant="light">{minutesNotice}</Alert> : null}
 
           <div className="meeting-detail-grid">
-            <aside className="meeting-detail-meta">
+            <Paper component="aside" className="meeting-detail-meta" withBorder radius="md" shadow="none">
               <div className="panel-title-row">
-                <h3>概览</h3>
-                <span className={`agent-state agent-state--${toneForRoomStatus(detailRoom.status)}`}>
+                <Title order={3}>概览</Title>
+                <Badge className={`agent-state agent-state--${toneForRoomStatus(detailRoom.status)}`} color="teal" variant="light">
                   {labelForRoomStatus(detailRoom.status)}
-                </span>
+                </Badge>
               </div>
 
               <div className="context-list">
@@ -180,70 +179,75 @@ function MeetingRoomDetail({ busyRoomId = '', onClose, onRoomAction, room }) {
                 </div>
               </div>
 
-              <div className="meeting-detail-actions">
+              <Group className="meeting-detail-actions" gap="xs">
                 {lifecycleActions.map((action) => (
-                  <button
+                  <Button
                     key={action}
-                    className="button button--secondary button--compact"
+                    variant="light"
+                    color="teal"
+                    size="xs"
                     type="button"
                     disabled={busyRoomId === detailRoom.id}
                     onClick={() => onRoomAction(detailRoom, action)}
                   >
                     {labelForRoomAction(action)}
-                  </button>
+                  </Button>
                 ))}
-                <button className="button button--ghost button--compact" type="button" onClick={() => setMinutesRoom(detailRoom)}>
+                <Button variant="subtle" color="gray" size="xs" type="button" onClick={() => setMinutesRoom(detailRoom)}>
                   纪要版本
-                </button>
-                <button className="button button--ghost button--compact" type="button" onClick={handleDownloadMinutes}>
+                </Button>
+                <Button variant="subtle" color="gray" size="xs" type="button" onClick={handleDownloadMinutes}>
                   导出纪要
-                </button>
-              </div>
+                </Button>
+              </Group>
 
               <section className="room-minutes-preview room-minutes-preview--admin">
                 <div className="panel-title-row">
-                  <h3>最新纪要</h3>
-                  {minutesMarkdown ? <span className="panel-badge panel-badge--neutral">Markdown</span> : null}
+                  <Title order={3}>最新纪要</Title>
+                  {minutesMarkdown ? <Badge color="gray" variant="light">Markdown</Badge> : null}
                 </div>
                 {minutesMarkdown ? (
                   <pre>{minutesMarkdown}</pre>
                 ) : (
-                  <p className="sidebar-empty">当前还没有已保存的会议纪要。</p>
+                  <Text className="sidebar-empty">当前还没有已保存的会议纪要。</Text>
                 )}
               </section>
-            </aside>
+            </Paper>
 
-            <section className="meeting-detail-messages">
+            <Paper component="section" className="meeting-detail-messages" withBorder radius="md" shadow="none">
               <div className="panel-header panel-header--horizontal">
                 <div>
-                  <p className="eyebrow eyebrow--subtle">消息历史</p>
-                  <h3>会议期间的全部消息</h3>
+                  <Text className="eyebrow eyebrow--subtle">消息历史</Text>
+                  <Title order={3}>会议期间的全部消息</Title>
                 </div>
                 {hasMore ? (
-                  <button
-                    className="button button--ghost button--compact room-history-load-more"
+                  <Button
+                    className="room-history-load-more"
+                    variant="subtle"
+                    color="gray"
+                    size="xs"
                     type="button"
                     onClick={handleLoadMore}
                     disabled={isLoadingMore}
                   >
-                    {isLoadingMore ? '加载中...' : '查看更早消息'}
-                  </button>
+                    {isLoadingMore ? '加载中...' : '查看更多早消息'}
+                  </Button>
                 ) : null}
               </div>
 
               {isLoading ? (
-                <p className="sidebar-empty">正在加载会议消息...</p>
+                <Text className="sidebar-empty">正在加载会议消息...</Text>
               ) : messages.length === 0 ? (
-                <p className="sidebar-empty">这个会议还没有消息记录。</p>
+                <Text className="sidebar-empty">这个会议还没有消息记录。</Text>
               ) : (
                 <div className="room-history-list">
                   <MessageList currentParticipantName="" messages={messages} onDownloadArtifact={handleDownloadArtifact} />
                 </div>
               )}
-            </section>
+            </Paper>
           </div>
-        </section>
-      </div>
+        </Stack>
+      </Modal>
 
       {minutesRoom ? <MinutesHistory room={minutesRoom} onClose={() => setMinutesRoom(null)} /> : null}
     </>

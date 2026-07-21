@@ -20,15 +20,32 @@ import (
 )
 
 func (s *Server) handleHealth(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (s *Server) handleReady(c *gin.Context) {
 	dbOK := true
 	if err := s.roomQueries.Ping(c.Request.Context()); err != nil {
 		dbOK = false
 	}
+	runtimeOK := true
+	if s.agentRuntime != nil {
+		if err := s.agentRuntime.Ready(c.Request.Context()); err != nil {
+			runtimeOK = false
+		}
+	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"ok": true,
+	status := http.StatusOK
+	if !dbOK || !runtimeOK {
+		status = http.StatusServiceUnavailable
+	}
+	c.JSON(status, gin.H{
+		"ok": dbOK && runtimeOK,
 		"database": gin.H{
 			"ok": dbOK,
+		},
+		"agentRuntime": gin.H{
+			"ok": runtimeOK,
 		},
 	})
 }
@@ -84,12 +101,13 @@ func (s *Server) handleUpdateAgent(c *gin.Context) {
 	}
 
 	updated, err := s.roomCommands.UpdateAgent(c.Request.Context(), agentID, service.UpdateAgentInput{
-		Name:         request.Name,
-		Role:         request.Role,
-		Runtime:      request.Runtime,
-		Description:  request.Description,
-		SystemPrompt: request.SystemPrompt,
-		Enabled:      request.Enabled,
+		Name:           request.Name,
+		Role:           request.Role,
+		Runtime:        request.Runtime,
+		Description:    request.Description,
+		SystemPrompt:   request.SystemPrompt,
+		Enabled:        request.Enabled,
+		ModelProfileID: request.ModelProfileID,
 	})
 	if err != nil {
 		if errors.Is(err, service.ErrAgentNotFound) {
@@ -98,6 +116,10 @@ func (s *Server) handleUpdateAgent(c *gin.Context) {
 		}
 		if errors.Is(err, service.ErrInvalidAgentRuntime) {
 			writeError(c, http.StatusBadRequest, "invalid agent runtime")
+			return
+		}
+		if errors.Is(err, service.ErrInvalidAgentModelBinding) {
+			writeError(c, http.StatusBadRequest, "model profile is incompatible with agent runtime")
 			return
 		}
 		if errors.Is(err, service.ErrAgentMentionExists) {
@@ -135,7 +157,15 @@ func (s *Server) handleCreateAgent(c *gin.Context) {
 		enabled = *request.Enabled
 	}
 
-	created, err := s.roomCommands.CreateAgent(c.Request.Context(), name, request.Role, request.Description, request.SystemPrompt, enabled, request.Runtime)
+	var created model.Agent
+	var err error
+	if creator, ok := s.roomCommands.(interface {
+		CreateAgentWithModel(context.Context, string, string, string, string, bool, string, string) (model.Agent, error)
+	}); ok {
+		created, err = creator.CreateAgentWithModel(c.Request.Context(), name, request.Role, request.Description, request.SystemPrompt, enabled, request.Runtime, request.ModelProfileID)
+	} else {
+		created, err = s.roomCommands.CreateAgent(c.Request.Context(), name, request.Role, request.Description, request.SystemPrompt, enabled, request.Runtime)
+	}
 	if err != nil {
 		if errors.Is(err, service.ErrAgentMentionExists) {
 			writeError(c, http.StatusConflict, "agent name already exists")
@@ -143,6 +173,10 @@ func (s *Server) handleCreateAgent(c *gin.Context) {
 		}
 		if errors.Is(err, service.ErrInvalidAgentRuntime) {
 			writeError(c, http.StatusBadRequest, "invalid agent runtime")
+			return
+		}
+		if errors.Is(err, service.ErrInvalidAgentModelBinding) {
+			writeError(c, http.StatusBadRequest, "model profile is incompatible with agent runtime")
 			return
 		}
 		s.logger.Error("create agent", "agent_name", name, "error", err)
@@ -452,6 +486,21 @@ func (s *Server) handleListRecentRooms(c *gin.Context) {
 		})
 	}
 	c.JSON(http.StatusOK, contracts.ListRecentRoomsResponse{Rooms: publicRooms})
+}
+
+func (s *Server) handleEntrySummary(c *gin.Context) {
+	summary, err := s.roomQueries.EntrySummary(c.Request.Context())
+	if err != nil {
+		s.logger.Error("entry summary", "error", err)
+		writeError(c, http.StatusInternalServerError, "failed to load entry summary")
+		return
+	}
+	c.JSON(http.StatusOK, contracts.EntrySummaryResponse{
+		ActiveRooms:        summary.ActiveRooms,
+		TodayRooms:         summary.TodayRooms,
+		KnowledgeDocuments: summary.KnowledgeDocuments,
+		EnabledAgents:      summary.EnabledAgents,
+	})
 }
 
 func (s *Server) handleArchiveRoom(c *gin.Context) {

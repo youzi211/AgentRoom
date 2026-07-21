@@ -34,11 +34,11 @@ def build_model(settings: Settings) -> ChatModel:
     if settings.custom.protocol.lower() == "anthropic":
         return ChatAnthropic(
             model=effective_model,
-            base_url=settings.custom.base_url,
+            base_url=settings.custom.base_url or None,
             api_key=settings.custom.api_key,
         )
     return ChatOpenAI(
         model=effective_model,
-        base_url=settings.custom.base_url,
+        base_url=settings.custom.base_url or None,
         api_key=settings.custom.api_key,
     )

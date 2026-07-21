@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Avatar, Badge, Button, Group, Paper, Select, Text, Title } from '@mantine/core'
 import {
   createRoomSocket,
   deleteKnowledgeDocument,
@@ -16,6 +17,7 @@ import AgentActivityPanel from './AgentActivityPanel'
 import AgentRoster from './AgentRoster'
 import FocusTimeline from './FocusTimeline'
 import KnowledgePanel from './KnowledgePanel'
+import MeetingRoomExperience from './MeetingRoomExperience'
 import MeetingMinutesPanel from './MeetingMinutesPanel'
 import MessageComposer from './MessageComposer'
 import MessageList from './MessageList'
@@ -202,7 +204,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
       const [roomResult, messagesResult, activityResult] = await Promise.allSettled([
         getRoom(roomId, roomPasscode),
         getMessages(roomId, roomPasscode),
-        getRoomActivity(roomId, roomPasscode),
+        getRoomActivity(roomId, roomPasscode, { limit: 100 }),
       ])
       if (!isCurrent) {
         return
@@ -380,12 +382,39 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
   }
 
   return (
+    <MeetingRoomExperience
+      activityError={activityError}
+      activityItems={activityItems}
+      activityLoading={activityLoading}
+      agents={agents}
+      connectionState={connectionState}
+      copyState={copyState}
+      focusPoints={focusPoints}
+      insertMentionRef={insertMentionRef}
+      messageListRef={messageListRef}
+      messages={messages}
+      onCopyRoomID={handleCopyRoomID}
+      onDownloadArtifact={handleDownloadArtifact}
+      onLeaveRoom={onLeaveRoom}
+      onSendMessage={handleSendMessage}
+      participantName={participantName}
+      participants={participants}
+      room={room}
+      roomId={roomId}
+      roomPasscode={roomPasscode}
+      thinkingAgents={thinkingAgents}
+      visibleMessages={visibleMessages}
+    />
+  )
+
+  return (
     <main className="chat-workbench">
-      <header className="chat-topbar">
+      <Paper component="header" className="chat-topbar" withBorder radius="md" shadow="xs">
         <div className="chat-room-meta">
-          <div className="brand-mark brand-mark--small">AR</div>
+          <Avatar className="brand-mark brand-mark--small" radius="sm" color="teal">AR</Avatar>
+          <strong className="chat-brand-name">AgentRoom</strong>
           <div>
-            <h1 className="chat-topbar-title">{room.name}</h1>
+            <Title order={1} className="chat-topbar-title">{room.name}</Title>
             <div className="chat-topbar-subtitle">
               <span className={`status-dot status-dot--${connectionState}`} />
               <span>{labelForConnectionState(connectionState)}</span>
@@ -396,25 +425,25 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
             </div>
           </div>
         </div>
-        <div className="chat-topbar-actions">
-          <span className="chat-identity">{`以 ${participantName} 加入`}</span>
-          <button className="button button--secondary button--compact" type="button" onClick={handleCopyRoomID}>
+        <Group className="chat-topbar-actions" gap="xs">
+          <Text className="chat-identity">{`以 ${participantName} 加入`}</Text>
+          <Button variant="default" size="xs" type="button" onClick={handleCopyRoomID}>
             {copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制房间 ID'}
-          </button>
-          <button className="button button--ghost button--compact" type="button" onClick={onLeaveRoom}>
+          </Button>
+          <Button variant="subtle" color="gray" size="xs" type="button" onClick={onLeaveRoom}>
             离开
-          </button>
-        </div>
-      </header>
+          </Button>
+        </Group>
+      </Paper>
 
       {errorMessage ? <p className="banner banner--error banner--compact">{errorMessage}</p> : null}
 
       <div className="chat-layout">
-        <aside className="chat-sidebar chat-context-panel" style={{ width: leftPanelWidth, minWidth: leftPanelWidth }}>
+        <Paper component="aside" className="chat-sidebar chat-context-panel" style={{ width: leftPanelWidth, minWidth: leftPanelWidth }} withBorder radius="md" shadow="xs">
           <section className="sidebar-section meeting-context-summary">
             <div className="sidebar-header">
               <h2>会议上下文</h2>
-              <span className="sidebar-count">Live</span>
+              <Badge className="sidebar-count" color="teal" variant="light">Live</Badge>
             </div>
             <div className="context-list">
               <div className="context-item">
@@ -439,7 +468,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
           <section className="sidebar-section meeting-owner-panel">
             <div className="sidebar-header">
               <h2>会议控制</h2>
-              {isOwner ? <span className="meeting-owner-badge">房主</span> : null}
+              {isOwner ? <Badge className="meeting-owner-badge" color="teal" variant="light">房主</Badge> : null}
             </div>
             <div className="context-list">
               <div className="context-item">
@@ -454,36 +483,36 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
             </p>
             {isOwner ? (
               <div className="meeting-owner-actions">
-                <select
-                  className="text-input meeting-owner-select"
+                <Select
+                  className="meeting-owner-select"
                   value={transferTargetID}
-                  onChange={(event) => setTransferTargetID(event.target.value)}
+                  onChange={(value) => setTransferTargetID(value || '')}
                   disabled={connectionState !== 'connected' || transferableParticipants.length === 0}
-                >
-                  <option value="">选择新的房主</option>
-                  {transferableParticipants.map((participant) => (
-                    <option key={participant.id} value={participant.id}>
-                      {participant.name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="选择新的房主"
+                  data={transferableParticipants.map((participant) => ({
+                    value: participant.id,
+                    label: participant.name,
+                  }))}
+                />
                 <div className="meeting-owner-action-row">
-                  <button
-                    className="button button--secondary button--compact"
+                  <Button
+                    variant="default"
+                    size="xs"
                     type="button"
                     onClick={handleTransferOwner}
                     disabled={connectionState !== 'connected' || !transferTargetID}
                   >
                     转交房主
-                  </button>
-                  <button
-                    className="button button--danger button--compact"
+                  </Button>
+                  <Button
+                    color="red"
+                    size="xs"
                     type="button"
                     onClick={handleCloseRoom}
                     disabled={connectionState !== 'connected'}
                   >
                     关闭会议
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : null}
@@ -508,7 +537,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
             onUploadDocument={(file) => uploadRoomKnowledge(roomId, file)}
             onDeleteDocument={deleteKnowledgeDocument}
           />
-        </aside>
+        </Paper>
 
         <ResizeHandle
           direction="horizontal"
@@ -519,16 +548,21 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
         />
 
         <section className="conversation-workspace">
-          <div className="conversation-heading">
+          <Paper className="conversation-heading" withBorder radius="md" shadow="xs">
             <div>
-              <p className="eyebrow eyebrow--subtle">实时讨论</p>
-              <h2>会议记录与决策流</h2>
+              <Text className="eyebrow eyebrow--subtle">实时讨论</Text>
+              <Title order={2}>会议记录与决策流</Title>
             </div>
-            <div className="conversation-toolbar">
-              <span>{`${visibleMessages.length} 条消息`}</span>
-              <span>{thinkingAgents.length > 0 ? `${thinkingAgents.length} 个 Agent 正在思考` : '等待讨论'}</span>
-            </div>
-          </div>
+            <Group className="conversation-toolbar" gap="xs">
+              <Badge variant="filled" color="teal">全部</Badge>
+              <Badge variant="light" color="gray">人类</Badge>
+              <Badge variant="light" color="gray">Agent</Badge>
+              <Badge variant="light" color="gray">{`${visibleMessages.length} 条消息`}</Badge>
+              <Badge variant="light" color={thinkingAgents.length > 0 ? 'teal' : 'gray'}>
+                {thinkingAgents.length > 0 ? `${thinkingAgents.length} 个 Agent 正在思考` : '等待讨论'}
+              </Badge>
+            </Group>
+          </Paper>
           <MessageList
             ref={messageListRef}
             currentParticipantName={participantName}
@@ -555,13 +589,13 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
           size={rightPanelWidth}
         />
 
-        <aside className="chat-sidebar agent-workbench-panel" style={{ width: rightPanelWidth, minWidth: rightPanelWidth }}>
+        <Paper component="aside" className="chat-sidebar agent-workbench-panel" style={{ width: rightPanelWidth, minWidth: rightPanelWidth }} withBorder radius="md" shadow="xs">
           <div className="agent-roster-region">
             <AgentRoster agents={agents} thinkingAgents={thinkingAgents} onInsertMention={handleInsertMention} />
           </div>
           <FocusTimeline focusPoints={focusPoints} />
           <AgentActivityPanel activities={activityItems} errorMessage={activityError} isLoading={activityLoading} />
-        </aside>
+        </Paper>
       </div>
     </main>
   )

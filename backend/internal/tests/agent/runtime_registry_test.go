@@ -15,7 +15,7 @@ type fakeRuntime struct {
 
 func (r fakeRuntime) Name() string { return r.name }
 
-func (r fakeRuntime) Respond(context.Context, agent.AgentRuntimeRequest) (agent.AgentRuntimeResponse, error) {
+func (r fakeRuntime) Respond(context.Context, agent.AgentRuntimeRequest, ...agent.AgentEventObserver) (agent.AgentRuntimeResponse, error) {
 	return agent.AgentRuntimeResponse{Content: "ok"}, nil
 }
 

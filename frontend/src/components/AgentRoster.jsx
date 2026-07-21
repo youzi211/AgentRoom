@@ -1,3 +1,5 @@
+import { Avatar, Badge, Button, Paper, Text } from '@mantine/core'
+
 function AgentRoster({ agents, thinkingAgents = [], onInsertMention }) {
   const thinkingIDs = new Set(thinkingAgents.map((agent) => agent.id))
 
@@ -5,29 +7,29 @@ function AgentRoster({ agents, thinkingAgents = [], onInsertMention }) {
     <section className="sidebar-section">
       <div className="sidebar-header">
         <h2>可用 Agent</h2>
-        <span className="sidebar-count">{agents.length}</span>
+        <Badge className="sidebar-count" color="teal" variant="light">{agents.length}</Badge>
       </div>
 
       {agents.length === 0 ? (
-        <p className="sidebar-empty">暂无可用 Agent，可在管理页启用后再创建房间。</p>
+        <Text className="sidebar-empty">暂无可用 Agent，可在管理页启用后再创建房间。</Text>
       ) : (
         <ul className="sidebar-list">
           {agents.map((agent) => (
-            <li className="sidebar-list-item sidebar-list-item--stacked" key={agent.id}>
+            <Paper component="li" className="sidebar-list-item sidebar-list-item--stacked" key={agent.id} withBorder radius="md" shadow="none">
               <div className="agent-row">
                 <div className="agent-identity">
-                  <div className="sidebar-avatar agent-avatar">{agent.name.charAt(0).toUpperCase()}</div>
+                  <Avatar className="sidebar-avatar agent-avatar" radius="sm" color="teal">{agent.name.charAt(0).toUpperCase()}</Avatar>
                   <div className="sidebar-copy">
-                    <p className="sidebar-primary">{agent.name}</p>
-                    <p className="sidebar-secondary">{thinkingIDs.has(agent.id) ? '正在思考' : agent.role}</p>
+                    <Text className="sidebar-primary">{agent.name}</Text>
+                    <Text className="sidebar-secondary">{thinkingIDs.has(agent.id) ? '正在思考' : agent.role}</Text>
                   </div>
                 </div>
-                <button className="mention-button" type="button" onClick={() => onInsertMention(agent.mention)}>
+                <Button className="mention-button" variant="light" color="teal" size="xs" type="button" onClick={() => onInsertMention(agent.mention)}>
                   {agent.mention}
-                </button>
+                </Button>
               </div>
-              {agent.description ? <p className="agent-description">{agent.description}</p> : null}
-            </li>
+              {agent.description ? <Text className="agent-description">{agent.description}</Text> : null}
+            </Paper>
           ))}
         </ul>
       )}

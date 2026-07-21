@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Alert, Badge, Button, Group, Paper, Stack, Text, Title } from '@mantine/core'
 
 function KnowledgePanel({ description, disabled = false, emptyText, listDocuments, onDeleteDocument, onUploadDocument, title }) {
   const [documents, setDocuments] = useState([])
@@ -80,59 +81,64 @@ function KnowledgePanel({ description, disabled = false, emptyText, listDocument
   }
 
   return (
-    <section className="sidebar-section knowledge-panel">
+    <Paper component="section" className="sidebar-section knowledge-panel" withBorder radius="md" shadow="none">
       <div className="sidebar-header">
         <div>
-          <h2>{title}</h2>
-          {description ? <p className="sidebar-note">{description}</p> : null}
+          <Title order={2}>{title}</Title>
+          {description ? <Text className="sidebar-note">{description}</Text> : null}
         </div>
-        <span className="sidebar-count">{documents.length}</span>
+        <Badge className="sidebar-count" color="teal" variant="light">{documents.length}</Badge>
       </div>
 
-      <div className="knowledge-actions">
+      <Group className="knowledge-actions" gap="xs">
         <input ref={fileInputRef} type="file" accept=".md,.markdown,text/markdown,text/plain" hidden onChange={handleFileChange} />
-        <button
-          className="button button--secondary button--compact"
+        <Button
+          variant="light"
+          color="teal"
+          size="xs"
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={disabled || isUploading}
         >
           {isUploading ? '上传中...' : '上传 .md'}
-        </button>
-      </div>
+        </Button>
+      </Group>
 
-      {errorMessage ? <p className="knowledge-error">{errorMessage}</p> : null}
+      {errorMessage ? <Alert color="red" variant="light">{errorMessage}</Alert> : null}
 
       {isLoading ? (
-        <p className="sidebar-empty">正在加载知识文档...</p>
+        <Text className="sidebar-empty">正在加载知识文档...</Text>
       ) : documents.length === 0 ? (
-        <p className="sidebar-empty">{emptyText}</p>
+        <Text className="sidebar-empty">{emptyText}</Text>
       ) : (
-        <ul className="knowledge-list">
+        <Stack component="ul" className="knowledge-list" gap="xs">
           {documents.map((document) => (
-            <li className="knowledge-list-item" key={document.id}>
+            <Paper component="li" className="knowledge-list-item" key={document.id} withBorder radius="md" shadow="none">
               <div className="knowledge-document-main">
-                <span className="knowledge-document-name">{document.fileName}</span>
-                <span className="knowledge-document-meta">
+                <Text className="knowledge-document-name">{document.fileName}</Text>
+                <Text className="knowledge-document-meta">
                   {formatFileSize(document.sizeBytes)} - {formatDate(document.createdAt)}
-                </span>
+                </Text>
               </div>
               {onDeleteDocument ? (
-                <button
+                <Button
                   className="knowledge-delete-button"
                   type="button"
                   title="删除知识文档"
+                  variant="subtle"
+                  color="red"
+                  size="xs"
                   onClick={() => handleDelete(document.id)}
                   disabled={disabled || isUploading}
                 >
                   删除
-                </button>
+                </Button>
               ) : null}
-            </li>
+            </Paper>
           ))}
-        </ul>
+        </Stack>
       )}
-    </section>
+    </Paper>
   )
 }
 

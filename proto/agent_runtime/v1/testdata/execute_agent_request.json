@@ -1,0 +1,68 @@
+{
+  "protocolVersion": "v1",
+  "runId": "run_contract",
+  "traceId": "trace_contract",
+  "dialogueRunId": "dialogue_contract",
+  "executorKind": "EXECUTOR_KIND_LLM",
+  "room": {
+    "id": "room_contract",
+    "name": "Contract room",
+    "dialogueMode": "mention_fanout"
+  },
+  "agent": {
+    "id": "agent_contract",
+    "name": "Architect",
+    "mention": "@architect",
+    "role": "software_architect",
+    "description": "Reviews the system design",
+    "systemPrompt": "Review the supplied context.",
+    "runtime": "llm",
+    "modelProfileId": "profile_contract"
+  },
+  "trigger": {
+    "id": "msg_trigger",
+    "senderId": "participant_contract",
+    "senderName": "User",
+    "senderType": "SENDER_TYPE_HUMAN",
+    "content": "Review this architecture",
+    "createdAt": "2026-07-16T00:00:00Z"
+  },
+  "recentMessages": [
+    {
+      "id": "msg_previous",
+      "senderId": "participant_contract",
+      "senderName": "User",
+      "senderType": "SENDER_TYPE_HUMAN",
+      "content": "Previous context",
+      "createdAt": "2026-07-15T23:59:00Z"
+    }
+  ],
+  "knowledgeChunks": [
+    {
+      "id": "chunk_contract",
+      "documentId": "document_contract",
+      "documentName": "architecture.md",
+      "scope": "room",
+      "scopeId": "room_contract",
+      "chunkIndex": 0,
+      "content": "The system uses a Go control plane."
+    }
+  ],
+  "model": {
+    "protocol": "openai",
+    "baseUrl": "https://model.invalid/v1",
+    "modelName": "contract-model",
+    "apiKey": "contract-secret-not-for-logs",
+    "profileId": "profile_contract",
+    "source": "database"
+  },
+  "limits": {
+    "timeout": "45s",
+    "maxOutputBytes": 1048576,
+    "maxArtifactBytes": 2097152,
+    "maxToolSteps": 8
+  },
+  "metadata": {
+    "request_source": "contract_test"
+  }
+}

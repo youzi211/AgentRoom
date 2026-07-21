@@ -1,20 +1,21 @@
 import { forwardRef } from 'react'
+import { Avatar, Badge, Button, Paper, Text, Title } from '@mantine/core'
 
 const MessageList = forwardRef(function MessageList({ currentParticipantName, messages, onDownloadArtifact, thinkingAgents = [] }, ref) {
   if (messages.length === 0 && thinkingAgents.length === 0) {
     return (
-      <section className="message-panel message-panel--empty">
+      <Paper component="section" className="message-panel message-panel--empty" withBorder radius="md" shadow="none">
         <div className="empty-state empty-state--conversation">
-          <p className="eyebrow eyebrow--subtle">对话</p>
-          <h2 className="message-empty-title">开始一次协作会议</h2>
-          <p className="muted-text">@产品经理 讨论需求，或上传会议文件后邀请 Agent 参与。</p>
+          <Text className="eyebrow eyebrow--subtle">对话</Text>
+          <Title order={2} className="message-empty-title">开始一次协作会议</Title>
+          <Text className="muted-text">@产品经理 讨论需求，或上传会议文件后邀请 Agent 参与。</Text>
         </div>
-      </section>
+      </Paper>
     )
   }
 
   return (
-    <section className="message-panel" aria-label="消息列表">
+    <Paper component="section" className="message-panel" aria-label="消息列表" withBorder radius="md" shadow="none">
       <ul className="message-list" ref={ref}>
         {messages.map((message) => {
           const messageRole = roleForMessage(message, currentParticipantName)
@@ -23,74 +24,79 @@ const MessageList = forwardRef(function MessageList({ currentParticipantName, me
           return (
             <li className={`message-row message-row--${messageRole}`} key={message.id}>
               {messageRole !== 'system' ? (
-                <span className={`message-avatar message-avatar--${messageRole}`} aria-hidden="true">
+                <Avatar className={`message-avatar message-avatar--${messageRole}`} radius="sm" color={messageRole === 'agent' ? 'teal' : 'gray'} aria-hidden="true">
                   {avatarTextForMessage(message, messageRole)}
-                </span>
+                </Avatar>
               ) : null}
-              <article className={`message-card message-card--${messageRole}`}>
+              <Paper component="article" className={`message-card message-card--${messageRole}`} withBorder radius="md" shadow="none">
                 <div className="message-meta">
                   <div className="message-author-group">
-                    <span className="message-author">{message.senderName}</span>
-                    <span className={`message-badge message-badge--${messageRole}`}>{labelForMessageRole(messageRole)}</span>
+                    <Text component="span" className="message-author">{message.senderName}</Text>
+                    <Badge className={`message-badge message-badge--${messageRole}`} color={messageRole === 'agent' ? 'teal' : 'gray'} variant="light">
+                      {labelForMessageRole(messageRole)}
+                    </Badge>
                   </div>
                   <time className="message-time" dateTime={message.createdAt}>
                     {formatMessageTime(message.createdAt)}
                   </time>
                 </div>
-                <p className="message-content">{message.content}</p>
+                <Text className="message-content">{message.content}</Text>
                 {message.artifacts?.length > 0 ? (
                   <div className="message-artifacts" aria-label="报告文件">
                     {message.artifacts.map((artifact) => (
-                      <button
+                      <Button
                         className="message-artifact-button"
                         key={artifact.id}
                         type="button"
+                        variant="light"
+                        color="teal"
+                        size="xs"
                         onClick={() => onDownloadArtifact?.(message, artifact)}
                       >
                         <span className="message-artifact-icon" aria-hidden="true">MD</span>
                         <span>{artifact.title || artifact.fileName || '下载报告'}</span>
                         <span className="message-artifact-action">下载报告</span>
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 ) : null}
                 {knowledgeSources.length > 0 ? (
                   <div className="message-sources" aria-label="知识来源">
-                    <span className="message-sources-label">参考：</span>
+                    <Text component="span" className="message-sources-label">参考：</Text>
                     {knowledgeSources.map((source) => (
-                      <span className="message-source-chip" key={source}>
+                      <Badge className="message-source-chip" key={source} color="gray" variant="light">
                         {source}
-                      </span>
+                      </Badge>
                     ))}
                   </div>
                 ) : null}
-              </article>
+              </Paper>
             </li>
           )
         })}
         {thinkingAgents.map((agent) => (
           <li className="message-row message-row--agent" key={`thinking:${agent.id}`}>
-            <span className="message-avatar message-avatar--agent" aria-hidden="true">
+            <Avatar className="message-avatar message-avatar--agent" radius="sm" color="teal" aria-hidden="true">
               {agent.name.charAt(0).toUpperCase()}
-            </span>
-            <article className="message-card message-card--agent message-card--thinking">
+            </Avatar>
+            <Paper component="article" className="message-card message-card--agent message-card--thinking" withBorder radius="md" shadow="none">
               <div className="message-meta">
                 <div className="message-author-group">
-                  <span className="message-author">{agent.name}</span>
-                  <span className="message-badge message-badge--agent">Agent</span>
+                  <Text component="span" className="message-author">{agent.name}</Text>
+                  <Badge className="message-badge message-badge--agent" color="teal" variant="light">Agent</Badge>
                 </div>
               </div>
-              <p className="message-content">
+              <Text className="message-content">
                 <span className="typing-dot" />
                 <span className="typing-dot" />
                 <span className="typing-dot" />
                 正在思考...
-              </p>
-            </article>
+              </Text>
+            </Paper>
           </li>
         ))}
       </ul>
-    </section>
+    </Paper>
   )
 })
 

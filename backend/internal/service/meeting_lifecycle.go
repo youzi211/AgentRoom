@@ -39,9 +39,15 @@ type MeetingLifecycle struct {
 	now        func() time.Time
 	schedule   scheduleFunc
 	closeDelay time.Duration
+	onStopped  func(string)
 
 	mu     sync.Mutex
 	timers map[string]timerHandle
+}
+
+func (l *MeetingLifecycle) WithRoomStopped(onStopped func(string)) *MeetingLifecycle {
+	l.onStopped = onStopped
+	return l
 }
 
 type lifecycleStore interface {
@@ -408,6 +414,9 @@ func (l *MeetingLifecycle) applyLifecycle(ctx context.Context, currentRoom *room
 	}
 
 	currentRoom.ApplyLifecycle(state)
+	if state.Status != model.RoomStatusActive && l.onStopped != nil {
+		l.onStopped(info.ID)
+	}
 	return nil
 }
 

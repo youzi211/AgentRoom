@@ -118,6 +118,11 @@ func (s *MySQLStore) UpdateAgent(ctx context.Context, a model.Agent) (model.Agen
 	existing.Description = a.Description
 	existing.SystemPrompt = a.SystemPrompt
 	existing.Enabled = a.Enabled
+	if a.ModelProfileID == "" {
+		existing.ModelProfileID = nil
+	} else {
+		existing.ModelProfileID = strPtr(a.ModelProfileID)
+	}
 	existing.UpdatedAt = now
 
 	if err := s.db.WithContext(ctx).Save(&existing).Error; err != nil {

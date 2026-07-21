@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Alert, Badge, Button, Group, Modal, Paper, Stack, Text, Textarea, Title } from '@mantine/core'
 import {
   exportRoomMinutesMarkdown,
   generateRoomMinutes,
@@ -117,73 +118,73 @@ function MinutesHistory({ room, onClose }) {
   const busy = status === 'generating' || status === 'saving'
 
   return (
-    <div className="delete-confirm-overlay delete-confirm-overlay--scrollable" role="dialog" aria-modal="true">
-      <div className="minutes-history-card">
-        <div className="panel-header panel-header--horizontal">
-          <div>
-            <h2>会议纪要 · {room.name}</h2>
-            <p className="panel-copy">查看历史版本、重新生成 AI 纪要，或编辑后保存为新版本。</p>
-          </div>
-          <button className="button button--ghost button--compact" type="button" onClick={onClose}>
-            关闭
-          </button>
-        </div>
-
-        {errorMessage ? <p className="banner banner--error">{errorMessage}</p> : null}
-        {notice ? <p className="banner banner--success">{notice}</p> : null}
+    <Modal
+      opened
+      onClose={onClose}
+      title={`会议纪要 / ${room.name}`}
+      size="xl"
+      centered
+      classNames={{ content: 'delete-confirm-overlay--scrollable' }}
+    >
+      <Stack gap="md">
+        <Text className="panel-copy">查看历史版本、重新生成 AI 纪要，或编辑后保存为新版本。</Text>
+        {errorMessage ? <Alert color="red" variant="light">{errorMessage}</Alert> : null}
+        {notice ? <Alert color="teal" variant="light">{notice}</Alert> : null}
 
         <div className="minutes-history-body">
-          <aside className="minutes-history-versions">
+          <Paper component="aside" className="minutes-history-versions" withBorder radius="md" shadow="none">
             <div className="panel-title-row">
-              <h3>版本</h3>
-              <span className="panel-badge panel-badge--neutral">{versions.length}</span>
+              <Title order={3}>版本</Title>
+              <Badge color="gray" variant="light">{versions.length}</Badge>
             </div>
             {status === 'loading' ? (
-              <p className="sidebar-empty">加载中...</p>
+              <Text className="sidebar-empty">加载中...</Text>
             ) : versions.length === 0 ? (
-              <p className="sidebar-empty">暂无纪要。点击「生成纪要」创建第一版。</p>
+              <Text className="sidebar-empty">暂无纪要。点击「生成纪要」创建第一版。</Text>
             ) : (
-              <ul className="minutes-version-list">
+              <Stack component="ul" className="minutes-version-list" gap="xs">
                 {versions.map((version) => (
                   <li key={version.id}>
-                    <button
+                    <Button
                       type="button"
-                      className={`minutes-version-button${version.id === selectedId ? ' minutes-version-button--active' : ''}`}
+                      className="minutes-version-button"
+                      variant={version.id === selectedId ? 'light' : 'subtle'}
+                      color={version.id === selectedId ? 'teal' : 'gray'}
+                      fullWidth
                       onClick={() => handleSelectVersion(version)}
                     >
-                      <span className="minutes-version-title">v{version.version} · {sourceLabel(version.source)}</span>
+                      <span className="minutes-version-title">v{version.version} / {sourceLabel(version.source)}</span>
                       <span className="minutes-version-time">{formatDateTime(version.createdAt)}</span>
-                    </button>
+                    </Button>
                   </li>
                 ))}
-              </ul>
+              </Stack>
             )}
-          </aside>
+          </Paper>
 
           <div className="minutes-history-editor">
-            <textarea
-              className="text-input text-input--prompt"
+            <Textarea
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               rows={16}
               placeholder="纪要 Markdown 内容..."
               disabled={busy}
             />
-            <div className="button-row">
-              <button className="button button--secondary button--compact" type="button" onClick={handleGenerate} disabled={busy}>
+            <Group className="button-row" justify="flex-end">
+              <Button variant="light" color="teal" size="xs" type="button" onClick={handleGenerate} disabled={busy}>
                 {status === 'generating' ? '生成中...' : '生成纪要'}
-              </button>
-              <button className="button button--secondary button--compact" type="button" onClick={handleExport} disabled={busy || !draft.trim()}>
+              </Button>
+              <Button variant="light" color="teal" size="xs" type="button" onClick={handleExport} disabled={busy || !draft.trim()}>
                 导出 Markdown
-              </button>
-              <button className="button button--primary button--compact" type="button" onClick={handleSave} disabled={busy || !draft.trim()}>
+              </Button>
+              <Button color="teal" size="xs" type="button" onClick={handleSave} disabled={busy || !draft.trim()}>
                 {status === 'saving' ? '保存中...' : '保存为新版本'}
-              </button>
-            </div>
+              </Button>
+            </Group>
           </div>
         </div>
-      </div>
-    </div>
+      </Stack>
+    </Modal>
   )
 }
 

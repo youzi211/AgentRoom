@@ -418,10 +418,12 @@ func (s *dialogueStore) AddMessage(_ context.Context, message model.Message) (mo
 	return message, nil
 }
 
-func (s *dialogueStore) CreateAgentRun(context.Context, store.AgentRun) error { return nil }
+func (s *dialogueStore) CreateAgentRun(ctx context.Context, run store.AgentRun) error {
+	return s.Store.CreateAgentRun(ctx, run)
+}
 
-func (s *dialogueStore) FinishAgentRun(context.Context, string, string, string, time.Time) error {
-	return nil
+func (s *dialogueStore) FinishAgentRun(ctx context.Context, runID string, status string, errText string, completedAt time.Time) error {
+	return s.Store.FinishAgentRun(ctx, runID, status, errText, completedAt)
 }
 
 func (s *dialogueStore) CreateDialogueRun(_ context.Context, run store.DialogueRun) error {

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"agentroom/backend/internal/llm"
@@ -9,8 +10,14 @@ import (
 )
 
 type LLMAgentRuntime struct {
-	client  llm.Client
-	timeout time.Duration
+	client   llm.Client
+	timeout  time.Duration
+	resolver ModelConfigResolver
+}
+
+func (r *LLMAgentRuntime) WithModelResolver(resolver ModelConfigResolver) *LLMAgentRuntime {
+	r.resolver = resolver
+	return r
 }
 
 func NewLLMAgentRuntime(client llm.Client, timeout time.Duration) *LLMAgentRuntime {
@@ -21,7 +28,17 @@ func (r *LLMAgentRuntime) Name() string {
 	return model.AgentRuntimeLLM
 }
 
-func (r *LLMAgentRuntime) Respond(ctx context.Context, request AgentRuntimeRequest) (AgentRuntimeResponse, error) {
+func (r *LLMAgentRuntime) Respond(ctx context.Context, request AgentRuntimeRequest, observers ...AgentEventObserver) (_ AgentRuntimeResponse, err error) {
+	observeRuntimeEvent(ctx, observers, AgentRuntimeEvent{RunID: request.RunID, Kind: "accepted"})
+	defer func() {
+		kind := "completed"
+		failure := ""
+		if err != nil {
+			kind = "failed"
+			failure = "local runtime failed"
+		}
+		observeRuntimeEvent(ctx, observers, AgentRuntimeEvent{RunID: request.RunID, Kind: kind, Failure: failure})
+	}()
 	promptContext := request.PromptContext
 	if promptContext.RoomName == "" {
 		promptContext = NewMentionPromptContext(request.Room, request.RecentMessages, request.Trigger, request.KnowledgeChunks)
@@ -34,14 +51,29 @@ func (r *LLMAgentRuntime) Respond(ctx context.Context, request AgentRuntimeReque
 	requestCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	response, err := r.client.Complete(requestCtx, promptMessages)
+	client := r.client
+	resolved := model.ResolvedModelConfig{}
+	if r.resolver != nil {
+		resolved, err = r.resolver.Resolve(requestCtx, model.ModelRuntimeGo, request.Agent.ModelProfileID)
+		if err != nil {
+			return AgentRuntimeResponse{}, err
+		}
+		client = llm.NewClient(llm.Config{BaseURL: resolved.BaseURL, APIKey: resolved.APIKey, Model: resolved.ModelName})
+	}
+	metadata := modelAuditMetadata(resolved)
+	observeRuntimeEvent(ctx, observers, AgentRuntimeEvent{RunID: request.RunID, Kind: "model_started", ModelName: resolved.ModelName})
+	response, err := client.Complete(requestCtx, promptMessages)
 	if err != nil {
-		return AgentRuntimeResponse{}, err
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return AgentRuntimeResponse{Metadata: metadata}, err
+		}
+		return AgentRuntimeResponse{Metadata: metadata}, errors.New("model request failed")
 	}
 
 	cleaned, err := StripThinkBlocks(response)
 	if err != nil {
 		return AgentRuntimeResponse{}, err
 	}
-	return AgentRuntimeResponse{Content: cleaned}, nil
+	observeRuntimeEvent(ctx, observers, AgentRuntimeEvent{RunID: request.RunID, Kind: "model_completed", ModelName: resolved.ModelName})
+	return AgentRuntimeResponse{Content: cleaned, Metadata: metadata}, nil
 }

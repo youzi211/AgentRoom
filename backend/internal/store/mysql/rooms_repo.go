@@ -213,6 +213,31 @@ func (s *MySQLStore) ListRooms(ctx context.Context, query store.ListRoomsQuery) 
 	return summaries, nil
 }
 
+func (s *MySQLStore) EntrySummary(ctx context.Context, query store.EntrySummaryQuery) (store.EntrySummary, error) {
+	var activeRooms int64
+	if err := s.db.WithContext(ctx).Model(&RoomModel{}).Where("status = ?", model.RoomStatusActive).Count(&activeRooms).Error; err != nil {
+		return store.EntrySummary{}, fmt.Errorf("count active rooms: %w", err)
+	}
+	var todayRooms int64
+	if err := s.db.WithContext(ctx).Model(&RoomModel{}).Where("created_at >= ? AND created_at < ?", query.TodayStart, query.Tomorrow).Count(&todayRooms).Error; err != nil {
+		return store.EntrySummary{}, fmt.Errorf("count today rooms: %w", err)
+	}
+	var knowledgeDocuments int64
+	if err := s.db.WithContext(ctx).Model(&KnowledgeDocumentModel{}).Count(&knowledgeDocuments).Error; err != nil {
+		return store.EntrySummary{}, fmt.Errorf("count knowledge documents: %w", err)
+	}
+	var enabledAgents int64
+	if err := s.db.WithContext(ctx).Model(&AgentModel{}).Where("enabled = ?", true).Count(&enabledAgents).Error; err != nil {
+		return store.EntrySummary{}, fmt.Errorf("count enabled agents: %w", err)
+	}
+	return store.EntrySummary{
+		ActiveRooms:        int(activeRooms),
+		TodayRooms:         int(todayRooms),
+		KnowledgeDocuments: int(knowledgeDocuments),
+		EnabledAgents:      int(enabledAgents),
+	}, nil
+}
+
 func (s *MySQLStore) UpdateRoomLifecycle(ctx context.Context, input store.UpdateRoomLifecycleInput) error {
 	ownerParticipantID := any(nil)
 	if input.OwnerParticipantID != "" {

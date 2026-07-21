@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Alert, Badge, Button, Group, Paper, Text, Title } from '@mantine/core'
 import { downloadMessageArtifact, exportRoomMinutesMarkdown, getMessages } from '../api/roomClient'
 import MessageList from './MessageList'
 import { downloadBlobFile, downloadMarkdownFile, minutesFilename } from './meetingMinutes'
@@ -100,31 +101,31 @@ function RoomReadOnly({ room, roomPasscode = '', onBackHome }) {
 
   return (
     <main className="workbench room-readonly">
-      <section className="panel room-readonly-banner">
+      <Paper component="section" className="panel room-readonly-banner" withBorder radius="md" shadow="xs">
         <div>
-          <p className="eyebrow">只读查看</p>
-          <h1>{room.name}</h1>
-          <p className="section-copy">
+          <Text className="eyebrow">只读查看</Text>
+          <Title order={1}>{room.name}</Title>
+          <Text className="section-copy">
             会议已经关闭。你可以继续查看历史消息和纪要，但不能加入实时连接、发送消息或恢复会议。
-          </p>
+          </Text>
         </div>
-        <div className="panel-badge-group">
-          <span className="panel-badge panel-badge--neutral">已关闭</span>
-          <button className="button button--secondary" type="button" onClick={onBackHome}>
+        <Group className="panel-badge-group" gap="xs">
+          <Badge color="gray" variant="light">已关闭</Badge>
+          <Button variant="default" type="button" onClick={onBackHome}>
             返回入口
-          </button>
-        </div>
-      </section>
+          </Button>
+        </Group>
+      </Paper>
 
-      {errorMessage ? <p className="banner banner--error">{errorMessage}</p> : null}
-      {minutesNotice ? <p className="banner banner--success">{minutesNotice}</p> : null}
+      {errorMessage ? <Alert color="red" variant="light">{errorMessage}</Alert> : null}
+      {minutesNotice ? <Alert color="teal" variant="light">{minutesNotice}</Alert> : null}
 
       <div className="room-readonly-grid">
-        <aside className="panel room-readonly-side">
+        <Paper component="aside" className="panel room-readonly-side" withBorder radius="md" shadow="xs">
           <div className="panel-header">
             <div>
-              <h2>会议信息</h2>
-              <p className="panel-copy">关闭后的会议保留历史消息与纪要，方便参会者只读回看。</p>
+              <Title order={2}>会议信息</Title>
+              <Text className="panel-copy">关闭后的会议保留历史消息与纪要，方便参会者只读回看。</Text>
             </div>
           </div>
 
@@ -149,47 +150,50 @@ function RoomReadOnly({ room, roomPasscode = '', onBackHome }) {
 
           <section className="room-minutes-preview">
             <div className="panel-title-row">
-              <h2>会议纪要</h2>
-              <button className="button button--secondary button--compact" type="button" onClick={handleDownloadMinutes}>
+              <Title order={2}>会议纪要</Title>
+              <Button variant="light" color="teal" size="xs" type="button" onClick={handleDownloadMinutes}>
                 下载 Markdown
-              </button>
+              </Button>
             </div>
             {minutesMarkdown ? (
               <pre>{minutesMarkdown}</pre>
             ) : (
-              <p className="sidebar-empty">当前还没有已保存的会议纪要。</p>
+              <Text className="sidebar-empty">当前还没有已保存的会议纪要。</Text>
             )}
           </section>
-        </aside>
+        </Paper>
 
-        <section className="panel room-history-panel">
+        <Paper component="section" className="panel room-history-panel" withBorder radius="md" shadow="xs">
           <div className="panel-header panel-header--horizontal">
             <div>
-              <p className="eyebrow eyebrow--subtle">会议历史</p>
-              <h2>关闭前的全部消息</h2>
+              <Text className="eyebrow eyebrow--subtle">会议历史</Text>
+              <Title order={2}>关闭前的全部消息</Title>
             </div>
             {hasMore ? (
-              <button
-                className="button button--ghost button--compact room-history-load-more"
+              <Button
+                className="room-history-load-more"
+                variant="subtle"
+                color="gray"
+                size="xs"
                 type="button"
                 onClick={handleLoadMore}
                 disabled={isLoadingMore}
               >
-                {isLoadingMore ? '加载中...' : '查看更早消息'}
-              </button>
+                {isLoadingMore ? '加载中...' : '查看更多早消息'}
+              </Button>
             ) : null}
           </div>
 
           {isLoading ? (
-            <p className="sidebar-empty">正在加载历史消息...</p>
+            <Text className="sidebar-empty">正在加载历史消息...</Text>
           ) : messages.length === 0 ? (
-            <p className="sidebar-empty">这个会议还没有消息记录。</p>
+            <Text className="sidebar-empty">这个会议还没有消息记录。</Text>
           ) : (
             <div className="room-history-list">
               <MessageList currentParticipantName="" messages={messages} onDownloadArtifact={handleDownloadArtifact} />
             </div>
           )}
-        </section>
+        </Paper>
       </div>
     </main>
   )

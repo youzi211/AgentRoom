@@ -37,7 +37,7 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react'
-import { getAgentRoleSets, getAgents, listRecentRooms } from '../api/roomClient'
+import { getAgentRoleSets, getAgents, getEntrySummary, listRecentRooms } from '../api/roomClient'
 
 const TEMPLATE_AGENT_MATCHERS = {
   product_manager: ['pm', '产品经理', 'Product Manager'],
@@ -102,10 +102,10 @@ const CAPABILITY_ITEMS = [
 ]
 
 const ENTRY_STATS = [
-  { icon: Users, label: '进行中', value: '6', tone: 'teal' },
-  { icon: CalendarDays, label: '今日会议', value: '12', tone: 'blue' },
-  { icon: FileText, label: '知识来源', value: '24', tone: 'amber' },
-  { icon: Database, label: 'Agent 角色', value: '18', tone: 'teal' },
+  { icon: Users, label: '进行中', field: 'activeRooms', tone: 'teal' },
+  { icon: CalendarDays, label: '今日会议', field: 'todayRooms', tone: 'blue' },
+  { icon: FileText, label: '知识来源', field: 'knowledgeDocuments', tone: 'amber' },
+  { icon: Database, label: 'Agent 角色', field: 'enabledAgents', tone: 'teal' },
 ]
 
 function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOpenAgentAdmin }) {
@@ -122,6 +122,11 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
   const [selectedAgentIds, setSelectedAgentIds] = useState(new Set())
   const [recentRooms, setRecentRooms] = useState([])
   const [recentRoomsState, setRecentRoomsState] = useState({
+    isLoading: true,
+    errorMessage: '',
+  })
+  const [entrySummary, setEntrySummary] = useState(null)
+  const [entrySummaryState, setEntrySummaryState] = useState({
     isLoading: true,
     errorMessage: '',
   })
@@ -177,6 +182,34 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
       }
     }
     void loadRecentRooms()
+    return () => {
+      isCurrent = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let isCurrent = true
+    const loadEntrySummary = async () => {
+      setEntrySummaryState({ isLoading: true, errorMessage: '' })
+      try {
+        const response = await getEntrySummary()
+        if (!isCurrent) {
+          return
+        }
+        setEntrySummary(response ?? null)
+        setEntrySummaryState({ isLoading: false, errorMessage: '' })
+      } catch (error) {
+        if (!isCurrent) {
+          return
+        }
+        setEntrySummary(null)
+        setEntrySummaryState({
+          isLoading: false,
+          errorMessage: error.message || 'entry summary unavailable',
+        })
+      }
+    }
+    void loadEntrySummary()
     return () => {
       isCurrent = false
     }
@@ -276,10 +309,9 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
             <BarChart3 size={17} />
             会议入口
           </span>
-          <button className="entry-dashboard-nav-item" type="button" onClick={onOpenAgentAdmin}>
-            <Settings size={17} />
+          <Button className="entry-dashboard-nav-item" type="button" variant="subtle" color="gray" leftSection={<Settings size={17} />} onClick={onOpenAgentAdmin}>
             管理后台
-          </button>
+          </Button>
         </nav>
       </header>
 
@@ -319,11 +351,14 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
           <Paper className="entry-stats-card" withBorder radius="md" shadow="xs">
             {ENTRY_STATS.map((item) => {
               const Icon = item.icon
+              const value = entrySummaryState.isLoading || entrySummaryState.errorMessage
+                ? '--'
+                : formatEntryStatValue(entrySummary?.[item.field])
               return (
                 <div className="entry-stat-item" key={item.label}>
                   <Icon className={`entry-stat-icon entry-stat-icon--${item.tone}`} size={20} />
                   <span>{item.label}</span>
-                  <strong>{item.value}</strong>
+                  <strong>{value}</strong>
                 </div>
               )
             })}
@@ -601,10 +636,9 @@ function ExistingRoomsTable({ canJoin, errorMessage, isLoading, onCopyRoomId, on
       {rooms.slice(0, 3).map((roomItem) => (
         <div className="entry-room-table-row" role="row" key={roomItem.id}>
           <span role="cell">{roomItem.name || '未命名会议'}</span>
-          <button type="button" className="entry-room-id-button" onClick={() => onCopyRoomId(roomItem)}>
+          <Button type="button" className="entry-room-id-button" variant="subtle" color="gray" size="compact-xs" rightSection={<Copy size={13} />} onClick={() => onCopyRoomId(roomItem)}>
             {roomItem.id}
-            <Copy size={13} />
-          </button>
+          </Button>
           <span role="cell">{roomItem.hasPasscode ? '需要口令' : '公开加入'}</span>
           <span role="cell">
             <Badge size="sm" variant="light" color={roomItem.dialoguePolicy?.mode === 'guided_dialogue' ? 'blue' : 'teal'}>
@@ -632,6 +666,10 @@ function ExistingRoomsTable({ canJoin, errorMessage, isLoading, onCopyRoomId, on
 function matchesTemplate(agent, templateID) {
   const matchers = TEMPLATE_AGENT_MATCHERS[templateID] ?? [templateID]
   return matchers.some((matcher) => agent.id === matcher || agent.name === matcher || agent.role === matcher)
+}
+
+function formatEntryStatValue(value) {
+  return Number.isFinite(value) ? String(value) : '--'
 }
 
 export default JoinScreen

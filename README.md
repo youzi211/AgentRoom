@@ -45,7 +45,7 @@ The current repository already includes:
 
 - MySQL-backed persistence for agents, rooms, participants, messages, agent runs, and Markdown knowledge metadata/chunks.
 - Automatic schema migration when `DB_AUTO_MIGRATE=true`.
-- OpenAI-compatible agent responses through `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`.
+- Unified OpenAI-compatible model Profile management for the Go and DeepAgent runtimes, including per-runtime defaults, per-Agent bindings, encrypted API keys, and connection tests.
 - Room-level and agent-level Markdown knowledge upload APIs.
 - Deterministic knowledge provenance on Agent messages through compact source chips.
 - Static Agent role templates and meeting role-set shortcuts built on the existing Agent configuration flow.
@@ -57,7 +57,7 @@ The current repository already includes:
 - Read-only access for ordinary participants after a room is closed.
 - Admin console support for room listing, room detail, full message history, archive, reopen, restore, and Agent configuration.
 - Meeting minutes generation, persistence with versioning, admin editing, and Markdown export.
-- Health endpoint with database status at `/api/health`.
+- Core liveness at `/api/health` and MySQL/Agent Runtime dependency readiness at `/api/ready`.
 
 ## Tech Stack
 
@@ -65,7 +65,8 @@ The current repository already includes:
 - **Frontend**: React + Vite app under `frontend/`
 - **Database**: MySQL 8
 - **Realtime transport**: WebSocket room sessions
-- **LLM integration**: OpenAI-compatible chat completion endpoint via `LLM_*`
+- **LLM integration**: database-managed OpenAI-compatible Profiles for Go and DeepAgent, with legacy environment fallback
+- **Agent execution**: long-running Python 3.12 + `uv` service, called by Go over server-streaming gRPC
 - **Ops**: Docker Compose for local containerized startup
 
 ## Prerequisites
@@ -76,6 +77,7 @@ For local development:
 - Node.js 18+
 - npm 9+
 - MySQL 8+
+- Python 3.11+ and `uv` when running DeepAgent outside Docker
 
 For container deployment:
 
@@ -116,6 +118,7 @@ The startup scripts make local container deployment actually one-step:
 
 - copy `.env.example` to `.env` when the file is missing
 - replace shipped placeholder secrets with generated values for `ADMIN_API_KEY`, `VITE_ADMIN_API_KEY`, `MYSQL_PASSWORD`, and `MYSQL_ROOT_PASSWORD`
+- generate `MODEL_CONFIG_ENCRYPTION_KEY` as a cryptographically random, base64-encoded 32-byte key when it is absent, and reject malformed existing values without replacing them
 - keep `VITE_ADMIN_API_KEY` aligned with `ADMIN_API_KEY`
 - clear the fake `LLM_API_KEY=your-api-key-here` placeholder so the stack still starts cleanly without a provider key
 - merge `PUBLIC_ORIGIN` into `ALLOWED_ORIGINS` so server-domain or server-IP access can open WebSocket rooms
@@ -127,7 +130,21 @@ The startup scripts make local container deployment actually one-step:
 
 If Docker Desktop or the Docker daemon is not running, the scripts stop early with a clear error.
 
-`LLM_API_KEY` is optional for boot. When it is blank, human chat still works and agent replies stay disabled until you set a real provider key in `.env` and rerun the script.
+After the first successful startup, copy `MODEL_CONFIG_ENCRYPTION_KEY` from `.env` into your secret manager or encrypted deployment backup. Keep the same value across restarts, upgrades, replicas, and restores. Losing or changing it does not expose the saved credentials, but it makes every API key already encrypted in `model_profiles` undecryptable; affected Profiles must then be supplied with new API keys. The application deliberately does not fall back to another Profile when an explicitly selected Profile cannot be decrypted.
+
+For a manual or orchestrated deployment, generate the key before first startup:
+
+```powershell
+$bytes = [byte[]]::new(32)
+[Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+[Convert]::ToBase64String($bytes)
+```
+
+```bash
+openssl rand -base64 32
+```
+
+`LLM_API_KEY` is optional for boot because `LLM_*` is now only the Go-runtime migration fallback. Create a Go Profile on the Models admin page for normal operation. Likewise, root `MODEL_*` values are only a DeepAgent migration fallback; the startup scripts never import either fallback into MySQL.
 
 For a real server deployment, set `PUBLIC_ORIGIN=` in `.env` before first startup if browsers will open the site with a public IP or domain name. Example values:
 
@@ -161,10 +178,11 @@ Use the printed direct-IP frontend URL from Windows. The script also whitelists 
 
 When the Bash script runs inside WSL, it also starts a tiny keepalive process by default so the WSL-hosted Docker daemon does not idle out and take the containers down with it. If you do not want that behavior for a given run, start with `KEEP_WSL_ALIVE=0 bash ./scripts/docker-up.sh`. To stop the keepalive later, run `pkill -f wsl-keepalive.sh` inside WSL and then shut WSL down when you are done.
 
-Compose starts three services:
+Compose starts four services:
 
 - `mysql`: MySQL 8 database with a persistent Docker volume.
-- `backend`: Go API server on port `8080`.
+- `backend`: Go control plane on port `8080`; it owns rooms, orchestration, MySQL commits, WebSocket events, Profile resolution, and cancellation.
+- `agent-runtime`: internal-only Python gRPC execution plane for ordinary LLM Agents and DeepAgent research. It has no AgentRoom database access and is not published to the host.
 - `frontend`: nginx serving the built Vite app and proxying `/api` plus WebSocket traffic to the backend.
 
 The backend container receives a container-network DSN:
@@ -215,9 +233,26 @@ The backend loads `../.env` when it starts from `backend/`, then reads process e
 | `DB_DRIVER` | No | `mysql` | Database driver label. Current backend uses MySQL. |
 | `MYSQL_DSN` | Yes | _none_ | MySQL DSN. Must include `parseTime=true`; `charset=utf8mb4` is recommended. |
 | `DB_AUTO_MIGRATE` | No | `false` | Runs embedded schema migrations at startup when `true`. |
-| `LLM_BASE_URL` | No | `https://api.openai.com` | OpenAI-compatible API base URL. |
-| `LLM_API_KEY` | No | _empty_ | API key for agent responses. If empty, human chat still works and agent failures are shown as room system messages. |
-| `LLM_MODEL` | No | `gpt-4o-mini` | Chat-completions model name. |
+| `MODEL_CONFIG_ENCRYPTION_KEY` | For saved API keys | _none_ | Base64 encoding of exactly 32 random bytes. Encrypts database Profile API keys; must be backed up and shared by all backend replicas. |
+| `LLM_BASE_URL` | No | `https://api.openai.com` | Legacy Go-runtime fallback API base URL, used only when no enabled database Go default exists. |
+| `LLM_API_KEY` | No | _empty_ | Legacy Go-runtime fallback key. It is not imported into a Profile. |
+| `LLM_MODEL` | No | `gpt-4o-mini` | Legacy Go-runtime fallback model name. |
+| `MODEL_PROTOCOL` | No | `openai` | Legacy DeepAgent fallback protocol. Database Profiles currently use OpenAI-compatible Chat Completions. |
+| `MODEL_BASE_URL` | No | `https://api.openai.com/v1` | Legacy DeepAgent fallback API base URL, used only when no enabled database DeepAgent default exists. |
+| `MODEL_NAME` | No | `gpt-5.5` | Legacy DeepAgent fallback model name. |
+| `MODEL_API_KEY` | No | _empty_ | Legacy DeepAgent fallback API key. It is not imported or written to DeepAgent files. |
+| `TAVILY_API_KEY` | For live DeepAgent research | _empty_ | Search credential used by DeepAgent; independent from model Profiles. |
+| `AGENT_RUNTIME_TRANSPORT` | No | `local` | Explicit `local` or `grpc` selection. Compose defaults to `grpc`; remote failures never auto-fallback. |
+| `AGENT_RUNTIME_GRPC_ADDRESS` | For `grpc` | `127.0.0.1:50051` | Python Runtime address; Compose uses `agent-runtime:50051`. |
+| `AGENT_RUNTIME_GRPC_INSECURE` | No | `false` | Explicit plaintext development mode. Production should configure CA/server identity and optional client certificates. |
+| `AGENT_RUNTIME_LLM_TIMEOUT_SECONDS` | No | `45` | Deadline for an ordinary remote LLM turn. |
+| `AGENT_RUNTIME_DEEPAGENT_TIMEOUT_SECONDS` | No | `300` | Deadline for a remote DeepAgent turn. |
+| `DEEPAGENT_COMMAND` | Local rollback only | `uv` | Legacy per-turn DeepAgent launcher used only when transport is `local`. |
+| `DEEPAGENT_WORKDIR` | No | `../deepagent` | DeepAgent project directory. Compose uses `/app/deepagent`. |
+| `DEEPAGENT_CONFIG` | No | `deepagent.toml` | Non-secret DeepAgent settings file relative to the work directory. |
+| `DEEPAGENT_REGISTRY` | No | `agents.json` | DeepAgent registry relative to the work directory. |
+| `DEEPAGENT_TIMEOUT_SECONDS` | No | `300` | Maximum duration of one DeepAgent child process. |
+| `DEEPAGENT_CONCURRENCY` | No | `1` | Maximum concurrent DeepAgent child processes per backend instance. |
 | `LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, or `error`. |
 | `LOG_FORMAT` | No | `text` | Use `json` for production log collectors. |
 | `LOG_ADD_SOURCE` | No | `false` | Include source file information in logs when `true`. |
@@ -239,6 +274,23 @@ Compose-only database bootstrap variables:
 
 ## Deployment Notes
 
+### Model configuration and resolution
+
+The Models admin page is the source of truth for new model configuration. Profiles are separated into `go` and `deepagent` runtime scopes. Each scope has at most one enabled default, and an Agent can either inherit its runtime default or bind a compatible Profile. When a room is created, the selected Profile ID is snapshotted with the room Agent; later changes to the global Agent binding affect only new rooms, while credential or endpoint rotation on the referenced Profile takes effect on its next call.
+
+Resolution is deterministic:
+
+1. the room Agent's snapshotted Profile ID;
+2. the enabled database default for that runtime (primarily for old rooms without a snapshot binding and other default-runtime calls);
+3. `LLM_*` for Go or `MODEL_*` for DeepAgent, only as a migration fallback when no database default exists;
+4. a model-not-configured error.
+
+A missing, disabled, incompatible, or undecryptable explicit Profile is an error and never silently falls through to a default or environment credential. Environment fallbacks are not automatically imported into the database, shown in the browser, or copied into Profile records.
+
+Profile API keys are encrypted in MySQL with `MODEL_CONFIG_ENCRYPTION_KEY`; API responses and the browser receive only masked key state. Go decrypts the selected Profile for one Agent turn and sends only that model connection over the protected internal gRPC call. Python keeps it in the isolated RunContext, creates a request-scoped client, clears the reference at cleanup, and never writes it to `.env`, TOML, reports, events, or logs. `TAVILY_API_KEY` remains a separately managed search credential.
+
+The dedicated `agent-runtime` image includes Python 3.12, pinned `uv`, locked dependencies, source, registry, and non-secret defaults. The backend image temporarily retains the legacy local executor during migration. A DeepAgent Profile configures its model connection in Docker, while live web research additionally requires `TAVILY_API_KEY` in the Python service environment.
+
 Before exposing AgentRoom outside a trusted internal network, verify these items against the running build:
 
 - Admin API writes require the configured `X-Admin-Key`: creating, updating, or deleting agents and uploading or deleting knowledge should not be anonymous.
@@ -250,13 +302,16 @@ Before exposing AgentRoom outside a trusted internal network, verify these items
 - Archived rooms stay admin-only.
 - Meeting minutes can be generated from persisted room messages, are stored as versioned records, can be edited by an admin in any room state, and exported as Markdown.
 - The admin console can list rooms, inspect full message history, archive a room, reopen a closed room, and restore an archived room back to `closed`.
-- `/api/health` reports `"database": {"ok": true}`.
+- `/api/health` reports Go process liveness; `/api/ready` separately reports database and Agent Runtime readiness.
+- `MODEL_CONFIG_ENCRYPTION_KEY` is present in the deployment secret store and restore procedure, and every backend replica receives the identical value.
+- The legacy `LLM_*` / `MODEL_*` fallbacks have been removed from the runtime environment after database defaults are verified, if your migration no longer needs them.
 
 ## HTTP Surface
 
 Primary API routes are under `/api`:
 
 - `GET /api/health`
+- `GET /api/ready`
 - `GET /api/admin/verify` (admin) - validates `X-Admin-Key`, used by the admin console gate
 - `GET /api/agents`
 - `POST /api/agents`

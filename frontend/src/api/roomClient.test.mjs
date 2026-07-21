@@ -3,15 +3,25 @@ import { test } from 'node:test'
 
 import {
   buildCreateRoomPayload,
+  clearModelProfileAPIKey,
   clearStoredAdminKey,
+  createModelProfile,
+  deleteModelProfile,
+  disableModelProfile,
   getAgentRoleSets,
   exportRoomMinutesMarkdown,
   getAgentTemplates,
   getMessages,
   getRoom,
   getRoomActivity,
+  listModelProfiles,
   reopenRoom,
+  setDefaultModelProfile,
   setStoredAdminKey,
+  testDraftModelProfile,
+  testSavedModelProfile,
+  updateModelProfile,
+  uploadRoomKnowledge,
 } from './roomClient.js'
 
 test('room client helpers build expected payloads and headers', async () => {
@@ -145,6 +155,105 @@ test('room client helpers build expected payloads and headers', async () => {
         { id: 'product_review', name: '产品评审', description: 'Review product scope.', templateIDs: ['product_manager'] },
       ],
     })
+  } finally {
+    clearStoredAdminKey()
+    globalThis.fetch = originalFetch
+    globalThis.window = originalWindow
+  }
+})
+
+test('model profile client follows the admin API contract', async () => {
+  const originalWindow = globalThis.window
+  const originalFetch = globalThis.fetch
+  const storage = new Map()
+  const requests = []
+
+  globalThis.window = {
+    localStorage: {
+      getItem(key) { return storage.get(key) ?? null },
+      setItem(key, value) { storage.set(key, String(value)) },
+      removeItem(key) { storage.delete(key) },
+    },
+  }
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), options })
+    return new Response(JSON.stringify({ ok: true, profiles: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+
+  try {
+    setStoredAdminKey('model-admin')
+    await listModelProfiles()
+    await createModelProfile({ name: 'Go', apiKey: 'create-secret' })
+    await updateModelProfile('profile /1', { name: 'Updated' })
+    await setDefaultModelProfile('profile /1')
+    await disableModelProfile('profile /1')
+    await clearModelProfileAPIKey('profile /1')
+    await deleteModelProfile('profile /1')
+    await testSavedModelProfile('profile /1')
+    await testDraftModelProfile({ baseURL: 'https://model.test/v1', modelName: 'm', apiKey: 'draft-secret' })
+
+    assert.deepEqual(requests.map(({ url, options }) => [url, options.method || 'GET']), [
+      ['/api/model-profiles', 'GET'],
+      ['/api/model-profiles', 'POST'],
+      ['/api/model-profiles/profile%20%2F1', 'PUT'],
+      ['/api/model-profiles/profile%20%2F1/default', 'POST'],
+      ['/api/model-profiles/profile%20%2F1', 'PUT'],
+      ['/api/model-profiles/profile%20%2F1', 'PUT'],
+      ['/api/model-profiles/profile%20%2F1', 'DELETE'],
+      ['/api/model-profiles/profile%20%2F1/test', 'POST'],
+      ['/api/model-profiles/test', 'POST'],
+    ])
+    requests.forEach(({ options }) => assert.equal(options.headers['X-Admin-Key'], 'model-admin'))
+    assert.deepEqual(JSON.parse(requests[4].options.body), { enabled: false })
+    assert.deepEqual(JSON.parse(requests[5].options.body), { clearAPIKey: true })
+    assert.deepEqual(JSON.parse(requests[8].options.body), {
+      baseURL: 'https://model.test/v1',
+      modelName: 'm',
+      apiKey: 'draft-secret',
+    })
+  } finally {
+    clearStoredAdminKey()
+    globalThis.fetch = originalFetch
+    globalThis.window = originalWindow
+  }
+})
+
+test('room knowledge upload sends the admin key and lets the browser set multipart content type', async () => {
+  const originalWindow = globalThis.window
+  const originalFetch = globalThis.fetch
+  const storage = new Map()
+  let captured = null
+
+  globalThis.window = {
+    localStorage: {
+      getItem(key) { return storage.get(key) ?? null },
+      setItem(key, value) { storage.set(key, String(value)) },
+      removeItem(key) { storage.delete(key) },
+    },
+  }
+  globalThis.fetch = async (url, options = {}) => {
+    captured = { url: String(url), options }
+    return new Response(JSON.stringify({ document: { id: 'doc-1' } }), {
+      status: 201,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+
+  try {
+    setStoredAdminKey('room-admin')
+    const file = new File(['# Notes'], 'notes.md', { type: 'text/markdown' })
+    const response = await uploadRoomKnowledge('room /1', file)
+
+    assert.deepEqual(response, { document: { id: 'doc-1' } })
+    assert.equal(captured.url, '/api/rooms/room%20%2F1/knowledge')
+    assert.equal(captured.options.method, 'POST')
+    assert.equal(captured.options.headers['X-Admin-Key'], 'room-admin')
+    assert.equal(captured.options.headers['Content-Type'], undefined)
+    assert.equal(captured.options.body instanceof FormData, true)
+    assert.equal(captured.options.body.get('file').name, 'notes.md')
   } finally {
     clearStoredAdminKey()
     globalThis.fetch = originalFetch

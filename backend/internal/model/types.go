@@ -111,27 +111,29 @@ type Participant struct {
 }
 
 type Agent struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Mention      string `json:"mention"`
-	Role         string `json:"role"`
-	Runtime      string `json:"runtime"`
-	Source       string `json:"source"`
-	Description  string `json:"description"`
-	Enabled      bool   `json:"enabled"`
-	SystemPrompt string `json:"-"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Mention        string `json:"mention"`
+	Role           string `json:"role"`
+	Runtime        string `json:"runtime"`
+	Source         string `json:"source"`
+	Description    string `json:"description"`
+	Enabled        bool   `json:"enabled"`
+	SystemPrompt   string `json:"-"`
+	ModelProfileID string `json:"modelProfileID,omitempty"`
 }
 
 type AgentConfig struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Mention      string `json:"mention"`
-	Role         string `json:"role"`
-	Runtime      string `json:"runtime"`
-	Source       string `json:"source"`
-	Description  string `json:"description"`
-	Enabled      bool   `json:"enabled"`
-	SystemPrompt string `json:"systemPrompt"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Mention        string `json:"mention"`
+	Role           string `json:"role"`
+	Runtime        string `json:"runtime"`
+	Source         string `json:"source"`
+	Description    string `json:"description"`
+	Enabled        bool   `json:"enabled"`
+	SystemPrompt   string `json:"systemPrompt"`
+	ModelProfileID string `json:"modelProfileID,omitempty"`
 }
 
 type KnowledgeDocument struct {
@@ -173,6 +175,7 @@ type MessageArtifact struct {
 
 type Message struct {
 	ID               string                   `json:"id"`
+	AgentRunID       string                   `json:"-"`
 	RoomID           string                   `json:"roomID"`
 	SenderID         string                   `json:"senderID"`
 	SenderName       string                   `json:"senderName"`
@@ -201,15 +204,16 @@ func (a Agent) Public() Agent {
 
 func (a Agent) Config() AgentConfig {
 	return AgentConfig{
-		ID:           a.ID,
-		Name:         a.Name,
-		Mention:      a.Mention,
-		Role:         a.Role,
-		Runtime:      NormalizeAgentRuntime(a.Runtime),
-		Source:       NormalizeAgentSource(a.Source),
-		Description:  a.Description,
-		Enabled:      a.Enabled,
-		SystemPrompt: a.SystemPrompt,
+		ID:             a.ID,
+		Name:           a.Name,
+		Mention:        a.Mention,
+		Role:           a.Role,
+		Runtime:        NormalizeAgentRuntime(a.Runtime),
+		Source:         NormalizeAgentSource(a.Source),
+		Description:    a.Description,
+		Enabled:        a.Enabled,
+		SystemPrompt:   a.SystemPrompt,
+		ModelProfileID: a.ModelProfileID,
 	}
 }
 

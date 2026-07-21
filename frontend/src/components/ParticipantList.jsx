@@ -1,29 +1,31 @@
+import { Avatar, Badge, Paper, Stack, Text, Title } from '@mantine/core'
+
 function ParticipantList({ participants }) {
   return (
-    <section className="sidebar-section">
+    <Paper component="section" className="sidebar-section" withBorder radius="md" shadow="none">
       <div className="sidebar-header">
-        <h2>在线成员</h2>
-        <span className="sidebar-count">{participants.length}</span>
+        <Title order={2}>在线成员</Title>
+        <Badge className="sidebar-count" color="teal" variant="light">{participants.length}</Badge>
       </div>
 
       {participants.length === 0 ? (
-        <p className="sidebar-empty">暂无成员在线</p>
+        <Text className="sidebar-empty">暂无成员在线</Text>
       ) : (
-        <ul className="sidebar-list">
+        <Stack component="ul" className="sidebar-list" gap="xs">
           {participants.map((participant) => (
-            <li className="sidebar-list-item" key={participant.id}>
+            <Paper component="li" className="sidebar-list-item" key={participant.id} withBorder radius="md" shadow="none">
               <div className="participant-identity">
-                <div className="sidebar-avatar participant-avatar">{participant.name.charAt(0).toUpperCase()}</div>
+                <Avatar className="sidebar-avatar participant-avatar" radius="sm" color="teal">{participant.name.charAt(0).toUpperCase()}</Avatar>
                 <div className="sidebar-copy">
-                  <p className="sidebar-primary">{participant.name}</p>
-                  <p className="sidebar-secondary">{formatJoinedAt(participant.joinedAt)} 加入</p>
+                  <Text className="sidebar-primary">{participant.name}</Text>
+                  <Text className="sidebar-secondary">{formatJoinedAt(participant.joinedAt)} 加入</Text>
                 </div>
               </div>
-            </li>
+            </Paper>
           ))}
-        </ul>
+        </Stack>
       )}
-    </section>
+    </Paper>
   )
 }
 

@@ -89,6 +89,51 @@ func TestDeepAgentRuntimeReturnsCommandFailure(t *testing.T) {
 	}
 }
 
+func TestDeepAgentRuntimeInjectsResolvedModelAndRedactsSecretFromReportAndErrors(t *testing.T) {
+	secret := "deepagent-secret-never-leak"
+	resolver := staticModelResolver{config: model.ResolvedModelConfig{
+		ProfileID: "deep-profile", Source: "database", BaseURL: "https://deep.example/v1", ModelName: "deep-model", APIKey: secret,
+	}}
+	workDir := t.TempDir()
+	runtime := agent.NewDeepAgentRuntime(agent.DeepAgentRuntimeConfig{
+		Command: os.Args[0], Args: []string{"-test.run=TestDeepAgentRuntimeHelperProcess", "--"},
+		Env:     []string{"AGENTROOM_DEEPAGENT_HELPER=1", "AGENTROOM_DEEPAGENT_REQUIRE_MODEL_ENV=1", "AGENTROOM_DEEPAGENT_ECHO_MODEL_KEY_REPORT=1"},
+		WorkDir: workDir, Timeout: 5 * time.Second, Resolver: resolver,
+	})
+	response, err := runtime.Respond(context.Background(), agent.AgentRuntimeRequest{RunID: "run_secret", Agent: model.Agent{Runtime: model.AgentRuntimeDeepAgent}, Trigger: model.Message{Content: "research"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(response.Artifacts[0].Content, secret) || !strings.Contains(response.Artifacts[0].Content, "[REDACTED]") {
+		t.Fatalf("report was not redacted: %q", response.Artifacts[0].Content)
+	}
+	if response.Metadata["model_profile_id"] != "deep-profile" || response.Metadata["model_name"] != "deep-model" {
+		t.Fatalf("missing model audit metadata: %+v", response.Metadata)
+	}
+
+	failing := agent.NewDeepAgentRuntime(agent.DeepAgentRuntimeConfig{
+		Command: os.Args[0], Args: []string{"-test.run=TestDeepAgentRuntimeHelperProcess", "--", "--fail"},
+		Env:     []string{"AGENTROOM_DEEPAGENT_HELPER=1", "AGENTROOM_DEEPAGENT_ECHO_MODEL_KEY_ERROR=1"},
+		WorkDir: workDir, Timeout: 5 * time.Second, Resolver: resolver,
+	})
+	failureResponse, err := failing.Respond(context.Background(), agent.AgentRuntimeRequest{RunID: "run_fail_secret", Agent: model.Agent{Runtime: model.AgentRuntimeDeepAgent}, Trigger: model.Message{Content: "fail"}})
+	if err == nil || strings.Contains(err.Error(), secret) {
+		t.Fatalf("command error leaked secret or unexpectedly succeeded: %v", err)
+	}
+	if failureResponse.Metadata["model_profile_id"] != "deep-profile" {
+		t.Fatalf("failure lost audit metadata: %+v", failureResponse.Metadata)
+	}
+}
+
+type staticModelResolver struct {
+	config model.ResolvedModelConfig
+	err    error
+}
+
+func (r staticModelResolver) Resolve(context.Context, string, string) (model.ResolvedModelConfig, error) {
+	return r.config, r.err
+}
+
 func TestDeepAgentRuntimeSeparatesQuestionFromCLIOptions(t *testing.T) {
 	workDir := t.TempDir()
 	runtime := agent.NewDeepAgentRuntime(agent.DeepAgentRuntimeConfig{
@@ -185,8 +230,17 @@ func TestDeepAgentRuntimeHelperProcess(t *testing.T) {
 	}
 	for _, arg := range cliArgs {
 		if arg == "--fail" {
-			_, _ = os.Stderr.WriteString("simulated deepagent failure")
+			message := "simulated deepagent failure"
+			if os.Getenv("AGENTROOM_DEEPAGENT_ECHO_MODEL_KEY_ERROR") == "1" {
+				message += " " + os.Getenv("MODEL_API_KEY")
+			}
+			_, _ = os.Stderr.WriteString(message)
 			os.Exit(7)
+		}
+	}
+	if os.Getenv("AGENTROOM_DEEPAGENT_REQUIRE_MODEL_ENV") == "1" {
+		if os.Getenv("MODEL_PROTOCOL") != "openai" || os.Getenv("MODEL_BASE_URL") != "https://deep.example/v1" || os.Getenv("MODEL_NAME") != "deep-model" || os.Getenv("MODEL_API_KEY") == "" {
+			os.Exit(9)
 		}
 	}
 	runID := ""
@@ -220,6 +274,9 @@ func TestDeepAgentRuntimeHelperProcess(t *testing.T) {
 		os.Exit(4)
 	}
 	content := "# Report\n\nQuestion: " + question + "\n"
+	if os.Getenv("AGENTROOM_DEEPAGENT_ECHO_MODEL_KEY_REPORT") == "1" {
+		content += "Key: " + os.Getenv("MODEL_API_KEY") + "\n"
+	}
 	if err := os.WriteFile(filepath.Join(reportDir, "report.md"), []byte(content), 0o644); err != nil {
 		os.Exit(5)
 	}

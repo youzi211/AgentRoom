@@ -89,6 +89,30 @@ def test_load_settings_uses_dotenv_when_process_env_has_empty_values(tmp_path, m
     settings.validate_credentials()
 
 
+def test_non_empty_process_model_environment_overrides_dotenv_and_toml(tmp_path, monkeypatch):
+    config_path = tmp_path / "deepagent.toml"
+    config_path.write_text(
+        '[model]\nname = "toml-model"\n[model.custom]\nenabled = true\nbase_url = "https://toml.example/v1"\napi_key = "toml-secret"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / ".env").write_text(
+        "MODEL_PROTOCOL=openai\nMODEL_BASE_URL=https://dotenv.example/v1\nMODEL_NAME=dotenv-model\nMODEL_API_KEY=dotenv-secret\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MODEL_PROTOCOL", "openai")
+    monkeypatch.setenv("MODEL_BASE_URL", "https://database-injected.example/v1")
+    monkeypatch.setenv("MODEL_NAME", "database-injected-model")
+    monkeypatch.setenv("MODEL_API_KEY", "database-injected-secret")
+
+    settings = load_settings(config_path)
+
+    assert settings.custom.base_url == "https://database-injected.example/v1"
+    assert settings.custom.model_name == "database-injected-model"
+    assert settings.custom.api_key == "database-injected-secret"
+    assert "database-injected-secret" not in config_path.read_text(encoding="utf-8")
+    assert "database-injected-secret" not in (tmp_path / ".env").read_text(encoding="utf-8")
+
+
 def test_model_endpoint_can_be_configured_entirely_from_dotenv(tmp_path, monkeypatch):
     for name in ("MODEL_PROTOCOL", "MODEL_BASE_URL", "MODEL_NAME", "MODEL_API_KEY", "TAVILY_API_KEY"):
         monkeypatch.delenv(name, raising=False)

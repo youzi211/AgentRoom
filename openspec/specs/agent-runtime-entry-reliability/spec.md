@@ -29,21 +29,60 @@ The system SHALL allow the entry page to retrieve a limited list of recent activ
 - **WHEN** `ADMIN_API_KEY` is configured and a request calls the admin room listing route without the admin key
 - **THEN** the backend rejects that admin listing request
 
-### Requirement: DeepAgent question text is isolated from CLI options
-The system SHALL pass user-controlled DeepAgent question text to the Python CLI so it cannot be interpreted as CLI options.
+### Requirement: Entry page statistics use real backend data
+The system SHALL provide real entry page statistics through a backend summary endpoint, and the entry page SHALL NOT use hardcoded business values for active rooms, today's rooms, knowledge sources, or Agent roles.
 
-#### Scenario: Question starts with option-like text
-- **WHEN** a DeepAgent runtime receives a question beginning with `--`
-- **THEN** the subprocess argv separates runtime options from the question positional argument
+#### Scenario: Ordinary user loads entry summary
+- **WHEN** an ordinary user opens the entry page
+- **THEN** the frontend requests a non-admin entry summary endpoint
+- **THEN** the statistics card renders values returned by that endpoint
 
-### Requirement: DeepAgent subprocess execution is concurrency bounded
-The system SHALL bound concurrent DeepAgent subprocess executions inside a backend process.
+#### Scenario: Entry summary response fields are complete
+- **WHEN** the backend returns the entry summary
+- **THEN** the response contains `activeRooms`, `todayRooms`, `knowledgeDocuments`, and `enabledAgents`
 
-#### Scenario: Multiple DeepAgent responses start concurrently
-- **WHEN** more DeepAgent runtime calls are requested than the configured concurrency limit allows
-- **THEN** excess calls wait for capacity instead of starting additional subprocesses immediately
+#### Scenario: Entry summary load fails
+- **WHEN** the entry summary endpoint request fails
+- **THEN** the frontend does not display hardcoded business statistics
+- **THEN** the frontend displays a placeholder or unavailable state for the statistics
 
-#### Scenario: Waiting runtime call observes cancellation
-- **WHEN** a DeepAgent runtime call is waiting for concurrency capacity and its context is canceled or times out
-- **THEN** the call returns without starting a subprocess
+### Requirement: Entry statistics are calculated consistently
+The system SHALL calculate entry page statistic totals in the backend, avoiding frontend derivation from limited lists or multiple unrelated endpoints.
+
+#### Scenario: Active room total
+- **WHEN** the backend calculates `activeRooms`
+- **THEN** `activeRooms` equals the total number of rooms with active status
+
+#### Scenario: Today's room total
+- **WHEN** the backend calculates `todayRooms`
+- **THEN** `todayRooms` equals the total number of rooms created on the current server-local date
+
+#### Scenario: Knowledge document total
+- **WHEN** the backend calculates `knowledgeDocuments`
+- **THEN** `knowledgeDocuments` equals the total number of knowledge documents
+
+#### Scenario: Enabled Agent total
+- **WHEN** the backend calculates `enabledAgents`
+- **THEN** `enabledAgents` equals the total number of Agents whose enabled status is true
+
+### Requirement: 远程 DeepAgent 请求内容与控制字段隔离
+系统 SHALL 把用户控制的 DeepAgent 问题作为 Protobuf 内容字段传递，并 MUST 由 Python Executor 以数据而非命令行选项解释该字段。
+
+#### Scenario: 问题以选项样式文本开头
+- **WHEN** DeepAgent 问题以 `--` 或其他类似控制参数的文本开头
+- **THEN** 该文本保持为问题内容
+- **THEN** 它不能改变 Python 服务启动参数、Executor 选择或运行限制
+
+### Requirement: 远程 DeepAgent 执行并发受服务容量约束
+系统 SHALL 在 Python 常驻 Runtime 中限制 DeepAgent 并发，并 MUST 让等待容量的调用观察 gRPC deadline 和取消。
+
+#### Scenario: 多个 DeepAgent 请求超过容量
+- **WHEN** 活动 DeepAgent 数达到配置上限
+- **THEN** 超额请求在有界队列等待或收到资源耗尽错误
+- **THEN** Python 不启动超过配置上限的 DeepAgent 执行
+
+#### Scenario: 容量等待期间调用取消
+- **WHEN** 等待 DeepAgent 容量的 gRPC 调用被取消或超时
+- **THEN** 该请求退出等待
+- **THEN** 该请求不再启动 DeepAgent Executor
 

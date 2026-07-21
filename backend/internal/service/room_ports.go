@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/room"
@@ -50,6 +51,10 @@ func (q *RoomQueries) ListRooms(ctx context.Context, query ListRoomsInput) ([]mo
 	return q.root.ListRooms(ctx, query)
 }
 
+func (q *RoomQueries) EntrySummary(ctx context.Context) (EntrySummary, error) {
+	return q.root.EntrySummary(ctx, EntrySummaryInput{Now: time.Now()})
+}
+
 func (q *RoomQueries) ListAgentKnowledge(ctx context.Context, agentID string) ([]model.KnowledgeDocument, error) {
 	return q.root.ListAgentKnowledge(ctx, agentID)
 }
@@ -84,6 +89,10 @@ func (c *RoomCommands) UpdateAgent(ctx context.Context, agentID string, input Up
 
 func (c *RoomCommands) CreateAgent(ctx context.Context, name, role, description, systemPrompt string, enabled bool, runtime string) (model.Agent, error) {
 	return c.root.CreateAgent(ctx, name, role, description, systemPrompt, enabled, runtime)
+}
+
+func (c *RoomCommands) CreateAgentWithModel(ctx context.Context, name, role, description, systemPrompt string, enabled bool, runtime string, modelProfileID string) (model.Agent, error) {
+	return c.root.agents.CreateAgentWithModel(ctx, name, role, description, systemPrompt, enabled, runtime, modelProfileID)
 }
 
 func (c *RoomCommands) DeleteAgent(ctx context.Context, agentID string) error {

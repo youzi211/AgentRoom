@@ -20,12 +20,23 @@ type Store interface {
 	UpdateAgent(ctx context.Context, agent model.Agent) (model.Agent, error)
 	DeleteAgent(ctx context.Context, agentID string) error
 
+	// Model profiles
+	ListModelProfiles(ctx context.Context) ([]model.ModelProfile, error)
+	GetModelProfile(ctx context.Context, profileID string) (model.ModelProfile, error)
+	GetDefaultModelProfile(ctx context.Context, runtimeScope string) (model.ModelProfile, error)
+	CreateModelProfile(ctx context.Context, profile model.ModelProfile) (model.ModelProfile, error)
+	UpdateModelProfile(ctx context.Context, profile model.ModelProfile) (model.ModelProfile, error)
+	SetDefaultModelProfile(ctx context.Context, profileID string) error
+	CountModelProfileReferences(ctx context.Context, profileID string) (int64, error)
+	DeleteModelProfile(ctx context.Context, profileID string) error
+
 	// Room lifecycle
 	CreateRoom(ctx context.Context, input CreateRoomInput) (model.RoomMeta, []model.Agent, error)
 	GetRoom(ctx context.Context, roomID string) (model.RoomMeta, error)
 	LoadRoomSnapshot(ctx context.Context, roomID string, messageLimit int) (RoomSnapshot, error)
 	ListRoomAgents(ctx context.Context, roomID string) ([]model.Agent, error)
 	ListRooms(ctx context.Context, query ListRoomsQuery) ([]model.RoomSummary, error)
+	EntrySummary(ctx context.Context, query EntrySummaryQuery) (EntrySummary, error)
 	UpdateRoomLifecycle(ctx context.Context, input UpdateRoomLifecycleInput) error
 
 	// Meeting minutes (versioned, persisted)
@@ -47,7 +58,10 @@ type Store interface {
 
 	// Agent runs
 	CreateAgentRun(ctx context.Context, run AgentRun) error
+	CommitAgentRunSuccess(ctx context.Context, input CommitAgentRunSuccessInput) (model.Message, error)
 	FinishAgentRun(ctx context.Context, runID string, status string, errText string, completedAt time.Time) error
+	ReconcileActiveAgentRuns(ctx context.Context, completedAt time.Time) (int64, error)
+	UpdateAgentRunModel(ctx context.Context, runID, profileID, source, modelName string) error
 	ListAgentRuns(ctx context.Context, query ListRunsQuery) ([]AgentRun, error)
 	CreateDialogueRun(ctx context.Context, run DialogueRun) error
 	FinishDialogueRun(ctx context.Context, runID string, status string, turnCount int, completedAt time.Time) error
@@ -84,6 +98,18 @@ type ListRoomsQuery struct {
 	Status string // "active", "closed", "archived", or "" / "all" for no filter
 	Limit  int
 	Offset int
+}
+
+type EntrySummaryQuery struct {
+	TodayStart time.Time
+	Tomorrow   time.Time
+}
+
+type EntrySummary struct {
+	ActiveRooms        int
+	TodayRooms         int
+	KnowledgeDocuments int
+	EnabledAgents      int
 }
 
 // ListMessagesQuery holds query parameters for listing messages.
@@ -131,6 +157,18 @@ type AgentRun struct {
 	Error            string
 	StartedAt        time.Time
 	CompletedAt      *time.Time
+	ModelProfileID   string
+	ModelSource      string
+	ModelName        string
+}
+
+type CommitAgentRunSuccessInput struct {
+	RunID          string
+	Message        model.Message
+	CompletedAt    time.Time
+	ModelProfileID string
+	ModelSource    string
+	ModelName      string
 }
 
 type DialogueRun struct {

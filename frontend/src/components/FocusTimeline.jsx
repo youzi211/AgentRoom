@@ -1,23 +1,25 @@
+import { Badge, Paper, Text, Title } from '@mantine/core'
+
 function FocusTimeline({ focusPoints = [] }) {
   if (focusPoints.length === 0) {
     return (
-      <section className="sidebar-section focus-panel">
+      <Paper component="section" className="sidebar-section focus-panel" withBorder radius="md" shadow="none">
         <div className="sidebar-header">
-          <h2>会议焦点</h2>
-          <span className="sidebar-count">0</span>
+          <Title order={2}>会议焦点</Title>
+          <Badge className="sidebar-count" color="teal" variant="light">0</Badge>
         </div>
-        <p className="sidebar-empty">发送消息后，AI 会自动提取会议焦点。</p>
-      </section>
+        <Text className="sidebar-empty">发送消息后，AI 会自动提取会议焦点。</Text>
+      </Paper>
     )
   }
 
   const groupedPoints = groupByTime(focusPoints)
 
   return (
-    <section className="sidebar-section focus-panel">
+    <Paper component="section" className="sidebar-section focus-panel" withBorder radius="md" shadow="none">
       <div className="sidebar-header">
-        <h2>会议焦点</h2>
-        <span className="sidebar-count">{focusPoints.length}</span>
+        <Title order={2}>会议焦点</Title>
+        <Badge className="sidebar-count" color="teal" variant="light">{focusPoints.length}</Badge>
       </div>
       <div className="focus-timeline">
         {groupedPoints.map((group, groupIndex) => (
@@ -28,8 +30,8 @@ function FocusTimeline({ focusPoints = [] }) {
                 <li key={point.id || pointIndex} className={`focus-item focus-item--${getCategoryClass(point.category)}`}>
                   <span className="focus-dot" />
                   <div className="focus-content">
-                    <span className="focus-text">{point.content}</span>
-                    {point.category && <span className="focus-category">{point.category}</span>}
+                    <Text component="span" className="focus-text">{point.content}</Text>
+                    {point.category && <Badge className="focus-category" color="gray" variant="light">{point.category}</Badge>}
                   </div>
                 </li>
               ))}
@@ -37,7 +39,7 @@ function FocusTimeline({ focusPoints = [] }) {
           </div>
         ))}
       </div>
-    </section>
+    </Paper>
   )
 }
 

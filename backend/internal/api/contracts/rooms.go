@@ -88,6 +88,13 @@ type ListRecentRoomsResponse struct {
 	Rooms []PublicRoomSummary `json:"rooms"`
 }
 
+type EntrySummaryResponse struct {
+	ActiveRooms        int `json:"activeRooms"`
+	TodayRooms         int `json:"todayRooms"`
+	KnowledgeDocuments int `json:"knowledgeDocuments"`
+	EnabledAgents      int `json:"enabledAgents"`
+}
+
 type MinutesHistoryResponse struct {
 	Minutes []model.MeetingMinutes `json:"minutes"`
 }

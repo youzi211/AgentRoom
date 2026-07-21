@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Avatar, Button, Paper, Text, Textarea } from '@mantine/core'
 import {
   buildMentionTargets,
   filterMentionTargets,
@@ -127,7 +128,7 @@ function MessageComposer({ agents = [], participants = [], currentParticipantNam
   return (
     <form className="composer" onSubmit={handleSubmit}>
       <div className="composer-input-wrapper">
-        <textarea
+        <Textarea
           ref={textareaRef}
           id="message-input"
           className="composer-input"
@@ -137,9 +138,10 @@ function MessageComposer({ agents = [], participants = [], currentParticipantNam
           placeholder="输入消息，使用 @ 提及 Agent 参与讨论。"
           rows={3}
           disabled={disabled}
+          autosize={false}
         />
         {showAutocomplete && filteredMentionTargets.length > 0 && (
-          <div className="autocomplete-popup" ref={autocompleteRef}>
+          <Paper className="autocomplete-popup" ref={autocompleteRef} withBorder radius="md" shadow="md">
             <ul className="autocomplete-list">
               {filteredMentionTargets.map((target, index) => (
                 <li
@@ -148,25 +150,25 @@ function MessageComposer({ agents = [], participants = [], currentParticipantNam
                   onClick={() => insertMentionFromAutocomplete(target.mention)}
                   onMouseEnter={() => setSelectedIndex(index)}
                 >
-                  <span className="autocomplete-avatar">{target.name.charAt(0).toUpperCase()}</span>
+                  <Avatar className="autocomplete-avatar" radius="sm" color="teal">{target.name.charAt(0).toUpperCase()}</Avatar>
                   <div className="autocomplete-info">
-                    <span className="autocomplete-name">{target.name}</span>
-                    <span className="autocomplete-role">{target.role}</span>
+                    <Text className="autocomplete-name">{target.name}</Text>
+                    <Text className="autocomplete-role">{target.role}</Text>
                   </div>
-                  <span className="autocomplete-mention">{target.mention}</span>
+                  <Text component="span" className="autocomplete-mention">{target.mention}</Text>
                 </li>
               ))}
             </ul>
-          </div>
+          </Paper>
         )}
       </div>
       <div className="composer-actions">
-        <span className={`composer-status${disabled ? ' composer-status--disabled' : ''}`}>
+        <Text component="span" className={`composer-status${disabled ? ' composer-status--disabled' : ''}`}>
           {disabled ? '连接不可用，正在等待恢复' : 'Enter 发送，Shift + Enter 换行'}
-        </span>
-        <button className="button button--primary" type="submit" disabled={disabled || !content.trim()}>
+        </Text>
+        <Button color="teal" type="submit" disabled={disabled || !content.trim()}>
           发送
-        </button>
+        </Button>
       </div>
     </form>
   )

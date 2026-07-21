@@ -30,6 +30,25 @@ random_token() {
   od -An -N24 -tx1 /dev/urandom | tr -d ' \n'
 }
 
+random_model_config_encryption_key() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -base64 32 | tr -d '\n'
+    return
+  fi
+
+  if command -v base64 >/dev/null 2>&1; then
+    dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '\r\n'
+    return
+  fi
+
+  printf 'openssl or base64 is required to generate MODEL_CONFIG_ENCRYPTION_KEY.\n' >&2
+  exit 1
+}
+
+valid_model_config_encryption_key() {
+  [[ "$1" =~ ^[A-Za-z0-9+/]{43}=$ ]]
+}
+
 get_env_value() {
   local key="$1"
   local match
@@ -286,6 +305,15 @@ if needs_randomization "${mysql_root_password}" 'change_me_root_password'; then
 fi
 set_env_value 'MYSQL_ROOT_PASSWORD' "${mysql_root_password}"
 
+model_config_encryption_key="$(get_env_value 'MODEL_CONFIG_ENCRYPTION_KEY')"
+if needs_randomization "${model_config_encryption_key}" 'generate_me_base64_32_bytes'; then
+  model_config_encryption_key="$(random_model_config_encryption_key)"
+elif ! valid_model_config_encryption_key "${model_config_encryption_key}"; then
+  printf 'MODEL_CONFIG_ENCRYPTION_KEY must be base64 encoding of exactly 32 bytes. The existing value was not replaced.\n' >&2
+  exit 1
+fi
+set_env_value 'MODEL_CONFIG_ENCRYPTION_KEY' "${model_config_encryption_key}"
+
 llm_api_key="$(get_env_value 'LLM_API_KEY')"
 if [[ "${llm_api_key}" == 'your-api-key-here' ]]; then
   set_env_value 'LLM_API_KEY' ''
@@ -330,7 +358,7 @@ fi
 backend_port="$(resolve_backend_port)"
 frontend_port="$(resolve_frontend_port)"
 frontend_url="http://127.0.0.1:${frontend_port}"
-backend_health_url="http://127.0.0.1:${backend_port}/api/health"
+backend_health_url="http://127.0.0.1:${backend_port}/api/ready"
 
 direct_frontend_url=''
 direct_backend_health_url=''
@@ -363,8 +391,9 @@ docker compose ps
 
 final_llm_api_key="$(get_env_value 'LLM_API_KEY')"
 if [[ -z "${final_llm_api_key}" ]]; then
-  note 'LLM_API_KEY is blank. Human chat will work, but agent replies stay disabled until you set a real key and rerun this script.'
+  note 'LLM_API_KEY is blank. Configure a Go model Profile in the admin UI; this variable is only a migration fallback.'
 fi
+note 'Back up MODEL_CONFIG_ENCRYPTION_KEY from .env in your secret manager. Losing or changing it makes saved model API keys undecryptable.'
 start_wsl_keepalive
 
 printf '\nAgentRoom is ready.\n'

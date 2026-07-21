@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Badge, Button, Group, Paper, Stack, Text, Title } from '@mantine/core'
 import { buildLocalMeetingMinutesMarkdown, downloadMarkdownFile, minutesFilename, normalizeMinutesPayload } from './meetingMinutes'
 
 function MeetingMinutesPanel({
@@ -65,33 +66,36 @@ function MeetingMinutesPanel({
   }
 
   return (
-    <section className="sidebar-section minutes-panel">
+    <Paper component="section" className="sidebar-section minutes-panel" withBorder radius="md" shadow="none">
       <div className="sidebar-header">
-        <h2>会议产物</h2>
-        <span className="sidebar-count">MD</span>
+        <Title order={2}>会议产物</Title>
+        <Badge className="sidebar-count" color="teal" variant="light">MD</Badge>
       </div>
-      <p className="sidebar-note">生成会议纪要，并导出 Markdown 文件用于归档或继续编辑。</p>
-      <div className="minutes-actions">
-        <button className="button button--secondary button--compact" type="button" onClick={handleGenerateMinutes} disabled={status !== 'idle'}>
+      <Stack gap="sm">
+        <Text className="sidebar-note">生成会议纪要，并导出 Markdown 文件用于归档或继续编辑。</Text>
+        <Group className="minutes-actions" gap="xs">
+        <Button variant="light" color="teal" size="xs" type="button" onClick={handleGenerateMinutes} disabled={status !== 'idle'}>
           {status === 'generating' ? '生成中...' : '生成纪要'}
-        </button>
-        <button
-          className="button button--primary button--compact"
+        </Button>
+        <Button
+          color="teal"
+          size="xs"
           type="button"
           onClick={handleExportMarkdown}
           disabled={status !== 'idle' || !canExport}
         >
           {status === 'exporting' ? '导出中...' : '导出 Markdown'}
-        </button>
-      </div>
-      {notice ? <p className="minutes-notice">{notice}</p> : null}
+        </Button>
+        </Group>
+      {notice ? <Text className="minutes-notice">{notice}</Text> : null}
       {previewMarkdown ? (
         <details className="minutes-preview">
           <summary>预览草稿</summary>
           <pre>{previewMarkdown}</pre>
         </details>
       ) : null}
-    </section>
+      </Stack>
+    </Paper>
   )
 }
 

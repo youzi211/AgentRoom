@@ -67,7 +67,7 @@ func (r *Runner) handleGuidedDialogue(ctx context.Context, currentRoom RuntimeRo
 		}
 
 		eligiblePeers := eligibleDialoguePeers(fullAgents, turnsByAgent, responder.ID, lastSpeakerID, policy)
-		response, knowledgeChunks, err := r.generateGuidedResponse(ctx, currentRoom, responder, parentMessage, trigger, eligiblePeers, policy, turnCount+1)
+		response, knowledgeChunks, agentRun, err := r.generateGuidedResponse(ctx, currentRoom, responder, parentMessage, trigger, eligiblePeers, policy, turnCount+1)
 		if err != nil {
 			status = dialogueFailureStatus(err)
 			content := fmt.Sprintf("Agent %s failed to respond: %s", responder.Name, shortReason(err))
@@ -77,10 +77,12 @@ func (r *Runner) handleGuidedDialogue(ctx context.Context, currentRoom RuntimeRo
 
 		normalized := normalizeGeneratedContent(response.Content)
 		if normalized == "" {
+			r.finishGuidedAgentRunFailure(ctx, currentRoom, agentRun, responder, errors.New("Agent Runtime returned empty output"))
 			status = model.DialogueRunStatusStoppedEmpty
 			break
 		}
 		if isDuplicateDialogueTurn(normalized, recentNormalized) {
+			r.finishGuidedAgentRunFailure(ctx, currentRoom, agentRun, responder, errors.New("Agent Runtime returned a duplicate dialogue turn"))
 			status = model.DialogueRunStatusStoppedDuplicate
 			break
 		}
@@ -89,14 +91,24 @@ func (r *Runner) handleGuidedDialogue(ctx context.Context, currentRoom RuntimeRo
 		agentMessage.DialogueRunID = runID
 		agentMessage.TurnIndex = turnCount + 1
 		agentMessage.ParentMessageID = parentMessage.ID
-		agentMessage.KnowledgeSources = knowledgeSourcesFromChunks(knowledgeChunks)
+		agentMessage.KnowledgeSources = knowledgeSourcesForResponse(response, knowledgeChunks)
 		agentMessage.Artifacts = messageArtifactsFromRuntime(response.Artifacts)
-		r.persistAndBroadcast(ctx, currentRoom, agentMessage)
+		now := time.Now().UTC()
+		savedAgentMessage, commitErr := r.store.CommitAgentRunSuccess(ctx, commitAgentRunSuccessInput(agentRun.ID, agentMessage, response.Metadata, now))
+		if commitErr != nil {
+			r.finishGuidedAgentRunFailure(ctx, currentRoom, agentRun, responder, commitErr)
+			r.persistAndBroadcast(ctx, currentRoom, currentRoom.NewSystemMessage(fmt.Sprintf("Agent %s response could not be saved", responder.Name)))
+			status = model.DialogueRunStatusFailed
+			break
+		}
+		currentRoom.AppendMessage(savedAgentMessage)
+		currentRoom.Broadcaster().BroadcastMessage(savedAgentMessage)
+		r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", "succeeded", "", &now)
 
 		turnCount++
 		turnsByAgent[responder.ID]++
 		lastSpeakerID = responder.ID
-		parentMessage = agentMessage
+		parentMessage = savedAgentMessage
 		recentNormalized = append(recentNormalized, normalized)
 
 		if !policy.AllowAgentToAgentMentions {
@@ -120,7 +132,7 @@ func (r *Runner) handleGuidedDialogue(ctx context.Context, currentRoom RuntimeRo
 	r.broadcastDialogueRunActivity(currentRoom, dialogueRun, "finished", status, turnCount, &completedAt)
 }
 
-func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message, rootHumanTrigger model.Message, eligiblePeers []model.Agent, policy model.DialoguePolicy, turnIndex int) (AgentRuntimeResponse, []model.KnowledgeChunk, error) {
+func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom RuntimeRoom, responder model.Agent, trigger model.Message, rootHumanTrigger model.Message, eligiblePeers []model.Agent, policy model.DialoguePolicy, turnIndex int) (AgentRuntimeResponse, []model.KnowledgeChunk, store.AgentRun, error) {
 	runID := model.NewID("run")
 	roomInfo := currentRoom.Info()
 	agentRun := store.AgentRun{
@@ -130,9 +142,12 @@ func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom Runtime
 		TriggerMessageID: trigger.ID,
 		Status:           "running",
 		StartedAt:        time.Now().UTC(),
+		ModelProfileID:   responder.ModelProfileID,
+		ModelSource:      modelSourceForAgent(responder),
 	}
 	if err := r.store.CreateAgentRun(ctx, agentRun); err != nil {
 		r.logger.Error("create agent run", "room_id", roomInfo.ID, "agent_id", responder.ID, "error", err)
+		return AgentRuntimeResponse{}, nil, agentRun, fmt.Errorf("create agent run: %w", err)
 	}
 	r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "started", "", "", nil)
 
@@ -147,38 +162,44 @@ func (r *Runner) generateGuidedResponse(ctx context.Context, currentRoom Runtime
 			r.logger.Error("finish agent run", "run_id", runID, "status", "failed", "error", finishErr)
 		}
 		r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", "failed", errText, &now)
-		return AgentRuntimeResponse{}, knowledgeChunks, err
+		return AgentRuntimeResponse{}, knowledgeChunks, agentRun, err
 	}
 
 	response, err := runtime.Respond(ctx, AgentRuntimeRequest{
 		RunID:           runID,
+		TraceID:         runID,
 		Room:            currentRoom,
 		Agent:           responder,
 		Trigger:         trigger,
 		RecentMessages:  recentMessages,
 		KnowledgeChunks: knowledgeChunks,
 		PromptContext:   promptContext,
-	})
+	}, r.runtimeEventObserver(currentRoom, responder, runID))
 	if err != nil {
+		terminalCtx, cancelTerminal := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancelTerminal()
+		r.recordModelAudit(terminalCtx, runID, response.Metadata)
 		now := time.Now().UTC()
-		status := "failed"
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			status = "timeout"
-		}
+		status := agentRunFailureStatus(ctx, err)
 		errText := shortReason(err)
-		if finishErr := r.store.FinishAgentRun(ctx, runID, status, errText, now); finishErr != nil {
+		if finishErr := r.store.FinishAgentRun(terminalCtx, runID, status, errText, now); finishErr != nil {
 			r.logger.Error("finish agent run", "run_id", runID, "status", status, "error", finishErr)
 		}
 		r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", status, errText, &now)
-		return AgentRuntimeResponse{}, knowledgeChunks, err
+		return AgentRuntimeResponse{}, knowledgeChunks, agentRun, err
 	}
+	return response, knowledgeChunks, agentRun, nil
+}
 
+func (r *Runner) finishGuidedAgentRunFailure(ctx context.Context, currentRoom RuntimeRoom, run store.AgentRun, responder model.Agent, err error) {
+	terminalCtx, cancelTerminal := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancelTerminal()
 	now := time.Now().UTC()
-	if finishErr := r.store.FinishAgentRun(ctx, runID, "succeeded", "", now); finishErr != nil {
-		r.logger.Error("finish agent run", "run_id", runID, "status", "succeeded", "error", finishErr)
+	errText := shortReason(err)
+	if finishErr := r.store.FinishAgentRun(terminalCtx, run.ID, "failed", errText, now); finishErr != nil && !errors.Is(finishErr, store.ErrAgentRunAlreadyFinished) {
+		r.logger.Error("finish guided agent run", "run_id", run.ID, "error", finishErr)
 	}
-	r.broadcastAgentRunActivity(currentRoom, agentRun, responder, "finished", "succeeded", "", &now)
-	return response, knowledgeChunks, nil
+	r.broadcastAgentRunActivity(currentRoom, run, responder, "finished", "failed", errText, &now)
 }
 
 func resolveGuidedCandidates(candidates []model.Agent, fullAgentByID map[string]model.Agent) []model.Agent {

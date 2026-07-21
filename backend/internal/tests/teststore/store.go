@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"agentroom/backend/internal/model"
@@ -12,6 +13,7 @@ import (
 )
 
 type Store struct {
+	mu                  sync.Mutex
 	Agents              []model.Agent
 	Rooms               map[string]model.RoomMeta
 	RoomAgents          map[string][]model.Agent
@@ -22,15 +24,18 @@ type Store struct {
 	Documents           []model.KnowledgeDocument
 	Chunks              []model.KnowledgeChunk
 	Minutes             []model.MeetingMinutes
+	ModelProfiles       []model.ModelProfile
 	UpdateAgentErr      error
 	DeleteAgentErr      error
 	ListRoomAgentsErr   error
 	ListMessagesErr     error
 	ListParticipantsErr error
 	DeleteDocumentErr   error
+	CommitAgentRunErr   error
+	PingErr             error
 }
 
-func (s *Store) Ping(context.Context) error { return nil }
+func (s *Store) Ping(context.Context) error { return s.PingErr }
 func (s *Store) Close() error               { return nil }
 
 func (s *Store) SeedAgents(_ context.Context, agents []model.Agent) error {
@@ -101,6 +106,100 @@ func (s *Store) DeleteAgent(_ context.Context, agentID string) error {
 	}
 	s.Agents = next
 	return nil
+}
+
+func (s *Store) ListModelProfiles(context.Context) ([]model.ModelProfile, error) {
+	return append([]model.ModelProfile(nil), s.ModelProfiles...), nil
+}
+
+func (s *Store) GetModelProfile(_ context.Context, id string) (model.ModelProfile, error) {
+	for _, profile := range s.ModelProfiles {
+		if profile.ID == id {
+			return profile, nil
+		}
+	}
+	return model.ModelProfile{}, store.ErrModelProfileNotFound
+}
+
+func (s *Store) GetDefaultModelProfile(_ context.Context, scope string) (model.ModelProfile, error) {
+	for _, profile := range s.ModelProfiles {
+		if profile.RuntimeScope == scope && profile.IsDefault {
+			return profile, nil
+		}
+	}
+	return model.ModelProfile{}, store.ErrModelProfileNotFound
+}
+
+func (s *Store) CreateModelProfile(_ context.Context, profile model.ModelProfile) (model.ModelProfile, error) {
+	if profile.IsDefault {
+		for i := range s.ModelProfiles {
+			if s.ModelProfiles[i].RuntimeScope == profile.RuntimeScope {
+				s.ModelProfiles[i].IsDefault = false
+			}
+		}
+	}
+	s.ModelProfiles = append(s.ModelProfiles, profile)
+	return profile, nil
+}
+
+func (s *Store) UpdateModelProfile(_ context.Context, profile model.ModelProfile) (model.ModelProfile, error) {
+	for i := range s.ModelProfiles {
+		if s.ModelProfiles[i].ID == profile.ID {
+			s.ModelProfiles[i] = profile
+			return profile, nil
+		}
+	}
+	return model.ModelProfile{}, store.ErrModelProfileNotFound
+}
+
+func (s *Store) SetDefaultModelProfile(_ context.Context, id string) error {
+	profile, err := s.GetModelProfile(context.Background(), id)
+	if err != nil {
+		return err
+	}
+	for i := range s.ModelProfiles {
+		if s.ModelProfiles[i].RuntimeScope == profile.RuntimeScope {
+			s.ModelProfiles[i].IsDefault = s.ModelProfiles[i].ID == id
+		}
+	}
+	return nil
+}
+
+func (s *Store) CountModelProfileReferences(_ context.Context, id string) (int64, error) {
+	var count int64
+	for _, agent := range s.Agents {
+		if agent.ModelProfileID == id {
+			count++
+		}
+	}
+	for _, agents := range s.RoomAgents {
+		for _, agent := range agents {
+			if agent.ModelProfileID == id {
+				count++
+			}
+		}
+	}
+	return count, nil
+}
+
+func (s *Store) DeleteModelProfile(_ context.Context, id string) error {
+	for i, profile := range s.ModelProfiles {
+		if profile.ID == id {
+			if profile.IsDefault {
+				return store.ErrModelProfileReferenced
+			}
+			refs, err := s.CountModelProfileReferences(context.Background(), id)
+			if err != nil {
+				return err
+			}
+			if refs > 0 {
+				return store.ErrModelProfileReferenced
+			}
+			s.ModelProfiles = append(s.ModelProfiles[:i], s.ModelProfiles[i+1:]...)
+			return nil
+		}
+	}
+	return store.ErrModelProfileNotFound
 }
 
 func (s *Store) CreateRoom(_ context.Context, input store.CreateRoomInput) (model.RoomMeta, []model.Agent, error) {
@@ -209,6 +308,26 @@ func (s *Store) ListRooms(_ context.Context, query store.ListRoomsQuery) ([]mode
 		return result[i].CreatedAt.After(result[j].CreatedAt)
 	})
 	return result, nil
+}
+
+func (s *Store) EntrySummary(_ context.Context, query store.EntrySummaryQuery) (store.EntrySummary, error) {
+	s.ensureMaps()
+	var summary store.EntrySummary
+	for _, meta := range s.Rooms {
+		if normalizeRoomStatus(meta.Status) == model.RoomStatusActive {
+			summary.ActiveRooms++
+		}
+		if !meta.CreatedAt.Before(query.TodayStart) && meta.CreatedAt.Before(query.Tomorrow) {
+			summary.TodayRooms++
+		}
+	}
+	summary.KnowledgeDocuments = len(s.Documents)
+	for _, agent := range s.Agents {
+		if agent.Enabled {
+			summary.EnabledAgents++
+		}
+	}
+	return summary, nil
 }
 
 func (s *Store) UpdateRoomLifecycle(_ context.Context, input store.UpdateRoomLifecycleInput) error {
@@ -357,17 +476,88 @@ func (s *Store) ListMessagesPage(_ context.Context, query store.ListMessagesQuer
 }
 
 func (s *Store) CreateAgentRun(_ context.Context, run store.AgentRun) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.AgentRuns = append(s.AgentRuns, run)
 	return nil
 }
 
+func (s *Store) CommitAgentRunSuccess(_ context.Context, input store.CommitAgentRunSuccessInput) (model.Message, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.CommitAgentRunErr != nil {
+		return model.Message{}, s.CommitAgentRunErr
+	}
+	for i := range s.AgentRuns {
+		if s.AgentRuns[i].ID != input.RunID {
+			continue
+		}
+		if s.AgentRuns[i].Status == "succeeded" {
+			for _, message := range s.RoomMessages[input.Message.RoomID] {
+				if message.AgentRunID == input.RunID {
+					return message, nil
+				}
+			}
+			return model.Message{}, fmt.Errorf("successful run %s has no message", input.RunID)
+		}
+		if s.AgentRuns[i].Status != "running" {
+			return model.Message{}, fmt.Errorf("%w: %s", store.ErrAgentRunAlreadyFinished, input.RunID)
+		}
+		message := input.Message
+		message.AgentRunID = input.RunID
+		s.ensureMaps()
+		s.RoomMessages[message.RoomID] = append(s.RoomMessages[message.RoomID], message)
+		sortMessages(s.RoomMessages[message.RoomID])
+		s.AgentRuns[i].Status = "succeeded"
+		s.AgentRuns[i].Error = ""
+		s.AgentRuns[i].CompletedAt = &input.CompletedAt
+		s.AgentRuns[i].ModelProfileID = input.ModelProfileID
+		s.AgentRuns[i].ModelSource = input.ModelSource
+		s.AgentRuns[i].ModelName = input.ModelName
+		return message, nil
+	}
+	return model.Message{}, fmt.Errorf("%w: %s", store.ErrAgentRunNotFound, input.RunID)
+}
+
 func (s *Store) FinishAgentRun(_ context.Context, runID string, status string, errText string, completedAt time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for i := range s.AgentRuns {
 		if s.AgentRuns[i].ID == runID {
+			if s.AgentRuns[i].Status != "running" {
+				return fmt.Errorf("%w: %s", store.ErrAgentRunAlreadyFinished, runID)
+			}
 			s.AgentRuns[i].Status = status
 			s.AgentRuns[i].Error = errText
 			s.AgentRuns[i].CompletedAt = &completedAt
 			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s", store.ErrAgentRunNotFound, runID)
+}
+
+func (s *Store) ReconcileActiveAgentRuns(_ context.Context, completedAt time.Time) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var count int64
+	for i := range s.AgentRuns {
+		if s.AgentRuns[i].Status != "running" {
+			continue
+		}
+		s.AgentRuns[i].Status = "interrupted"
+		s.AgentRuns[i].Error = "backend restarted during Agent Runtime execution"
+		s.AgentRuns[i].CompletedAt = &completedAt
+		count++
+	}
+	return count, nil
+}
+
+func (s *Store) UpdateAgentRunModel(_ context.Context, runID, profileID, source, modelName string) error {
+	for i := range s.AgentRuns {
+		if s.AgentRuns[i].ID == runID {
+			s.AgentRuns[i].ModelProfileID = profileID
+			s.AgentRuns[i].ModelSource = source
+			s.AgentRuns[i].ModelName = modelName
 		}
 	}
 	return nil

@@ -29,6 +29,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      agent-runtime:
+        condition: service_healthy
     environment:
       PORT: "8080"
       DB_DRIVER: "mysql"
@@ -36,14 +38,39 @@ services:
       DB_AUTO_MIGRATE: "${DB_AUTO_MIGRATE:-true}"
       ADMIN_API_KEY: "${ADMIN_API_KEY:-change_me_admin_key}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
+      MODEL_CONFIG_ENCRYPTION_KEY: "${MODEL_CONFIG_ENCRYPTION_KEY:-}"
       LLM_BASE_URL: "${LLM_BASE_URL:-https://api.openai.com}"
       LLM_API_KEY: "${LLM_API_KEY:-}"
       LLM_MODEL: "${LLM_MODEL:-gpt-4o-mini}"
+      MODEL_PROTOCOL: "${MODEL_PROTOCOL:-openai}"
+      MODEL_BASE_URL: "${MODEL_BASE_URL:-https://api.openai.com/v1}"
+      MODEL_NAME: "${MODEL_NAME:-gpt-5.5}"
+      MODEL_API_KEY: "${MODEL_API_KEY:-}"
+      TAVILY_API_KEY: "${TAVILY_API_KEY:-}"
+      AGENT_RUNTIME_TRANSPORT: "${AGENT_RUNTIME_TRANSPORT:-grpc}"
+      AGENT_RUNTIME_GRPC_ADDRESS: "${AGENT_RUNTIME_GRPC_ADDRESS:-agent-runtime:50051}"
+      AGENT_RUNTIME_GRPC_INSECURE: "${AGENT_RUNTIME_GRPC_INSECURE:-true}"
+      AGENT_RUNTIME_GRPC_SERVER_NAME: "${AGENT_RUNTIME_GRPC_SERVER_NAME:-}"
+      AGENT_RUNTIME_GRPC_CA_FILE: "${AGENT_RUNTIME_GRPC_CA_FILE:-}"
+      AGENT_RUNTIME_GRPC_CLIENT_CERT_FILE: "${AGENT_RUNTIME_GRPC_CLIENT_CERT_FILE:-}"
+      AGENT_RUNTIME_GRPC_CLIENT_KEY_FILE: "${AGENT_RUNTIME_GRPC_CLIENT_KEY_FILE:-}"
+      AGENT_RUNTIME_LLM_TIMEOUT_SECONDS: "${AGENT_RUNTIME_LLM_TIMEOUT_SECONDS:-45}"
+      AGENT_RUNTIME_DEEPAGENT_TIMEOUT_SECONDS: "${AGENT_RUNTIME_DEEPAGENT_TIMEOUT_SECONDS:-300}"
+      AGENT_RUNTIME_MAX_REQUEST_BYTES: "${AGENT_RUNTIME_MAX_REQUEST_BYTES:-8388608}"
+      AGENT_RUNTIME_MAX_EVENT_BYTES: "${AGENT_RUNTIME_MAX_EVENT_BYTES:-4194304}"
+      DEEPAGENT_COMMAND: "uv"
+      DEEPAGENT_WORKDIR: "/app/deepagent"
+      DEEPAGENT_CONFIG: "deepagent.toml"
+      DEEPAGENT_REGISTRY: "agents.json"
+      DEEPAGENT_TIMEOUT_SECONDS: "${DEEPAGENT_TIMEOUT_SECONDS:-300}"
+      DEEPAGENT_CONCURRENCY: "${DEEPAGENT_CONCURRENCY:-1}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
       LOG_FORMAT: "${LOG_FORMAT:-json}"
       LOG_ADD_SOURCE: "${LOG_ADD_SOURCE:-false}"
     ports:
       - "${BACKEND_HOST_PORT:-8080}:8080"
+    volumes:
+      - deepagent-runs:/app/deepagent/runs
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/health | grep -q '\"ok\":true'"]
       interval: 10s
@@ -70,5 +97,34 @@ services:
       retries: 12
       start_period: 5s
 
+  agent-runtime:
+    build:
+      context: ./deepagent
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      AGENT_RUNTIME_HOST: "0.0.0.0"
+      AGENT_RUNTIME_PORT: "50051"
+      AGENT_RUNTIME_INSECURE: "${AGENT_RUNTIME_INSECURE:-true}"
+      AGENT_RUNTIME_WORK_DIR: "/app/runs"
+      AGENT_RUNTIME_MAX_CONCURRENCY: "${AGENT_RUNTIME_MAX_CONCURRENCY:-4}"
+      AGENT_RUNTIME_DEEPAGENT_CONCURRENCY: "${AGENT_RUNTIME_DEEPAGENT_CONCURRENCY:-1}"
+      AGENT_RUNTIME_MAX_PENDING: "${AGENT_RUNTIME_MAX_PENDING:-16}"
+      AGENT_RUNTIME_MAX_REQUEST_BYTES: "${AGENT_RUNTIME_MAX_REQUEST_BYTES:-8388608}"
+      AGENT_RUNTIME_MAX_EVENT_BYTES: "${AGENT_RUNTIME_MAX_EVENT_BYTES:-4194304}"
+      AGENT_RUNTIME_MAX_ARTIFACT_BYTES: "${AGENT_RUNTIME_MAX_ARTIFACT_BYTES:-2097152}"
+      AGENT_RUNTIME_MAX_OUTPUT_BYTES: "${AGENT_RUNTIME_MAX_OUTPUT_BYTES:-1048576}"
+      AGENT_RUNTIME_EVENT_BUFFER_SIZE: "${AGENT_RUNTIME_EVENT_BUFFER_SIZE:-16}"
+      AGENT_RUNTIME_SHUTDOWN_GRACE_SECONDS: "${AGENT_RUNTIME_SHUTDOWN_GRACE_SECONDS:-10}"
+      TAVILY_API_KEY: "${TAVILY_API_KEY:-}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      LOG_FORMAT: "${LOG_FORMAT:-json}"
+    volumes:
+      - agent-runtime-runs:/app/runs
+    expose:
+      - "50051"
+
 volumes:
   mysql-data:
+  deepagent-runs:
+  agent-runtime-runs:

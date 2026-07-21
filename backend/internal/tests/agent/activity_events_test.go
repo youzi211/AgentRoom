@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -12,6 +13,35 @@ import (
 	"agentroom/backend/internal/realtime"
 	"agentroom/backend/internal/tests/teststore"
 )
+
+type canceledAgentRuntime struct{}
+
+func (canceledAgentRuntime) Name() string { return model.AgentRuntimeLLM }
+func (canceledAgentRuntime) Respond(context.Context, agent.AgentRuntimeRequest, ...agent.AgentEventObserver) (agent.AgentRuntimeResponse, error) {
+	return agent.AgentRuntimeResponse{}, context.Canceled
+}
+
+type artifactAuditRuntime struct{}
+
+func (artifactAuditRuntime) Name() string { return model.AgentRuntimeDeepAgent }
+func (artifactAuditRuntime) Respond(_ context.Context, request agent.AgentRuntimeRequest, _ ...agent.AgentEventObserver) (agent.AgentRuntimeResponse, error) {
+	content := "review complete"
+	if request.Agent.ID == "research" {
+		content = "@Reviewer verify the research"
+	}
+	return agent.AgentRuntimeResponse{
+		Content: content,
+		Artifacts: []agent.AgentRuntimeArtifact{{
+			ID: "report-" + request.Agent.ID, Type: "markdown_report", Title: "Report",
+			FileName: request.Agent.ID + ".md", MIMEType: "text/markdown", Content: "# " + request.Agent.Name,
+		}},
+		Metadata: map[string]string{
+			"model_profile_id": "profile-" + request.Agent.ID,
+			"model_source":     "database",
+			"model_name":       "research-model",
+		},
+	}, nil
+}
 
 func TestAgentActivityEventsWrapMentionFanoutRun(t *testing.T) {
 	llmClient := &sequenceLLM{responses: []string{"I can help with the rollout."}}
@@ -39,6 +69,14 @@ func TestAgentActivityEventsWrapMentionFanoutRun(t *testing.T) {
 	}
 	if finished[0].Activity.Status != "succeeded" || finished[0].Activity.CompletedAt == nil {
 		t.Fatalf("unexpected finished activity payload: %#v", finished[0].Activity)
+	}
+	for _, phase := range []string{"accepted", "model_started", "model_completed", "completed"} {
+		if got := activityEvents(room.events, "agent_runtime", phase); len(got) != 1 {
+			t.Fatalf("expected one %s runtime activity, got %#v", phase, room.events)
+		}
+	}
+	if messages := room.agentMessages(); len(messages) != 1 {
+		t.Fatalf("runtime lifecycle events must not create chat messages, got %#v", messages)
 	}
 }
 
@@ -76,6 +114,43 @@ func TestAgentRunFailsWhenRuntimeIsNotConfigured(t *testing.T) {
 	last := messages[len(messages)-1]
 	if last.SenderType != model.SenderTypeSystem || !strings.Contains(last.Content, "runtime deepagent is not configured") {
 		t.Fatalf("expected system runtime failure message, got %#v", last)
+	}
+}
+
+func TestAgentMessageIsNotPublishedWhenAtomicSuccessCommitFails(t *testing.T) {
+	llmClient := &sequenceLLM{responses: []string{"Uncommitted response"}}
+	store := &teststore.Store{CommitAgentRunErr: errors.New("database commit failed")}
+	runner := agent.NewRunner(llmClient, store)
+	room := newDialogueRuntimeRoom(model.DefaultDialoguePolicy(), []model.Agent{testAgent("builder", "Builder")})
+	trigger := room.newHumanMessage("Alice", "@Builder please review this.")
+	room.AppendMessage(trigger)
+
+	runner.HandleHumanMessage(context.Background(), room, trigger)
+
+	if messages := room.agentMessages(); len(messages) != 0 {
+		t.Fatalf("failed success commit must not publish an Agent message: %#v", messages)
+	}
+	messages := room.Messages()
+	if messages[len(messages)-1].SenderType != model.SenderTypeSystem || !strings.Contains(messages[len(messages)-1].Content, "could not be saved") {
+		t.Fatalf("expected visible system failure, got %#v", messages)
+	}
+	if len(store.AgentRuns) != 1 || store.AgentRuns[0].Status != "failed" {
+		t.Fatalf("expected failed terminal Run after rollback, got %#v", store.AgentRuns)
+	}
+}
+
+func TestCancelledAgentRunPersistsCanceledTerminalState(t *testing.T) {
+	store := &teststore.Store{}
+	runner := agent.NewRunner(&sequenceLLM{}, store).
+		WithRuntimeRegistry(agent.NewRuntimeRegistry(canceledAgentRuntime{}))
+	room := newDialogueRuntimeRoom(model.DefaultDialoguePolicy(), []model.Agent{testAgent("builder", "Builder")})
+	trigger := room.newHumanMessage("Alice", "@Builder please review this.")
+	room.AppendMessage(trigger)
+
+	runner.HandleHumanMessage(context.Background(), room, trigger)
+
+	if len(store.AgentRuns) != 1 || store.AgentRuns[0].Status != "canceled" || store.AgentRuns[0].CompletedAt == nil {
+		t.Fatalf("expected durable canceled terminal state, got %#v", store.AgentRuns)
 	}
 }
 
@@ -168,6 +243,61 @@ func TestGuidedDialoguePreservesDeepAgentRuntimeArtifacts(t *testing.T) {
 	}
 	if len(messages[0].Artifacts) != 1 || messages[0].Artifacts[0].ID != "report" || !strings.Contains(messages[0].Artifacts[0].Content, "# Report") {
 		t.Fatalf("expected guided dialogue report artifact, got %#v", messages[0].Artifacts)
+	}
+}
+
+func TestDeepAgentArtifactsAndAuditSurviveHumanAndAgentMentionsInAllDialogueModes(t *testing.T) {
+	tests := []struct {
+		name   string
+		policy model.DialoguePolicy
+	}{
+		{
+			name: "mention fanout",
+			policy: model.DialoguePolicy{
+				Mode: model.DialogueModeMentionFanout, MaxAutonomousTurns: 2, MaxTurnsPerAgent: 1,
+				AllowAgentToAgentMentions: true, ResponseStrategy: model.DialogueResponseStrategyMentionedFirst,
+			},
+		},
+		{
+			name: "guided dialogue",
+			policy: model.DialoguePolicy{
+				Mode: model.DialogueModeGuided, MaxAutonomousTurns: 2, MaxTurnsPerAgent: 1,
+				AllowAgentToAgentMentions: true, ResponseStrategy: model.DialogueResponseStrategyMentionedFirst,
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := &teststore.Store{}
+			runner := agent.NewRunner(&sequenceLLM{}, store).
+				WithRuntimeRegistry(agent.NewRuntimeRegistry(artifactAuditRuntime{}))
+			room := newDialogueRuntimeRoom(test.policy, []model.Agent{
+				{ID: "research", Name: "Research", Mention: "@Research", Runtime: model.AgentRuntimeDeepAgent, Enabled: true},
+				{ID: "reviewer", Name: "Reviewer", Mention: "@Reviewer", Runtime: model.AgentRuntimeDeepAgent, Enabled: true},
+			})
+			trigger := room.newHumanMessage("Alice", "@Research investigate the topic")
+			room.AppendMessage(trigger)
+
+			runner.HandleHumanMessage(context.Background(), room, trigger)
+
+			messages := room.agentMessages()
+			if len(messages) != 2 || messages[0].SenderID != "research" || messages[1].SenderID != "reviewer" {
+				t.Fatalf("expected human mention followed by Agent mention, got %#v", messages)
+			}
+			for _, message := range messages {
+				if len(message.Artifacts) != 1 || !strings.Contains(message.Artifacts[0].Content, "# ") {
+					t.Fatalf("expected saved Markdown artifact, got %#v", message.Artifacts)
+				}
+			}
+			if len(store.AgentRuns) != 2 {
+				t.Fatalf("expected two durable Agent runs, got %#v", store.AgentRuns)
+			}
+			for _, run := range store.AgentRuns {
+				if run.Status != "succeeded" || run.ModelSource != "database" || run.ModelName != "research-model" || run.ModelProfileID == "" {
+					t.Fatalf("expected persisted DeepAgent audit, got %#v", run)
+				}
+			}
+		})
 	}
 }
 

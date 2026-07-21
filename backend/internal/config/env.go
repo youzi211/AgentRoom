@@ -63,6 +63,25 @@ type DeepAgentConfig struct {
 	Concurrency int
 }
 
+const (
+	AgentRuntimeTransportLocal = "local"
+	AgentRuntimeTransportGRPC  = "grpc"
+)
+
+type AgentRuntimeConfig struct {
+	Transport       string
+	GRPCAddress     string
+	GRPCInsecure    bool
+	ServerName      string
+	CAFile          string
+	ClientCertFile  string
+	ClientKeyFile   string
+	LLMTimeout      time.Duration
+	DeepTimeout     time.Duration
+	MaxRequestBytes int
+	MaxEventBytes   int
+}
+
 // LoadDBConfig reads database configuration from environment variables.
 func LoadDBConfig() DBConfig {
 	return DBConfig{
@@ -116,6 +135,86 @@ func LoadDeepAgentConfig() DeepAgentConfig {
 		Timeout:     timeout,
 		Concurrency: concurrency,
 	}
+}
+
+func LoadAgentRuntimeConfig() (AgentRuntimeConfig, error) {
+	config := AgentRuntimeConfig{
+		Transport:       strings.ToLower(strings.TrimSpace(os.Getenv("AGENT_RUNTIME_TRANSPORT"))),
+		GRPCAddress:     strings.TrimSpace(os.Getenv("AGENT_RUNTIME_GRPC_ADDRESS")),
+		GRPCInsecure:    strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_RUNTIME_GRPC_INSECURE")), "true"),
+		ServerName:      strings.TrimSpace(os.Getenv("AGENT_RUNTIME_GRPC_SERVER_NAME")),
+		CAFile:          strings.TrimSpace(os.Getenv("AGENT_RUNTIME_GRPC_CA_FILE")),
+		ClientCertFile:  strings.TrimSpace(os.Getenv("AGENT_RUNTIME_GRPC_CLIENT_CERT_FILE")),
+		ClientKeyFile:   strings.TrimSpace(os.Getenv("AGENT_RUNTIME_GRPC_CLIENT_KEY_FILE")),
+		LLMTimeout:      envDurationSeconds("AGENT_RUNTIME_LLM_TIMEOUT_SECONDS", 45*time.Second),
+		DeepTimeout:     envDurationSeconds("AGENT_RUNTIME_DEEPAGENT_TIMEOUT_SECONDS", 5*time.Minute),
+		MaxRequestBytes: envPositiveInt("AGENT_RUNTIME_MAX_REQUEST_BYTES", 8*1024*1024),
+		MaxEventBytes:   envPositiveInt("AGENT_RUNTIME_MAX_EVENT_BYTES", 4*1024*1024),
+	}
+	if config.Transport == "" {
+		config.Transport = AgentRuntimeTransportLocal
+	}
+	if config.GRPCAddress == "" {
+		config.GRPCAddress = "127.0.0.1:50051"
+	}
+	if err := config.Validate(); err != nil {
+		return AgentRuntimeConfig{}, err
+	}
+	return config, nil
+}
+
+func (c AgentRuntimeConfig) Validate() error {
+	if c.Transport != AgentRuntimeTransportLocal && c.Transport != AgentRuntimeTransportGRPC {
+		return errors.New("AGENT_RUNTIME_TRANSPORT must be local or grpc")
+	}
+	if c.LLMTimeout <= 0 || c.DeepTimeout <= 0 {
+		return errors.New("Agent Runtime deadlines must be positive")
+	}
+	if c.MaxRequestBytes <= 0 || c.MaxEventBytes <= 0 {
+		return errors.New("Agent Runtime message limits must be positive")
+	}
+	if c.Transport == AgentRuntimeTransportLocal {
+		return nil
+	}
+	if c.GRPCAddress == "" {
+		return errors.New("AGENT_RUNTIME_GRPC_ADDRESS is required for grpc transport")
+	}
+	if c.GRPCInsecure {
+		return nil
+	}
+	if c.CAFile == "" {
+		return errors.New("AGENT_RUNTIME_GRPC_CA_FILE is required unless grpc insecure mode is explicit")
+	}
+	if (c.ClientCertFile == "") != (c.ClientKeyFile == "") {
+		return errors.New("Agent Runtime client certificate and key must be configured together")
+	}
+	for _, path := range []string{c.CAFile, c.ClientCertFile, c.ClientKeyFile} {
+		if path == "" {
+			continue
+		}
+		info, err := os.Stat(path)
+		if err != nil || info.IsDir() {
+			return errors.New("Agent Runtime TLS file is missing or unreadable: " + path)
+		}
+	}
+	return nil
+}
+
+func envDurationSeconds(name string, fallback time.Duration) time.Duration {
+	seconds := envPositiveInt(name, int(fallback/time.Second))
+	return time.Duration(seconds) * time.Second
+}
+
+func envPositiveInt(name string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed <= 0 {
+		return 0
+	}
+	return parsed
 }
 
 func trimEnvValue(value string) string {

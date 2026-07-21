@@ -14,19 +14,28 @@ import (
 )
 
 type UpdateAgentInput struct {
-	Name         string
-	Role         string
-	Runtime      string
-	Description  string
-	SystemPrompt string
-	Enabled      *bool
+	Name           string
+	Role           string
+	Runtime        string
+	Description    string
+	SystemPrompt   string
+	Enabled        *bool
+	ModelProfileID *string
 }
 
+var ErrInvalidAgentModelBinding = errors.New("invalid agent model profile binding")
+
 type AgentService struct {
-	mu     sync.RWMutex
-	store  agentStore
-	agents []model.Agent
-	logger *slog.Logger
+	mu            sync.RWMutex
+	store         agentStore
+	agents        []model.Agent
+	logger        *slog.Logger
+	modelProfiles agentModelProfileStore
+}
+
+type agentModelProfileStore interface {
+	GetModelProfile(context.Context, string) (model.ModelProfile, error)
+	GetDefaultModelProfile(context.Context, string) (model.ModelProfile, error)
 }
 
 type agentStore interface {
@@ -46,6 +55,11 @@ func NewAgentService(s agentStore, agents []model.Agent) *AgentService {
 	}
 }
 
+func (s *AgentService) WithModelProfiles(profiles agentModelProfileStore) *AgentService {
+	s.modelProfiles = profiles
+	return s
+}
+
 func (s *AgentService) Agents() []model.AgentConfig {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -62,7 +76,7 @@ func (s *AgentService) ResolveForRoom(agentIDs []string) []model.Agent {
 	defer s.mu.RUnlock()
 
 	if agentIDs == nil {
-		return enabledAgents(s.agents)
+		return s.snapshotModelProfiles(enabledAgents(s.agents))
 	}
 	if len(agentIDs) == 0 {
 		return []model.Agent{}
@@ -86,7 +100,23 @@ func (s *AgentService) ResolveForRoom(agentIDs []string) []model.Agent {
 		}
 	}
 
-	return selected
+	return s.snapshotModelProfiles(selected)
+}
+
+func (s *AgentService) snapshotModelProfiles(agents []model.Agent) []model.Agent {
+	result := append([]model.Agent(nil), agents...)
+	if s.modelProfiles == nil {
+		return result
+	}
+	for i := range result {
+		if result[i].ModelProfileID != "" {
+			continue
+		}
+		if p, err := s.modelProfiles.GetDefaultModelProfile(context.Background(), model.RuntimeScopeForAgent(result[i].Runtime)); err == nil && p.Enabled {
+			result[i].ModelProfileID = p.ID
+		}
+	}
+	return result
 }
 
 func (s *AgentService) UpdateAgent(ctx context.Context, agentID string, input UpdateAgentInput) (model.Agent, error) {
@@ -107,6 +137,9 @@ func (s *AgentService) UpdateAgent(ctx context.Context, agentID string, input Up
 	}
 
 	updated := applyAgentUpdate(*current, input)
+	if err := s.validateModelBinding(ctx, updated.Runtime, updated.ModelProfileID); err != nil {
+		return model.Agent{}, err
+	}
 	if hasAgentMentionConflict(s.agents, updated.ID, updated.Mention) {
 		return model.Agent{}, ErrAgentMentionExists
 	}
@@ -125,6 +158,10 @@ func (s *AgentService) UpdateAgent(ctx context.Context, agentID string, input Up
 }
 
 func (s *AgentService) CreateAgent(ctx context.Context, name, role, description, systemPrompt string, enabled bool, runtime string) (model.Agent, error) {
+	return s.CreateAgentWithModel(ctx, name, role, description, systemPrompt, enabled, runtime, "")
+}
+
+func (s *AgentService) CreateAgentWithModel(ctx context.Context, name, role, description, systemPrompt string, enabled bool, runtime string, modelProfileID string) (model.Agent, error) {
 	trimmedName := strings.TrimSpace(name)
 	if trimmedName == "" {
 		return model.Agent{}, fmt.Errorf("agent name is required")
@@ -143,15 +180,19 @@ func (s *AgentService) CreateAgent(ctx context.Context, name, role, description,
 	s.mu.RUnlock()
 
 	a := model.Agent{
-		ID:           model.NewID("agent"),
-		Name:         trimmedName,
-		Mention:      mention,
-		Role:         strings.TrimSpace(role),
-		Runtime:      normalizedRuntime,
-		Source:       model.AgentSourceBuiltin,
-		Description:  strings.TrimSpace(description),
-		SystemPrompt: strings.TrimSpace(systemPrompt),
-		Enabled:      enabled,
+		ID:             model.NewID("agent"),
+		Name:           trimmedName,
+		Mention:        mention,
+		Role:           strings.TrimSpace(role),
+		Runtime:        normalizedRuntime,
+		Source:         model.AgentSourceBuiltin,
+		Description:    strings.TrimSpace(description),
+		SystemPrompt:   strings.TrimSpace(systemPrompt),
+		Enabled:        enabled,
+		ModelProfileID: strings.TrimSpace(modelProfileID),
+	}
+	if err := s.validateModelBinding(ctx, a.Runtime, a.ModelProfileID); err != nil {
+		return model.Agent{}, err
 	}
 
 	result, err := s.store.CreateAgent(ctx, a)
@@ -164,6 +205,23 @@ func (s *AgentService) CreateAgent(ctx context.Context, name, role, description,
 	s.mu.Unlock()
 
 	return result, nil
+}
+
+func (s *AgentService) validateModelBinding(ctx context.Context, runtime, profileID string) error {
+	if strings.TrimSpace(profileID) == "" || s.modelProfiles == nil {
+		return nil
+	}
+	p, err := s.modelProfiles.GetModelProfile(ctx, profileID)
+	if err != nil {
+		return fmt.Errorf("%w: model profile not found", ErrInvalidAgentModelBinding)
+	}
+	if !p.Enabled {
+		return fmt.Errorf("%w: model profile is disabled", ErrInvalidAgentModelBinding)
+	}
+	if p.RuntimeScope != model.RuntimeScopeForAgent(runtime) {
+		return fmt.Errorf("%w: runtime scope mismatch", ErrInvalidAgentModelBinding)
+	}
+	return nil
 }
 
 func (s *AgentService) DeleteAgent(ctx context.Context, agentID string) error {
@@ -200,6 +258,9 @@ func applyAgentUpdate(current model.Agent, input UpdateAgentInput) model.Agent {
 	}
 	if input.Enabled != nil {
 		current.Enabled = *input.Enabled
+	}
+	if input.ModelProfileID != nil {
+		current.ModelProfileID = strings.TrimSpace(*input.ModelProfileID)
 	}
 	return current
 }

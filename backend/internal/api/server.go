@@ -18,6 +18,8 @@ type Server struct {
 	roomQueries    RoomQueryService
 	roomCommands   RoomCommandService
 	roomAccess     RoomAccessService
+	modelProfiles  ModelProfileService
+	agentRuntime   AgentRuntimeReadiness
 	logger         *slog.Logger
 	config         Config
 	allowedOrigins map[string]struct{}
@@ -34,6 +36,7 @@ type RoomQueryService interface {
 	Agents() []model.AgentConfig
 	GetRoom(ctx context.Context, roomID string) (*room.Room, bool)
 	ListRooms(ctx context.Context, query service.ListRoomsInput) ([]model.RoomSummary, error)
+	EntrySummary(ctx context.Context) (service.EntrySummary, error)
 	ListAgentKnowledge(ctx context.Context, agentID string) ([]model.KnowledgeDocument, error)
 	ListMessagesPage(ctx context.Context, currentRoom *room.Room, limit int, before string) (service.MessagePage, error)
 	GetMessageArtifact(ctx context.Context, currentRoom *room.Room, messageID string, artifactID string) (model.MessageArtifact, error)
@@ -67,10 +70,25 @@ type RoomAccessService interface {
 	CanAccessRoom(currentRoom *room.Room, passcode string) bool
 }
 
+type ModelProfileService interface {
+	List(context.Context) ([]model.ModelProfile, error)
+	Create(context.Context, service.CreateModelProfileInput) (model.ModelProfile, error)
+	Update(context.Context, string, service.UpdateModelProfileInput) (model.ModelProfile, error)
+	SetDefault(context.Context, string) error
+	Delete(context.Context, string) error
+	TestConnection(context.Context, service.TestModelProfileInput) (service.ModelConnectionResult, error)
+}
+
+type AgentRuntimeReadiness interface {
+	Ready(context.Context) error
+}
+
 type Dependencies struct {
-	Queries  RoomQueryService
-	Commands RoomCommandService
-	Access   RoomAccessService
+	Queries       RoomQueryService
+	Commands      RoomCommandService
+	Access        RoomAccessService
+	ModelProfiles ModelProfileService
+	AgentRuntime  AgentRuntimeReadiness
 }
 
 func NewServer(deps Dependencies) *Server {
@@ -82,6 +100,8 @@ func NewServerWithConfig(deps Dependencies, config Config) *Server {
 		roomQueries:    deps.Queries,
 		roomCommands:   deps.Commands,
 		roomAccess:     deps.Access,
+		modelProfiles:  deps.ModelProfiles,
+		agentRuntime:   deps.AgentRuntime,
 		logger:         logging.Component("api"),
 		config:         config,
 		allowedOrigins: originSet(config.AllowedOrigins),
@@ -116,15 +136,26 @@ func (s *Server) Routes() http.Handler {
 
 func (s *Server) registerAPIRoutes(routes gin.IRoutes) {
 	routes.GET("/health", s.handleHealth)
+	routes.GET("/ready", s.handleReady)
 	routes.GET("/admin/verify", s.requireAdmin, s.handleAdminVerify)
 	routes.GET("/rooms", s.requireAdmin, s.handleListRooms)
 	routes.GET("/recent-rooms", s.handleListRecentRooms)
+	routes.GET("/entry-summary", s.handleEntrySummary)
 	routes.POST("/rooms/:roomID/archive", s.requireAdmin, s.handleArchiveRoom)
 	routes.POST("/rooms/:roomID/reopen", s.requireAdmin, s.handleReopenRoom)
 	routes.POST("/rooms/:roomID/restore", s.requireAdmin, s.handleRestoreRoom)
 	routes.GET("/rooms/:roomID/minutes/history", s.requireAdmin, s.handleListMinutes)
 	routes.PUT("/rooms/:roomID/minutes", s.requireAdmin, s.handleSaveMinutes)
 	routes.GET("/agents", s.handleAgents)
+	if s.modelProfiles != nil {
+		routes.GET("/model-profiles", s.requireAdmin, s.handleListModelProfiles)
+		routes.POST("/model-profiles", s.requireAdmin, s.handleCreateModelProfile)
+		routes.POST("/model-profiles/test", s.requireAdmin, s.handleTestDraftModelProfile)
+		routes.PUT("/model-profiles/:profileID", s.requireAdmin, s.handleUpdateModelProfile)
+		routes.POST("/model-profiles/:profileID/default", s.requireAdmin, s.handleSetDefaultModelProfile)
+		routes.POST("/model-profiles/:profileID/test", s.requireAdmin, s.handleTestSavedModelProfile)
+		routes.DELETE("/model-profiles/:profileID", s.requireAdmin, s.handleDeleteModelProfile)
+	}
 	routes.GET("/agent-templates", s.handleAgentTemplates)
 	routes.GET("/agent-role-sets", s.handleAgentRoleSets)
 	routes.POST("/agents", s.requireAdmin, s.handleCreateAgent)

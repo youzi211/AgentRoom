@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"agentroom/backend/internal/model"
+	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/service"
 	"agentroom/backend/internal/store"
 	"agentroom/backend/internal/tests/teststore"
@@ -98,6 +99,43 @@ func TestAgentServiceUpdateRuntime(t *testing.T) {
 	}
 	if updated.Runtime != model.AgentRuntimeDeepAgent {
 		t.Fatalf("expected updated runtime, got %#v", updated)
+	}
+}
+
+func TestRoomCreationSnapshotsResolvedProfileID(t *testing.T) {
+	agents := []model.Agent{{ID: "a", Name: "Agent", Mention: "@Agent", Runtime: model.AgentRuntimeLLM, Enabled: true}}
+	backingStore := &teststore.Store{
+		Agents: append([]model.Agent(nil), agents...),
+		ModelProfiles: []model.ModelProfile{
+			{ID: "default-old", RuntimeScope: model.ModelRuntimeGo, Enabled: true, IsDefault: true},
+			{ID: "default-new", RuntimeScope: model.ModelRuntimeGo, Enabled: true},
+		},
+	}
+	agentService := service.NewAgentService(backingStore, agents).WithModelProfiles(backingStore)
+	manager := room.NewManager(backingStore, agentService.ResolveForRoom)
+	firstRoom, err := manager.CreateRoom(context.Background(), "First", []string{"a"}, "", model.DialoguePolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := backingStore.RoomAgents[firstRoom.Info().ID][0].ModelProfileID; got != "default-old" {
+		t.Fatalf("first room snapshot profile = %q", got)
+	}
+	if err := backingStore.SetDefaultModelProfile(context.Background(), "default-new"); err != nil {
+		t.Fatal(err)
+	}
+	profileID := "default-new"
+	if _, err := agentService.UpdateAgent(context.Background(), "a", service.UpdateAgentInput{ModelProfileID: &profileID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := backingStore.RoomAgents[firstRoom.Info().ID][0].ModelProfileID; got != "default-old" {
+		t.Fatalf("existing room snapshot changed after agent rebind: %q", got)
+	}
+	secondRoom, err := manager.CreateRoom(context.Background(), "Second", []string{"a"}, "", model.DialoguePolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := backingStore.RoomAgents[secondRoom.Info().ID][0].ModelProfileID; got != "default-new" {
+		t.Fatalf("new room snapshot profile = %q", got)
 	}
 }
 

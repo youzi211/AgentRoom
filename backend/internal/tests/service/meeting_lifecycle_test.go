@@ -5,11 +5,23 @@ import (
 	"testing"
 	"time"
 
+	"agentroom/backend/internal/agent"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/service"
 	"agentroom/backend/internal/tests/teststore"
 )
+
+type roomCancelRuntime struct{ rooms []string }
+
+func (r *roomCancelRuntime) Name() string { return model.AgentRuntimeLLM }
+func (r *roomCancelRuntime) Respond(context.Context, agent.AgentRuntimeRequest, ...agent.AgentEventObserver) (agent.AgentRuntimeResponse, error) {
+	return agent.AgentRuntimeResponse{}, nil
+}
+func (r *roomCancelRuntime) CancelRoom(roomID string) int {
+	r.rooms = append(r.rooms, roomID)
+	return 1
+}
 
 func TestMeetingLifecycleAssignsInitialOwnerOnFirstJoin(t *testing.T) {
 	roomService, currentRoom, store := newLifecycleRoomService(t)
@@ -120,6 +132,31 @@ func TestMeetingLifecycleManualCloseClearsOwnerAndDeadline(t *testing.T) {
 	}
 	if len(currentRoom.Participants()) != 0 {
 		t.Fatalf("expected participants cleared, got %#v", currentRoom.Participants())
+	}
+}
+
+func TestMeetingLifecycleCancelsAgentRunsWhenRoomStops(t *testing.T) {
+	store := &teststore.Store{
+		Rooms: make(map[string]model.RoomMeta), RoomAgents: make(map[string][]model.Agent),
+		RoomMessages: make(map[string][]model.Message), ActiveParticipants: make(map[string][]model.Participant),
+	}
+	manager := room.NewManager(store, func([]string) []model.Agent { return nil })
+	canceler := &roomCancelRuntime{}
+	runner := agent.NewRunner(nil, store).WithRuntimeRegistry(agent.NewRuntimeRegistry(canceler))
+	roomService := service.NewRoomService(manager, nil, nil, runner, nil, store)
+	currentRoom, err := manager.CreateRoom(context.Background(), "Planning", nil, "", model.DefaultDialoguePolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	alice, err := roomService.JoinParticipant(context.Background(), currentRoom, "Alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := roomService.CloseRoomByOwner(context.Background(), currentRoom, alice.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(canceler.rooms) != 1 || canceler.rooms[0] != currentRoom.Info().ID {
+		t.Fatalf("expected room run cancellation, got %#v", canceler.rooms)
 	}
 }
 

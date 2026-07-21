@@ -14,18 +14,19 @@ import (
 
 // AgentModel maps to the `agents` table (global agent configuration).
 type AgentModel struct {
-	ID           string    `gorm:"primaryKey;size:64"`
-	Name         string    `gorm:"size:128;not null"`
-	Mention      string    `gorm:"size:128;uniqueIndex:uk_agents_mention;not null"`
-	Role         string    `gorm:"size:128;not null"`
-	Runtime      string    `gorm:"size:32;not null;default:'llm'"`
-	Source       string    `gorm:"size:32;not null;default:'builtin'"`
-	Description  string    `gorm:"type:text;not null"`
-	SystemPrompt string    `gorm:"column:system_prompt;type:text;not null"`
-	Enabled      bool      `gorm:"not null;default:true"`
-	SortOrder    int       `gorm:"column:sort_order;not null;default:0"`
-	CreatedAt    time.Time `gorm:"not null"`
-	UpdatedAt    time.Time `gorm:"not null"`
+	ID             string    `gorm:"primaryKey;size:64"`
+	Name           string    `gorm:"size:128;not null"`
+	Mention        string    `gorm:"size:128;uniqueIndex:uk_agents_mention;not null"`
+	Role           string    `gorm:"size:128;not null"`
+	Runtime        string    `gorm:"size:32;not null;default:'llm'"`
+	Source         string    `gorm:"size:32;not null;default:'builtin'"`
+	Description    string    `gorm:"type:text;not null"`
+	SystemPrompt   string    `gorm:"column:system_prompt;type:text;not null"`
+	Enabled        bool      `gorm:"not null;default:true"`
+	SortOrder      int       `gorm:"column:sort_order;not null;default:0"`
+	CreatedAt      time.Time `gorm:"not null"`
+	UpdatedAt      time.Time `gorm:"not null"`
+	ModelProfileID *string   `gorm:"column:model_profile_id;size:64;index"`
 }
 
 func (AgentModel) TableName() string { return "agents" }
@@ -56,18 +57,19 @@ func (RoomModel) TableName() string { return "rooms" }
 
 // RoomAgentModel maps to the `room_agents` table (per-room agent snapshot).
 type RoomAgentModel struct {
-	RoomID       string    `gorm:"primaryKey;size:64;uniqueIndex:idx_room_agents_mention"`
-	AgentID      string    `gorm:"primaryKey;size:64"`
-	Name         string    `gorm:"size:128;not null"`
-	Mention      string    `gorm:"size:128;not null;uniqueIndex:idx_room_agents_mention"`
-	Role         string    `gorm:"size:128;not null"`
-	Runtime      string    `gorm:"size:32;not null;default:'llm'"`
-	Source       string    `gorm:"size:32;not null;default:'builtin'"`
-	Description  string    `gorm:"type:text;not null"`
-	SystemPrompt string    `gorm:"column:system_prompt;type:text;not null"`
-	Enabled      bool      `gorm:"not null;default:true"`
-	SortOrder    int       `gorm:"column:sort_order;not null;default:0"`
-	CreatedAt    time.Time `gorm:"not null"`
+	RoomID         string    `gorm:"primaryKey;size:64;uniqueIndex:idx_room_agents_mention"`
+	AgentID        string    `gorm:"primaryKey;size:64"`
+	Name           string    `gorm:"size:128;not null"`
+	Mention        string    `gorm:"size:128;not null;uniqueIndex:idx_room_agents_mention"`
+	Role           string    `gorm:"size:128;not null"`
+	Runtime        string    `gorm:"size:32;not null;default:'llm'"`
+	Source         string    `gorm:"size:32;not null;default:'builtin'"`
+	Description    string    `gorm:"type:text;not null"`
+	SystemPrompt   string    `gorm:"column:system_prompt;type:text;not null"`
+	Enabled        bool      `gorm:"not null;default:true"`
+	SortOrder      int       `gorm:"column:sort_order;not null;default:0"`
+	CreatedAt      time.Time `gorm:"not null"`
+	ModelProfileID *string   `gorm:"column:model_profile_id;size:64;index"`
 }
 
 func (RoomAgentModel) TableName() string { return "room_agents" }
@@ -87,18 +89,20 @@ func (ParticipantModel) TableName() string { return "participants" }
 
 // MessageModel maps to the `messages` table.
 type MessageModel struct {
-	ID                   string    `gorm:"primaryKey;size:64;index:idx_messages_room_created"`
-	RoomID               string    `gorm:"size:64;not null;index:idx_messages_room_created"`
-	SenderID             string    `gorm:"size:64;not null"`
-	SenderName           string    `gorm:"size:128;not null"`
-	SenderType           string    `gorm:"size:32;not null"`
-	Content              string    `gorm:"type:text;not null"`
-	DialogueRunID        string    `gorm:"column:dialogue_run_id;size:64;index:idx_messages_dialogue_run"`
-	TurnIndex            int       `gorm:"column:turn_index;not null;default:0"`
-	ParentMessageID      string    `gorm:"column:parent_message_id;size:64"`
-	KnowledgeSourcesJSON string    `gorm:"column:knowledge_sources_json;type:text"`
-	ArtifactsJSON        string    `gorm:"column:artifacts_json;type:mediumtext"`
-	CreatedAt            time.Time `gorm:"not null;index:idx_messages_room_created"`
+	ID                   string         `gorm:"primaryKey;size:64;index:idx_messages_room_created"`
+	AgentRunID           *string        `gorm:"column:agent_run_id;size:64;uniqueIndex:uk_messages_agent_run_id"`
+	AgentRun             *AgentRunModel `gorm:"foreignKey:AgentRunID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT"`
+	RoomID               string         `gorm:"size:64;not null;index:idx_messages_room_created"`
+	SenderID             string         `gorm:"size:64;not null"`
+	SenderName           string         `gorm:"size:128;not null"`
+	SenderType           string         `gorm:"size:32;not null"`
+	Content              string         `gorm:"type:text;not null"`
+	DialogueRunID        string         `gorm:"column:dialogue_run_id;size:64;index:idx_messages_dialogue_run"`
+	TurnIndex            int            `gorm:"column:turn_index;not null;default:0"`
+	ParentMessageID      string         `gorm:"column:parent_message_id;size:64"`
+	KnowledgeSourcesJSON string         `gorm:"column:knowledge_sources_json;type:text"`
+	ArtifactsJSON        string         `gorm:"column:artifacts_json;type:mediumtext"`
+	CreatedAt            time.Time      `gorm:"not null;index:idx_messages_room_created"`
 }
 
 func (MessageModel) TableName() string { return "messages" }
@@ -126,9 +130,30 @@ type AgentRunModel struct {
 	Error            *string    `gorm:"type:text"`
 	StartedAt        time.Time  `gorm:"not null"`
 	CompletedAt      *time.Time `gorm:""`
+	ModelProfileID   *string    `gorm:"column:model_profile_id;size:64;index"`
+	ModelSource      string     `gorm:"column:model_source;size:32;not null;default:''"`
+	ModelName        string     `gorm:"column:model_name;size:255;not null;default:''"`
 }
 
 func (AgentRunModel) TableName() string { return "agent_runs" }
+
+type ModelProfileModel struct {
+	ID               string    `gorm:"primaryKey;size:64"`
+	Name             string    `gorm:"size:128;not null"`
+	RuntimeScope     string    `gorm:"column:runtime_scope;size:32;not null;index"`
+	Protocol         string    `gorm:"size:64;not null"`
+	BaseURL          string    `gorm:"column:base_url;size:1024;not null"`
+	ModelName        string    `gorm:"column:model_name;size:255;not null"`
+	APIKeyCiphertext string    `gorm:"column:api_key_ciphertext;type:text;not null"`
+	APIKeyHint       string    `gorm:"column:api_key_hint;size:32;not null;default:''"`
+	Enabled          bool      `gorm:"not null;default:true"`
+	IsDefault        bool      `gorm:"column:is_default;not null;default:false"`
+	DefaultSlot      *string   `gorm:"column:default_slot;size:32;uniqueIndex:uk_model_profiles_default_slot"`
+	CreatedAt        time.Time `gorm:"not null"`
+	UpdatedAt        time.Time `gorm:"not null"`
+}
+
+func (ModelProfileModel) TableName() string { return "model_profiles" }
 
 // KnowledgeDocumentModel maps to metadata for room-level or agent-level knowledge documents.
 type KnowledgeDocumentModel struct {
@@ -181,7 +206,7 @@ func (SchemaMigrationModel) TableName() string { return "schema_migrations" }
 // ── Domain → GORM 转换 ───────────────────────────────────────────────
 
 func agentToModel(a model.Agent, sortOrder int) AgentModel {
-	return AgentModel{
+	m := AgentModel{
 		ID:           a.ID,
 		Name:         a.Name,
 		Mention:      a.Mention,
@@ -193,10 +218,14 @@ func agentToModel(a model.Agent, sortOrder int) AgentModel {
 		Enabled:      a.Enabled,
 		SortOrder:    sortOrder,
 	}
+	if a.ModelProfileID != "" {
+		m.ModelProfileID = strPtr(a.ModelProfileID)
+	}
+	return m
 }
 
 func roomAgentToModel(roomID string, a model.Agent, sortOrder int) RoomAgentModel {
-	return RoomAgentModel{
+	m := RoomAgentModel{
 		RoomID:       roomID,
 		AgentID:      a.ID,
 		Name:         a.Name,
@@ -209,6 +238,10 @@ func roomAgentToModel(roomID string, a model.Agent, sortOrder int) RoomAgentMode
 		Enabled:      a.Enabled,
 		SortOrder:    sortOrder,
 	}
+	if a.ModelProfileID != "" {
+		m.ModelProfileID = strPtr(a.ModelProfileID)
+	}
+	return m
 }
 
 func participantToModel(input store.AddParticipantInput) ParticipantModel {
@@ -226,7 +259,7 @@ func participantToModel(input store.AddParticipantInput) ParticipantModel {
 }
 
 func messageToModel(msg model.Message) MessageModel {
-	return MessageModel{
+	m := MessageModel{
 		ID:                   msg.ID,
 		RoomID:               msg.RoomID,
 		SenderID:             msg.SenderID,
@@ -240,6 +273,10 @@ func messageToModel(msg model.Message) MessageModel {
 		ArtifactsJSON:        encodeMessageArtifacts(msg.Artifacts),
 		CreatedAt:            msg.CreatedAt,
 	}
+	if msg.AgentRunID != "" {
+		m.AgentRunID = strPtr(msg.AgentRunID)
+	}
+	return m
 }
 
 func agentRunToModel(run store.AgentRun) AgentRunModel {
@@ -250,6 +287,11 @@ func agentRunToModel(run store.AgentRun) AgentRunModel {
 		TriggerMessageID: run.TriggerMessageID,
 		Status:           run.Status,
 		StartedAt:        run.StartedAt,
+		ModelSource:      run.ModelSource,
+		ModelName:        run.ModelName,
+	}
+	if run.ModelProfileID != "" {
+		m.ModelProfileID = strPtr(run.ModelProfileID)
 	}
 	if run.Error != "" {
 		m.Error = strPtr(run.Error)
@@ -305,29 +347,31 @@ func knowledgeChunkToModel(chunk model.KnowledgeChunk) KnowledgeChunkModel {
 
 func (m AgentModel) toDomain() model.Agent {
 	return model.Agent{
-		ID:           m.ID,
-		Name:         m.Name,
-		Mention:      m.Mention,
-		Role:         m.Role,
-		Runtime:      model.NormalizeAgentRuntime(m.Runtime),
-		Source:       model.NormalizeAgentSource(m.Source),
-		Description:  m.Description,
-		SystemPrompt: m.SystemPrompt,
-		Enabled:      m.Enabled,
+		ID:             m.ID,
+		Name:           m.Name,
+		Mention:        m.Mention,
+		Role:           m.Role,
+		Runtime:        model.NormalizeAgentRuntime(m.Runtime),
+		Source:         model.NormalizeAgentSource(m.Source),
+		Description:    m.Description,
+		SystemPrompt:   m.SystemPrompt,
+		Enabled:        m.Enabled,
+		ModelProfileID: strPtrDeref(m.ModelProfileID),
 	}
 }
 
 func (m RoomAgentModel) toDomain() model.Agent {
 	return model.Agent{
-		ID:           m.AgentID,
-		Name:         m.Name,
-		Mention:      m.Mention,
-		Role:         m.Role,
-		Runtime:      model.NormalizeAgentRuntime(m.Runtime),
-		Source:       model.NormalizeAgentSource(m.Source),
-		Description:  m.Description,
-		SystemPrompt: m.SystemPrompt,
-		Enabled:      m.Enabled,
+		ID:             m.AgentID,
+		Name:           m.Name,
+		Mention:        m.Mention,
+		Role:           m.Role,
+		Runtime:        model.NormalizeAgentRuntime(m.Runtime),
+		Source:         model.NormalizeAgentSource(m.Source),
+		Description:    m.Description,
+		SystemPrompt:   m.SystemPrompt,
+		Enabled:        m.Enabled,
+		ModelProfileID: strPtrDeref(m.ModelProfileID),
 	}
 }
 
@@ -342,6 +386,7 @@ func (m ParticipantModel) toDomain() model.Participant {
 func (m MessageModel) toDomain() model.Message {
 	return model.Message{
 		ID:               m.ID,
+		AgentRunID:       strPtrDeref(m.AgentRunID),
 		RoomID:           m.RoomID,
 		SenderID:         m.SenderID,
 		SenderName:       m.SenderName,
@@ -366,7 +411,22 @@ func (m AgentRunModel) toStore() store.AgentRun {
 		Error:            strPtrDeref(m.Error),
 		StartedAt:        m.StartedAt,
 		CompletedAt:      m.CompletedAt,
+		ModelProfileID:   strPtrDeref(m.ModelProfileID),
+		ModelSource:      m.ModelSource,
+		ModelName:        m.ModelName,
 	}
+}
+
+func modelProfileToModel(p model.ModelProfile) ModelProfileModel {
+	m := ModelProfileModel{ID: p.ID, Name: p.Name, RuntimeScope: p.RuntimeScope, Protocol: p.Protocol, BaseURL: p.BaseURL, ModelName: p.ModelName, APIKeyCiphertext: p.APIKeyCiphertext, APIKeyHint: p.APIKeyHint, Enabled: p.Enabled, IsDefault: p.IsDefault, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
+	if p.IsDefault {
+		m.DefaultSlot = strPtr(p.RuntimeScope)
+	}
+	return m
+}
+
+func (m ModelProfileModel) toDomain() model.ModelProfile {
+	return model.ModelProfile{ID: m.ID, Name: m.Name, RuntimeScope: m.RuntimeScope, Protocol: m.Protocol, BaseURL: m.BaseURL, ModelName: m.ModelName, APIKeyCiphertext: m.APIKeyCiphertext, APIKeyHint: m.APIKeyHint, HasAPIKey: m.APIKeyCiphertext != "", Enabled: m.Enabled, IsDefault: m.IsDefault, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt}
 }
 
 func (m DialogueRunModel) toStore() store.DialogueRun {

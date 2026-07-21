@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Alert, Button, Group, Paper, PasswordInput, Stack, Text, Title } from '@mantine/core'
 import { clearStoredAdminKey, getStoredAdminKey, setStoredAdminKey, verifyAdminKey } from '../api/roomClient'
 import { LogIn, Settings, Sparkles } from 'lucide-react'
 
@@ -70,46 +71,42 @@ function AdminGate({ children, onBackHome }) {
             <Settings size={17} />
             管理后台
           </span>
-          <button className="entry-dashboard-nav-item" type="button" onClick={onBackHome}>
-            <LogIn size={17} />
+          <Button className="entry-dashboard-nav-item" type="button" variant="subtle" color="gray" leftSection={<LogIn size={17} />} onClick={onBackHome}>
             会议入口
-          </button>
+          </Button>
         </nav>
       </header>
 
       <section className="admin-gate-layout">
-        <form className="panel panel--primary-flow" onSubmit={handleSubmit}>
-          <div className="panel-header">
-            <h2>进入管理后台</h2>
-            <p className="panel-copy">输入管理密钥（ADMIN_API_KEY）以管理会议记录、归档房间和 Agent 配置。</p>
-          </div>
+        <Paper component="form" className="panel panel--primary-flow" withBorder radius="md" shadow="xs" onSubmit={handleSubmit}>
+          <Stack gap="md">
+            <div className="panel-header">
+              <Title order={2}>进入管理后台</Title>
+              <Text className="panel-copy">输入管理密钥（ADMIN_API_KEY）以管理会议记录、归档房间和 Agent 配置。</Text>
+            </div>
 
-          {errorMessage ? <p className="banner banner--error">{errorMessage}</p> : null}
+            {errorMessage ? <Alert color="red" variant="light">{errorMessage}</Alert> : null}
 
-          <div className="form-stack">
-            <div className="field-group">
-              <label htmlFor="admin-key">管理密钥</label>
-              <input
+            <PasswordInput
                 id="admin-key"
+                label="管理密钥"
+                description="密钥仅保存在本浏览器，用于随请求发送，不会写入构建产物。"
                 autoFocus
-                type="password"
                 value={keyInput}
                 onChange={(event) => setKeyInput(event.target.value)}
                 placeholder="ADMIN_API_KEY"
                 disabled={status === 'checking'}
                 maxLength={200}
               />
-              <p className="field-hint">密钥仅保存在本浏览器，用于随请求发送，不会写入构建产物。</p>
-            </div>
-          </div>
 
-          <div className="button-row button-row--stack-end">
-            <span className="helper-text">{status === 'checking' ? '正在校验已保存的密钥...' : '校验通过后进入后台。'}</span>
-            <button className="button button--primary" type="submit" disabled={status === 'checking'}>
+            <Group justify="space-between" align="center">
+              <Text className="helper-text">{status === 'checking' ? '正在校验已保存的密钥...' : '校验通过后进入后台。'}</Text>
+              <Button color="teal" type="submit" disabled={status === 'checking'}>
               进入后台
-            </button>
-          </div>
-        </form>
+              </Button>
+            </Group>
+          </Stack>
+        </Paper>
       </section>
     </main>
   )

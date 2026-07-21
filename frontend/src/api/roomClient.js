@@ -121,9 +121,13 @@ export async function getMessages(roomId, passcode = '', { before = '', limit } 
   return parseResponse(response)
 }
 
-export async function getRoomActivity(roomId, passcode = '') {
+export async function getRoomActivity(roomId, passcode = '', { limit } = {}) {
   const encodedRoomId = encodeURIComponent(roomId)
-  const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/activity`, {
+  const params = new URLSearchParams()
+  if (limit) {
+    params.set('limit', String(limit))
+  }
+  const response = await fetch(`${API_BASE_PATH}/rooms/${encodedRoomId}/activity${params.toString() ? `?${params.toString()}` : ''}`, {
     headers: withAdminKey(withRoomPasscode({}, passcode)),
   })
   return parseResponse(response)
@@ -305,6 +309,49 @@ export async function listRooms({ status = '', limit, offset } = {}) {
   return parseResponse(response)
 }
 
+export async function listModelProfiles() {
+  const response = await fetch(`${API_BASE_PATH}/model-profiles`, { headers: withAdminKey() })
+  return parseResponse(response)
+}
+
+export async function createModelProfile(profile) {
+  const response = await fetch(`${API_BASE_PATH}/model-profiles`, { method: 'POST', headers: withAdminKey(JSON_HEADERS), body: JSON.stringify(profile) })
+  return parseResponse(response)
+}
+
+export async function updateModelProfile(profileId, profile) {
+  const response = await fetch(`${API_BASE_PATH}/model-profiles/${encodeURIComponent(profileId)}`, { method: 'PUT', headers: withAdminKey(JSON_HEADERS), body: JSON.stringify(profile) })
+  return parseResponse(response)
+}
+
+export async function setDefaultModelProfile(profileId) {
+  const response = await fetch(`${API_BASE_PATH}/model-profiles/${encodeURIComponent(profileId)}/default`, { method: 'POST', headers: withAdminKey() })
+  return parseResponse(response)
+}
+
+export function disableModelProfile(profileId) {
+  return updateModelProfile(profileId, { enabled: false })
+}
+
+export function clearModelProfileAPIKey(profileId) {
+  return updateModelProfile(profileId, { clearAPIKey: true })
+}
+
+export async function deleteModelProfile(profileId) {
+  const response = await fetch(`${API_BASE_PATH}/model-profiles/${encodeURIComponent(profileId)}`, { method: 'DELETE', headers: withAdminKey() })
+  return parseResponse(response)
+}
+
+export async function testSavedModelProfile(profileId) {
+  const response = await fetch(`${API_BASE_PATH}/model-profiles/${encodeURIComponent(profileId)}/test`, { method: 'POST', headers: withAdminKey() })
+  return parseResponse(response)
+}
+
+export async function testDraftModelProfile(profile) {
+  const response = await fetch(`${API_BASE_PATH}/model-profiles/test`, { method: 'POST', headers: withAdminKey(JSON_HEADERS), body: JSON.stringify(profile) })
+  return parseResponse(response)
+}
+
 export async function listRecentRooms({ limit } = {}) {
   const params = new URLSearchParams()
   if (limit) {
@@ -312,6 +359,11 @@ export async function listRecentRooms({ limit } = {}) {
   }
   const query = params.toString()
   const response = await fetch(`${API_BASE_PATH}/recent-rooms${query ? `?${query}` : ''}`)
+  return parseResponse(response)
+}
+
+export async function getEntrySummary() {
+  const response = await fetch(`${API_BASE_PATH}/entry-summary`)
   return parseResponse(response)
 }
 

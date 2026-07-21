@@ -1,0 +1,253 @@
+syntax = "proto3";
+
+package agentroom.runtime.v1;
+
+option go_package = "agentroom/backend/internal/agentproto/v1;agentruntimev1";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// AgentRuntimeService executes one immutable Agent turn. Cross-Agent selection,
+// dialogue continuation, persistence, and room broadcasting remain Go concerns.
+service AgentRuntimeService {
+  rpc ExecuteAgent(ExecuteAgentRequest) returns (stream AgentEvent);
+}
+
+enum ExecutorKind {
+  EXECUTOR_KIND_UNSPECIFIED = 0;
+  EXECUTOR_KIND_LLM = 1;
+  EXECUTOR_KIND_DEEPAGENT = 2;
+}
+
+enum SenderType {
+  SENDER_TYPE_UNSPECIFIED = 0;
+  SENDER_TYPE_HUMAN = 1;
+  SENDER_TYPE_AGENT = 2;
+  SENDER_TYPE_SYSTEM = 3;
+}
+
+enum RunErrorCode {
+  RUN_ERROR_CODE_UNSPECIFIED = 0;
+  RUN_ERROR_CODE_INVALID_REQUEST = 1;
+  RUN_ERROR_CODE_MODEL_NOT_CONFIGURED = 2;
+  RUN_ERROR_CODE_MODEL_AUTHENTICATION_FAILED = 3;
+  RUN_ERROR_CODE_MODEL_RATE_LIMITED = 4;
+  RUN_ERROR_CODE_MODEL_TIMEOUT = 5;
+  RUN_ERROR_CODE_CANCELLED = 6;
+  RUN_ERROR_CODE_TOOL_FAILED = 7;
+  RUN_ERROR_CODE_OUTPUT_INVALID = 8;
+  RUN_ERROR_CODE_RESOURCE_EXHAUSTED = 9;
+  RUN_ERROR_CODE_EXECUTOR_UNAVAILABLE = 10;
+  RUN_ERROR_CODE_PROTOCOL_ERROR = 11;
+  RUN_ERROR_CODE_INTERNAL = 12;
+}
+
+message RoomSnapshot {
+  string id = 1;
+  string name = 2;
+  string dialogue_mode = 3;
+}
+
+message AgentSnapshot {
+  string id = 1;
+  string name = 2;
+  string mention = 3;
+  string role = 4;
+  string description = 5;
+  string system_prompt = 6;
+  string runtime = 7;
+  string model_profile_id = 8;
+}
+
+message MessageSnapshot {
+  string id = 1;
+  string sender_id = 2;
+  string sender_name = 3;
+  SenderType sender_type = 4;
+  string content = 5;
+  google.protobuf.Timestamp created_at = 6;
+  string dialogue_run_id = 7;
+  int32 turn_index = 8;
+  string parent_message_id = 9;
+}
+
+message KnowledgeChunk {
+  string id = 1;
+  string document_id = 2;
+  string document_name = 3;
+  string scope = 4;
+  string scope_id = 5;
+  int32 chunk_index = 6;
+  string content = 7;
+}
+
+// ModelConnection is sensitive request-only data. Interceptors and application
+// logs must never serialize this message or expose api_key.
+message ModelConnection {
+  string protocol = 1;
+  string base_url = 2;
+  string model_name = 3;
+  string api_key = 4;
+  string profile_id = 5;
+  string source = 6;
+}
+
+message ExecutionLimits {
+  google.protobuf.Duration timeout = 1;
+  uint32 max_output_bytes = 2;
+  uint32 max_artifact_bytes = 3;
+  uint32 max_tool_steps = 4;
+}
+
+message ParticipantSnapshot {
+  string id = 1;
+  string name = 2;
+}
+
+// PromptContextSnapshot carries the complete structured input used by the Go
+// Prompt Composer. It intentionally contains no rendered prompt so Python can
+// preserve trust boundaries and compose the provider request itself.
+message PromptContextSnapshot {
+  string room_name = 1;
+  string dialogue_mode = 2;
+  repeated ParticipantSnapshot online_human_participants = 3;
+  repeated AgentSnapshot room_agents = 4;
+  string trigger_sender = 5;
+  SenderType trigger_sender_type = 6;
+  string trigger_content = 7;
+  string latest_visible_speaker = 8;
+  SenderType latest_visible_speaker_type = 9;
+  repeated MessageSnapshot transcript = 10;
+  repeated KnowledgeChunk knowledge_chunks = 11;
+  AgentSnapshot current_speaker = 12;
+  string root_human_trigger_sender = 13;
+  SenderType root_human_trigger_type = 14;
+  string root_human_trigger_content = 15;
+  uint32 autonomous_turn_index = 16;
+  uint32 max_autonomous_turns = 17;
+  bool allow_self_followup = 18;
+  bool allow_agent_to_agent_mentions = 19;
+  uint32 max_turns_per_agent = 20;
+  string response_strategy = 21;
+  repeated AgentSnapshot eligible_peers = 22;
+}
+
+message ExecuteAgentRequest {
+  string protocol_version = 1;
+  string run_id = 2;
+  string trace_id = 3;
+  string dialogue_run_id = 4;
+  ExecutorKind executor_kind = 5;
+  RoomSnapshot room = 6;
+  AgentSnapshot agent = 7;
+  MessageSnapshot trigger = 8;
+  repeated MessageSnapshot recent_messages = 9;
+  repeated KnowledgeChunk knowledge_chunks = 10;
+  ModelConnection model = 11;
+  ExecutionLimits limits = 12;
+  map<string, string> metadata = 13;
+  PromptContextSnapshot prompt_context = 14;
+}
+
+message Usage {
+  uint64 input_tokens = 1;
+  uint64 output_tokens = 2;
+  uint64 total_tokens = 3;
+}
+
+message ModelAudit {
+  string profile_id = 1;
+  string source = 2;
+  string model_name = 3;
+}
+
+message KnowledgeSource {
+  string document_id = 1;
+  string document_name = 2;
+  string scope = 3;
+}
+
+message Artifact {
+  string id = 1;
+  string type = 2;
+  string title = 3;
+  string file_name = 4;
+  string mime_type = 5;
+  bytes content = 6;
+  string external_uri = 7;
+}
+
+message RunFailure {
+  RunErrorCode code = 1;
+  string message = 2;
+  bool retryable = 3;
+}
+
+message AcceptedEvent {}
+
+message ModelStartedEvent {
+  string model_name = 1;
+}
+
+message ModelCompletedEvent {
+  string model_name = 1;
+  Usage usage = 2;
+}
+
+message ToolStartedEvent {
+  string tool_call_id = 1;
+  string tool_name = 2;
+  string input_summary = 3;
+}
+
+message ToolCompletedEvent {
+  string tool_call_id = 1;
+  string tool_name = 2;
+  string output_summary = 3;
+}
+
+message ToolFailedEvent {
+  string tool_call_id = 1;
+  string tool_name = 2;
+  RunFailure failure = 3;
+}
+
+message OutputDeltaEvent {
+  string text = 1;
+}
+
+message ArtifactReadyEvent {
+  Artifact artifact = 1;
+}
+
+message CompletedEvent {
+  string content = 1;
+  repeated Artifact artifacts = 2;
+  repeated KnowledgeSource knowledge_sources = 3;
+  ModelAudit model = 4;
+  Usage usage = 5;
+}
+
+message FailedEvent {
+  RunFailure failure = 1;
+}
+
+message AgentEvent {
+  string protocol_version = 1;
+  string run_id = 2;
+  uint64 sequence = 3;
+  google.protobuf.Timestamp occurred_at = 4;
+
+  oneof payload {
+    AcceptedEvent accepted = 10;
+    ModelStartedEvent model_started = 11;
+    ModelCompletedEvent model_completed = 12;
+    ToolStartedEvent tool_started = 13;
+    ToolCompletedEvent tool_completed = 14;
+    ToolFailedEvent tool_failed = 15;
+    OutputDeltaEvent output_delta = 16;
+    ArtifactReadyEvent artifact_ready = 17;
+    CompletedEvent completed = 18;
+    FailedEvent failed = 19;
+  }
+}

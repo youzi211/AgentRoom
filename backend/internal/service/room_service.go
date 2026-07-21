@@ -38,6 +38,7 @@ type RoomService struct {
 type roomStore interface {
 	Ping(ctx context.Context) error
 	ListRooms(ctx context.Context, query store.ListRoomsQuery) ([]model.RoomSummary, error)
+	EntrySummary(ctx context.Context, query store.EntrySummaryQuery) (store.EntrySummary, error)
 	AddParticipant(ctx context.Context, input store.AddParticipantInput) (model.Participant, error)
 	MarkParticipantLeft(ctx context.Context, participantID string, leftAt time.Time) error
 	AddMessage(ctx context.Context, message model.Message) (model.Message, error)
@@ -59,6 +60,12 @@ type agentResponseJob struct {
 }
 
 func NewRoomService(manager *room.Manager, agents *AgentService, knowledge *KnowledgeService, runner *agent.Runner, focus *FocusService, s roomStore) *RoomService {
+	lifecycle := NewMeetingLifecycle(s)
+	if runner != nil {
+		lifecycle.WithRoomStopped(func(roomID string) {
+			runner.CancelRoom(roomID)
+		})
+	}
 	return &RoomService{
 		manager:   manager,
 		agents:    agents,
@@ -67,7 +74,7 @@ func NewRoomService(manager *room.Manager, agents *AgentService, knowledge *Know
 		focus:     focus,
 		store:     s,
 		logger:    logging.Component("room_service"),
-		lifecycle: NewMeetingLifecycle(s),
+		lifecycle: lifecycle,
 	}
 }
 

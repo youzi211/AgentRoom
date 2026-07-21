@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Alert, Badge, Button, Group, Paper, ScrollArea, Table, Text, Title } from '@mantine/core'
 import { archiveRoom, listRooms, reopenRoom, restoreRoom } from '../api/roomClient'
 import MeetingRoomDetail from './MeetingRoomDetail'
 import {
@@ -99,83 +100,93 @@ function MeetingAdmin() {
       <section className="admin-hero">
         <div>
           <p className="eyebrow">会议记录</p>
-          <h1>管理所有会议与纪要</h1>
-          <p className="section-copy">
+          <Title order={1}>管理所有会议与纪要</Title>
+          <Text className="section-copy">
             浏览进行中、已关闭和已归档的会议，查看全部消息历史，并按新的生命周期语义执行归档、恢复会议或取消归档。
-          </p>
+          </Text>
         </div>
       </section>
 
-      {errorMessage ? <p className="banner banner--error">{errorMessage}</p> : null}
+      {errorMessage ? <Alert color="red" variant="light">{errorMessage}</Alert> : null}
 
-      <div className="panel">
+      <Paper className="panel" withBorder radius="md" shadow="xs">
         <div className="panel-header panel-header--horizontal">
           <div className="panel-title-row">
-            <h2>会议列表</h2>
-            <span className="panel-badge panel-badge--neutral">{rooms.length}</span>
+            <Title order={2}>会议列表</Title>
+            <Badge color="gray" variant="light">{rooms.length}</Badge>
           </div>
-          <div className="agent-select-actions" role="tablist" aria-label="会议状态筛选">
+          <Group className="agent-select-actions" gap="xs" role="tablist" aria-label="会议状态筛选">
             {STATUS_FILTERS.map((filter) => (
-              <button
+              <Button
                 key={filter.value || 'all'}
                 type="button"
-                className={`button button--ghost button--compact${statusFilter === filter.value ? ' button--active' : ''}`}
+                size="xs"
+                variant={statusFilter === filter.value ? 'light' : 'subtle'}
+                color={statusFilter === filter.value ? 'teal' : 'gray'}
                 onClick={() => setStatusFilter(filter.value)}
               >
                 {filter.label}
-              </button>
+              </Button>
             ))}
-          </div>
+          </Group>
         </div>
 
         {isLoading ? (
-          <p className="sidebar-empty">正在加载...</p>
+          <Text className="sidebar-empty">正在加载...</Text>
         ) : rooms.length === 0 ? (
-          <p className="sidebar-empty">暂无会议记录。</p>
+          <Text className="sidebar-empty">暂无会议记录。</Text>
         ) : (
-          <div className="meeting-table" role="table">
-            <div className="meeting-table-head" role="row">
-              <span role="columnheader">会议名称</span>
-              <span role="columnheader">状态</span>
-              <span role="columnheader">消息数</span>
-              <span role="columnheader">创建时间</span>
-              <span role="columnheader">最近消息</span>
-              <span role="columnheader">操作</span>
-            </div>
+          <ScrollArea>
+            <Table className="meeting-table" verticalSpacing="sm" horizontalSpacing="md">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>会议名称</Table.Th>
+                  <Table.Th>状态</Table.Th>
+                  <Table.Th>消息数</Table.Th>
+                  <Table.Th>创建时间</Table.Th>
+                  <Table.Th>最近消息</Table.Th>
+                  <Table.Th>操作</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
             {rooms.map((roomItem) => (
-              <div className="meeting-table-row" role="row" key={roomItem.id}>
-                <span className="meeting-cell-name" role="cell">
+              <Table.Tr key={roomItem.id}>
+                <Table.Td className="meeting-cell-name">
                   <strong>{roomItem.name}</strong>
-                  <button type="button" className="meeting-room-id" title="复制房间 ID" onClick={() => handleCopyId(roomItem.id)}>
+                  <Button type="button" className="meeting-room-id" title="复制房间 ID" variant="subtle" color="gray" size="compact-xs" onClick={() => handleCopyId(roomItem.id)}>
                     {roomItem.id}
-                  </button>
-                </span>
-                <span role="cell">
-                  <span className={`agent-state agent-state--${toneForRoomStatus(roomItem.status)}`}>
+                  </Button>
+                </Table.Td>
+                <Table.Td>
+                  <Badge className={`agent-state agent-state--${toneForRoomStatus(roomItem.status)}`} color="teal" variant="light">
                     {labelForRoomStatus(roomItem.status)}
-                  </span>
-                </span>
-                <span role="cell">{roomItem.messageCount ?? 0}</span>
-                <span role="cell">{formatDateTime(roomItem.createdAt)}</span>
-                <span role="cell">{formatDateTime(roomItem.lastMessageAt)}</span>
-                <span className="meeting-cell-actions" role="cell">
+                  </Badge>
+                </Table.Td>
+                <Table.Td>{roomItem.messageCount ?? 0}</Table.Td>
+                <Table.Td>{formatDateTime(roomItem.createdAt)}</Table.Td>
+                <Table.Td>{formatDateTime(roomItem.lastMessageAt)}</Table.Td>
+                <Table.Td className="meeting-cell-actions">
                   {actionsForRoomStatus(roomItem.status).map((action) => (
-                    <button
+                    <Button
                       key={`${roomItem.id}:${action}`}
-                      className={`button ${action === 'detail' ? 'button--ghost' : 'button--secondary'} button--compact`}
+                      size="xs"
+                      variant={action === 'detail' ? 'subtle' : 'light'}
+                      color={action === 'detail' ? 'gray' : 'teal'}
                       type="button"
                       onClick={() => handleRoomAction(roomItem, action)}
                       disabled={action !== 'detail' && busyRoomId === roomItem.id}
                     >
                       {labelForRoomAction(action)}
-                    </button>
+                    </Button>
                   ))}
-                </span>
-              </div>
+                </Table.Td>
+              </Table.Tr>
             ))}
-          </div>
+              </Table.Tbody>
+            </Table>
+          </ScrollArea>
         )}
-      </div>
+      </Paper>
 
       {selectedRoom ? (
         <MeetingRoomDetail

@@ -13,3 +13,10 @@ backend/server.exe
 .vite-dev-*.log
 .vite-dev-*.pid
 test-results/
+.agents/
+.pytest_cache/
+.tools/
+.uv-cache/
+.go-cache/
+.playwright-cli/
+output/

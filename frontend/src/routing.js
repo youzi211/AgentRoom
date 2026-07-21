@@ -4,6 +4,7 @@ const ROOM_SESSION_PREFIX = 'agentroom:room-session:'
 export const ROUTE_NAMES = {
   home: 'home',
   agents: 'agents',
+  models: 'models',
   admin: 'admin',
   room: 'room',
   notFound: 'notFound',
@@ -12,6 +13,7 @@ export const ROUTE_NAMES = {
 export const ADMIN_SECTIONS = {
   meetings: 'meetings',
   agents: 'agents',
+  models: 'models',
 }
 
 export function parseCurrentRoute() {
@@ -26,8 +28,12 @@ export function parseCurrentRoute() {
     return { name: ROUTE_NAMES.admin, section: ADMIN_SECTIONS.agents }
   }
 
+  if (segments.length === 1 && segments[0] === 'models') {
+    return { name: ROUTE_NAMES.admin, section: ADMIN_SECTIONS.models }
+  }
+
   if (segments.length >= 1 && segments[0] === 'admin') {
-    const section = segments[1] === 'agents' ? ADMIN_SECTIONS.agents : ADMIN_SECTIONS.meetings
+    const section = segments[1] === 'agents' ? ADMIN_SECTIONS.agents : segments[1] === 'models' ? ADMIN_SECTIONS.models : ADMIN_SECTIONS.meetings
     return { name: ROUTE_NAMES.admin, section }
   }
 
@@ -50,7 +56,7 @@ export function navigateHome({ replace = false } = {}) {
 }
 
 export function navigateAdmin(section = ADMIN_SECTIONS.meetings, { replace = false } = {}) {
-  const path = section === ADMIN_SECTIONS.agents ? '/admin/agents' : '/admin'
+	const path = section === ADMIN_SECTIONS.agents ? '/agents' : section === ADMIN_SECTIONS.models ? '/models' : '/admin'
   navigate(path, { replace })
 }
 

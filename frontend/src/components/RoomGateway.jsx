@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Button, Paper, Text, Title } from '@mantine/core'
 import { getRoom } from '../api/roomClient'
 import { clearRoomSession } from '../routing'
 import ChatRoom from './ChatRoom'
@@ -93,13 +94,13 @@ function RoomGateway({
   if (loadState.status === 'loading') {
     return (
       <main className="workbench workbench--center">
-        <section className="panel direct-entry-panel">
+        <Paper component="section" className="panel direct-entry-panel" withBorder radius="md" shadow="xs">
           <div className="panel-header">
-            <p className="eyebrow">会议链接</p>
-            <h1>正在确认会议状态</h1>
-            <p className="section-copy">我们正在检查这个会议是否仍在进行中，以及当前链接是否可以直接查看历史记录。</p>
+            <Text className="eyebrow">会议链接</Text>
+            <Title order={1}>正在确认会议状态</Title>
+            <Text className="section-copy">我们正在检查这个会议是否仍在进行中，以及当前链接是否可以直接查看历史记录。</Text>
           </div>
-        </section>
+        </Paper>
       </main>
     )
   }
@@ -171,18 +172,18 @@ function RoomGateway({
 function RoomAccessDenied({ title, description, onBackHome }) {
   return (
     <main className="workbench workbench--center">
-      <section className="panel direct-entry-panel">
+      <Paper component="section" className="panel direct-entry-panel" withBorder radius="md" shadow="xs">
         <div className="panel-header panel-header--horizontal">
           <div>
-            <p className="eyebrow">只读限制</p>
-            <h1>{title}</h1>
-            <p className="section-copy">{description}</p>
+            <Text className="eyebrow">只读限制</Text>
+            <Title order={1}>{title}</Title>
+            <Text className="section-copy">{description}</Text>
           </div>
-          <button className="button button--primary" type="button" onClick={onBackHome}>
+          <Button color="teal" type="button" onClick={onBackHome}>
             返回入口
-          </button>
+          </Button>
         </div>
-      </section>
+      </Paper>
     </main>
   )
 }

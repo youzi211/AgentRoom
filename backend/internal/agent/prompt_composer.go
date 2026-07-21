@@ -10,6 +10,30 @@ import (
 	"github.com/tmc/langchaingo/prompts"
 )
 
+const (
+	// transcriptFullLayerMessageCount is how many of the most recent transcript
+	// messages keep full-text rendering (subject to transcriptMessageCharLimit).
+	// Older messages fall back to a single summary line.
+	transcriptFullLayerMessageCount = 10
+	// transcriptMessageCharLimit caps a single full-layer message body; content
+	// beyond this is truncated with transcriptTruncatedSuffix.
+	transcriptMessageCharLimit = 800
+	// transcriptSummaryPrefixChars caps the content prefix kept for a
+	// summary-layer (older) message.
+	transcriptSummaryPrefixChars = 80
+	// transcriptTotalBudgetChars is the overall character budget for the
+	// rendered transcript block, enforced after layering.
+	transcriptTotalBudgetChars = 6000
+	// transcriptMinRetainedMessages is the floor below which budget
+	// enforcement stops dropping the oldest messages.
+	transcriptMinRetainedMessages = 5
+)
+
+const (
+	transcriptTruncatedSuffix = "…[消息过长，已截断]"
+	transcriptSummarySuffix   = "…"
+)
+
 var sharedAgentPromptTemplate = prompts.NewChatPromptTemplate([]prompts.MessageFormatter{
 	prompts.NewSystemMessagePromptTemplate(
 		`{{.systemContract}}{{.roleTemplateBlock}}`,
@@ -45,6 +69,12 @@ func composePromptMessages(responder model.Agent, promptContext PromptContext) (
 		"knowledgeBlock":       formatKnowledgeBlock(promptContext.KnowledgeChunks),
 		"outputContract":       fixedOutputContract(),
 	})
+}
+
+// ComposePromptForRuntime exposes the structured prompt contract to runtime
+// golden tests and migration adapters without exposing provider credentials.
+func ComposePromptForRuntime(responder model.Agent, promptContext PromptContext) ([]llm.ChatMessage, error) {
+	return composePromptMessages(responder, promptContext)
 }
 
 func fixedSystemContract() string {
@@ -164,16 +194,77 @@ func formatTranscriptBlock(transcript []model.Message) string {
 		return builder.String()
 	}
 
-	for _, message := range transcript {
-		builder.WriteString("- ")
-		builder.WriteString(message.SenderName)
-		builder.WriteString(" (")
-		builder.WriteString(message.SenderType)
-		builder.WriteString("): ")
-		builder.WriteString(message.Content)
+	lines := renderTranscriptLines(transcript)
+	lines = enforceTranscriptBudget(lines)
+
+	for _, line := range lines {
+		builder.WriteString(line)
 		builder.WriteString("\n")
 	}
 	return strings.TrimRight(builder.String(), "\n")
+}
+
+// renderTranscriptLines renders each transcript message into one display line,
+// applying a new/old layering: the most recent transcriptFullLayerMessageCount
+// messages keep full-text rendering (subject to transcriptMessageCharLimit),
+// older messages are downgraded to a short summary line.
+func renderTranscriptLines(transcript []model.Message) []string {
+	fullLayerStart := len(transcript) - transcriptFullLayerMessageCount
+	if fullLayerStart < 0 {
+		fullLayerStart = 0
+	}
+
+	lines := make([]string, 0, len(transcript))
+	for index, message := range transcript {
+		if index < fullLayerStart {
+			lines = append(lines, formatTranscriptSummaryLine(message))
+			continue
+		}
+		lines = append(lines, formatTranscriptFullLine(message))
+	}
+	return lines
+}
+
+func formatTranscriptFullLine(message model.Message) string {
+	return "- " + message.SenderName + " (" + message.SenderType + "): " + truncateTranscriptContent(message.Content)
+}
+
+func formatTranscriptSummaryLine(message model.Message) string {
+	return "- " + message.SenderName + " (" + message.SenderType + "): " + summarizeTranscriptContent(message.Content)
+}
+
+func truncateTranscriptContent(content string) string {
+	runes := []rune(content)
+	if len(runes) <= transcriptMessageCharLimit {
+		return content
+	}
+	return string(runes[:transcriptMessageCharLimit]) + transcriptTruncatedSuffix
+}
+
+func summarizeTranscriptContent(content string) string {
+	runes := []rune(content)
+	if len(runes) <= transcriptSummaryPrefixChars {
+		return content
+	}
+	return string(runes[:transcriptSummaryPrefixChars]) + transcriptSummarySuffix
+}
+
+// enforceTranscriptBudget drops the oldest rendered lines when the total
+// character count still exceeds transcriptTotalBudgetChars after layering,
+// stopping once transcriptMinRetainedMessages lines remain.
+func enforceTranscriptBudget(lines []string) []string {
+	for len(lines) > transcriptMinRetainedMessages && transcriptLinesLength(lines) > transcriptTotalBudgetChars {
+		lines = lines[1:]
+	}
+	return lines
+}
+
+func transcriptLinesLength(lines []string) int {
+	total := 0
+	for _, line := range lines {
+		total += len(line) + 1
+	}
+	return total
 }
 
 func formatKnowledgeBlock(chunks []model.KnowledgeChunk) string {

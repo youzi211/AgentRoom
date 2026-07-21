@@ -14,6 +14,10 @@ from tavily import TavilyClient
 from agentroom_deepagent.config import Settings
 
 
+class SearchToolError(RuntimeError):
+    """Redacted boundary error for Tavily failures."""
+
+
 def build_search_tool(settings: Settings) -> Callable:
     """Return an `internet_search` callable backed by Tavily."""
     tavily_client = TavilyClient(api_key=settings.env["TAVILY_API_KEY"])
@@ -25,11 +29,14 @@ def build_search_tool(settings: Settings) -> Callable:
         include_raw_content: bool = settings.include_raw_content,
     ):
         """Run a public web search for current research sources."""
-        return tavily_client.search(
-            query,
-            max_results=max_results,
-            topic=topic or settings.search_topic,
-            include_raw_content=include_raw_content,
-        )
+        try:
+            return tavily_client.search(
+                query,
+                max_results=max_results,
+                topic=topic or settings.search_topic,
+                include_raw_content=include_raw_content,
+            )
+        except Exception as exc:
+            raise SearchToolError("research search provider request failed") from exc
 
     return internet_search

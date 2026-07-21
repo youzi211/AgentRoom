@@ -1,10 +1,14 @@
 package logging
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 )
+
+var sensitiveLogKey = regexp.MustCompile(`(?i)(api[_-]?key|authorization|password|passcode|secret|token|dsn)`)
 
 // Init reads log configuration from environment variables and sets the
 // default slog logger. Call this once at startup before any other code
@@ -23,6 +27,20 @@ func Init() {
 		Level:     level,
 		AddSource: addSource,
 	}
+	secrets := sensitiveEnvironmentValues()
+	opts.ReplaceAttr = func(_ []string, attr slog.Attr) slog.Attr {
+		if sensitiveLogKey.MatchString(attr.Key) {
+			return slog.String(attr.Key, "[REDACTED]")
+		}
+		switch attr.Value.Kind() {
+		case slog.KindString:
+			return slog.String(attr.Key, RedactText(attr.Value.String(), secrets...))
+		case slog.KindAny:
+			return slog.String(attr.Key, RedactText(fmt.Sprint(attr.Value.Any()), secrets...))
+		default:
+			return attr
+		}
+	}
 
 	var handler slog.Handler
 	if strings.EqualFold(os.Getenv("LOG_FORMAT"), "json") {
@@ -33,6 +51,28 @@ func Init() {
 
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
+}
+
+// RedactText removes known credentials from log messages and error values.
+func RedactText(value string, secrets ...string) string {
+	redacted := value
+	for _, secret := range secrets {
+		if secret != "" {
+			redacted = strings.ReplaceAll(redacted, secret, "[REDACTED]")
+		}
+	}
+	return redacted
+}
+
+func sensitiveEnvironmentValues() []string {
+	values := make([]string, 0)
+	for _, entry := range os.Environ() {
+		name, value, found := strings.Cut(entry, "=")
+		if found && len(value) >= 4 && sensitiveLogKey.MatchString(name) {
+			values = append(values, value)
+		}
+	}
+	return values
 }
 
 // Component returns a logger annotated with the given component name.

@@ -21,6 +21,7 @@ type DeepAgentRuntimeConfig struct {
 	Config      string
 	Timeout     time.Duration
 	Concurrency int
+	Resolver    ModelConfigResolver
 }
 
 type DeepAgentRuntime struct {
@@ -51,7 +52,17 @@ func (r *DeepAgentRuntime) Name() string {
 	return model.AgentRuntimeDeepAgent
 }
 
-func (r *DeepAgentRuntime) Respond(ctx context.Context, request AgentRuntimeRequest) (AgentRuntimeResponse, error) {
+func (r *DeepAgentRuntime) Respond(ctx context.Context, request AgentRuntimeRequest, observers ...AgentEventObserver) (_ AgentRuntimeResponse, err error) {
+	observeRuntimeEvent(ctx, observers, AgentRuntimeEvent{RunID: request.RunID, Kind: "accepted"})
+	defer func() {
+		kind := "completed"
+		failure := ""
+		if err != nil {
+			kind = "failed"
+			failure = "local runtime failed"
+		}
+		observeRuntimeEvent(ctx, observers, AgentRuntimeEvent{RunID: request.RunID, Kind: kind, Failure: failure})
+	}()
 	runID := strings.TrimSpace(request.RunID)
 	if runID == "" {
 		runID = model.NewID("deepagent")
@@ -74,30 +85,46 @@ func (r *DeepAgentRuntime) Respond(ctx context.Context, request AgentRuntimeRequ
 	if strings.TrimSpace(r.config.WorkDir) != "" {
 		cmd.Dir = r.config.WorkDir
 	}
-	if len(r.config.Env) > 0 {
-		cmd.Env = append(os.Environ(), r.config.Env...)
+	resolved := model.ResolvedModelConfig{}
+	if r.config.Resolver != nil {
+		var err error
+		resolved, err = r.config.Resolver.Resolve(requestCtx, model.ModelRuntimeDeepAgent, request.Agent.ModelProfileID)
+		if err != nil {
+			return AgentRuntimeResponse{}, err
+		}
+	}
+	metadata := modelAuditMetadata(resolved)
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+	metadata["runtime"] = model.AgentRuntimeDeepAgent
+	metadata["run_id"] = runID
+	cmd.Env = append(os.Environ(), r.config.Env...)
+	if resolved.Source != "" {
+		cmd.Env = append(cmd.Env, "MODEL_PROTOCOL=openai", "MODEL_BASE_URL="+resolved.BaseURL, "MODEL_NAME="+resolved.ModelName, "MODEL_API_KEY="+resolved.APIKey)
 	}
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
 
 	if err := r.acquire(requestCtx); err != nil {
-		return AgentRuntimeResponse{}, err
+		return AgentRuntimeResponse{Metadata: metadata}, err
 	}
 	defer r.release()
 
 	if err := cmd.Run(); err != nil {
-		return AgentRuntimeResponse{}, fmt.Errorf("deepagent command failed: %w: %s", err, shortCommandOutput(output.String()))
+		safeOutput := shortCommandOutput(redactSecret(output.String(), resolved.APIKey))
+		return AgentRuntimeResponse{Metadata: metadata}, fmt.Errorf("deepagent command failed: %w: %s", err, safeOutput)
 	}
 
 	reportPath := filepath.Join(r.config.WorkDir, "runs", runID, "report.md")
 	reportBytes, err := os.ReadFile(reportPath)
 	if err != nil {
-		return AgentRuntimeResponse{}, fmt.Errorf("read deepagent report: %w", err)
+		return AgentRuntimeResponse{Metadata: metadata}, fmt.Errorf("read deepagent report: %w", err)
 	}
-	report := strings.TrimSpace(string(reportBytes))
+	report := strings.TrimSpace(redactSecret(string(reportBytes), resolved.APIKey))
 	if report == "" {
-		return AgentRuntimeResponse{}, fmt.Errorf("deepagent report is empty")
+		return AgentRuntimeResponse{Metadata: metadata}, fmt.Errorf("deepagent report is empty")
 	}
 
 	return AgentRuntimeResponse{
@@ -113,10 +140,7 @@ func (r *DeepAgentRuntime) Respond(ctx context.Context, request AgentRuntimeRequ
 				Content:  report,
 			},
 		},
-		Metadata: map[string]string{
-			"runtime": model.AgentRuntimeDeepAgent,
-			"run_id":  runID,
-		},
+		Metadata: metadata,
 	}, nil
 }
 

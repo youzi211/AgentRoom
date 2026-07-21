@@ -6,15 +6,20 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "deepagents",
+    "grpcio>=1.82.1",
+    "grpcio-health-checking>=1.82.1",
     "langchain",
     "langchain-anthropic",
     "langchain-openai",
+    "openai>=2.42.0",
+    "protobuf>=7.35.1",
     "python-dotenv",
     "tavily-python",
 ]
 
 [project.scripts]
 deepagent-research = "agentroom_deepagent.cli:main"
+agent-runtime = "agent_runtime.server:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -22,6 +27,7 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
+    "grpcio-tools>=1.82.1",
     "pytest",
 ]
 
