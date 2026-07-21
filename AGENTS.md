@@ -32,7 +32,11 @@
 
 ## Commit & Pull Request Guidelines
 - Recent history uses short, intent-first subjects, for example `Capture the next dialogue layer...` and `Decouple AgentRoom from the raw OpenAI SDK...`.
+- Commit subjects are short and intent-first (explain *why*, not just what moved).
 - Commit messages must be written in Chinese.
+- Do not develop directly on `main`; create a short-lived task branch and merge it after review and verification.
+- Branch names should start with the change type, such as `feat/user-registration` or `fix/payment-callback`. When Codex performs the task, prefix the branch with `codex/`, for example `codex/feat/user-registration`.
+- Commit messages must follow `<type>: <Chinese description>`. Use `feat`, `fix`, `refactor`, `docs`, or `chore`, for example `feat: 添加用户注册` and `fix: 修复支付回调错误`.
 - Keep commit titles concise and explain why the change exists, not just what moved.
 - PRs should include: scope summary, affected paths, verification commands run, and screenshots for UI changes.
 - Call out schema, env, or deployment changes explicitly so reviewers can test safely.
