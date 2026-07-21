@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"agentroom/backend/internal/model"
+	"agentroom/backend/internal/realtime"
 	"agentroom/backend/internal/room"
 	"agentroom/backend/internal/store"
 )
@@ -173,12 +174,7 @@ func (s *RoomService) HandleHumanMessage(ctx context.Context, currentRoom *room.
 
 	currentRoom.AppendMessage(savedMessage)
 
-	var focusPoints []model.FocusPoint
-	if s.focus != nil {
-		focusPoints = s.focus.AddMessage(ctx, currentRoom.Info().ID, savedMessage)
-	}
-
-	return savedMessage, focusPoints, nil
+	return savedMessage, nil, nil
 }
 
 func (s *RoomService) TriggerAgentResponses(ctx context.Context, currentRoom *room.Room, message model.Message) {
@@ -194,6 +190,26 @@ func (s *RoomService) TriggerAgentResponses(ctx context.Context, currentRoom *ro
 	case <-ctx.Done():
 		s.logger.Warn("skip queued agent response", "room_id", currentRoom.Info().ID, "message_id", message.ID, "error", ctx.Err())
 	}
+}
+
+func (s *RoomService) ScheduleFocusAnalysis(ctx context.Context, currentRoom *room.Room, message model.Message) {
+	if s == nil || s.focus == nil || currentRoom == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	analysis, ok := s.focus.ObserveMessage(currentRoom.Info().ID, message)
+	if !ok {
+		return
+	}
+	s.ensureFocusWorkers()
+	s.enqueueFocusJob(focusWorkerJob{
+		ctx:      context.WithoutCancel(ctx),
+		room:     currentRoom,
+		analysis: analysis,
+	})
 }
 
 func (s *RoomService) TransferRoomOwner(ctx context.Context, currentRoom *room.Room, callerParticipantID string, targetParticipantID string) error {
@@ -216,5 +232,46 @@ func (s *RoomService) ensureResponseWorkers() {
 func (s *RoomService) runAgentResponseWorker() {
 	for job := range s.responseJobs {
 		s.runner.HandleHumanMessage(job.ctx, job.room, job.message)
+	}
+}
+
+func (s *RoomService) ensureFocusWorkers() {
+	s.focusStart.Do(func() {
+		s.focusJobs = make(chan focusWorkerJob, defaultFocusAnalysisQueue)
+		for i := 0; i < defaultFocusAnalysisWorkers; i++ {
+			go s.runFocusWorker()
+		}
+	})
+}
+
+func (s *RoomService) enqueueFocusJob(job focusWorkerJob) {
+	select {
+	case s.focusJobs <- job:
+	default:
+		s.focus.SkipAnalysis(job.analysis)
+		s.logger.Warn("skip queued focus analysis", "room_id", job.analysis.roomID, "target_count", job.analysis.targetCount)
+	}
+}
+
+func (s *RoomService) runFocusWorker() {
+	for job := range s.focusJobs {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(job.ctx), defaultFocusAnalysisTimeout)
+		focusPoints := s.focus.analyzeMessages(ctx, job.analysis.roomID, job.analysis.messages)
+		cancel()
+
+		next, publish := s.focus.CompleteAnalysis(job.analysis, focusPoints)
+		if publish {
+			job.room.Events().BroadcastEvent(realtime.Event{
+				Type:        realtime.EventTypeFocusUpdate,
+				FocusPoints: focusPoints,
+			})
+		}
+		if next != nil {
+			s.enqueueFocusJob(focusWorkerJob{
+				ctx:      job.ctx,
+				room:     job.room,
+				analysis: *next,
+			})
+		}
 	}
 }

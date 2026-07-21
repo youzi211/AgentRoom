@@ -16,6 +16,9 @@ import (
 const (
 	defaultAgentResponseWorkers = 4
 	defaultAgentResponseQueue   = 64
+	defaultFocusAnalysisWorkers = 2
+	defaultFocusAnalysisQueue   = 64
+	defaultFocusAnalysisTimeout = 30 * time.Second
 )
 
 // RoomService coordinates room use cases across runtime room state, persistence, and agents.
@@ -33,6 +36,8 @@ type RoomService struct {
 	lifecycle     *MeetingLifecycle
 	responseJobs  chan agentResponseJob
 	responseStart sync.Once
+	focusJobs     chan focusWorkerJob
+	focusStart    sync.Once
 }
 
 type roomStore interface {
@@ -57,6 +62,12 @@ type agentResponseJob struct {
 	ctx     context.Context
 	room    *room.Room
 	message model.Message
+}
+
+type focusWorkerJob struct {
+	ctx      context.Context
+	room     *room.Room
+	analysis focusAnalysisJob
 }
 
 func NewRoomService(manager *room.Manager, agents *AgentService, knowledge *KnowledgeService, runner *agent.Runner, focus *FocusService, s roomStore) *RoomService {
