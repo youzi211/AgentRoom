@@ -21,3 +21,6 @@ test-results/
 .playwright-cli/
 output/
 .zread/
+# Added by code-review-graph
+.code-review-graph/
+.mcp.json
