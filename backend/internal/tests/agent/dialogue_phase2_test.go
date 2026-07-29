@@ -148,6 +148,9 @@ func TestGuidedDialogueRespectsMaxAutonomousTurns(t *testing.T) {
 	if len(store.dialogueRuns) != 1 || store.dialogueRuns[0].TurnCount != 2 {
 		t.Fatalf("expected dialogue run to record 2 turns, got %#v", store.dialogueRuns)
 	}
+	if store.dialogueRuns[0].Status != model.DialogueRunStatusStoppedLimit {
+		t.Fatalf("expected stable turn-limit stop status, got %#v", store.dialogueRuns[0])
+	}
 }
 
 func TestGuidedDialogueDisallowsSelfFollowupWhenDisabled(t *testing.T) {
@@ -258,6 +261,79 @@ func TestGuidedDialogueStopsCleanlyOnProviderError(t *testing.T) {
 	}
 	if store.dialogueRuns[0].TurnCount != 1 {
 		t.Fatalf("expected dialogue run to record the single completed turn before failure, got %#v", store.dialogueRuns[0])
+	}
+}
+
+func TestGuidedDialogueStopsOnEmptyOutput(t *testing.T) {
+	store := &dialogueStore{}
+	runner := agent.NewRunner(&sequenceLLM{}, store).WithRuntimeRegistry(agent.NewRuntimeRegistry(emptyDialogueRuntime{}))
+	room := newDialogueRuntimeRoom(model.DialoguePolicy{
+		Mode:                      model.DialogueModeGuided,
+		MaxAutonomousTurns:        2,
+		MaxTurnsPerAgent:          1,
+		AllowSelfFollowup:         false,
+		AllowAgentToAgentMentions: true,
+		ResponseStrategy:          model.DialogueResponseStrategyMentionedFirst,
+	}, []model.Agent{testAgent("author", "Author")})
+
+	trigger := room.newHumanMessage("Alice", "@Author start the review.")
+	room.AppendMessage(trigger)
+	runner.HandleHumanMessage(context.Background(), room, trigger)
+
+	if len(room.agentMessages()) != 0 {
+		t.Fatalf("expected empty output not to become a chat message, got %#v", room.Messages())
+	}
+	if len(store.dialogueRuns) != 1 || store.dialogueRuns[0].Status != model.DialogueRunStatusStoppedEmpty || store.dialogueRuns[0].TurnCount != 0 {
+		t.Fatalf("expected stable empty-output stop audit, got %#v", store.dialogueRuns)
+	}
+	if len(store.AgentRuns) != 1 || store.AgentRuns[0].Status != "failed" {
+		t.Fatalf("expected empty Agent turn to fail its run, got %#v", store.AgentRuns)
+	}
+}
+
+type emptyDialogueRuntime struct{}
+
+func (emptyDialogueRuntime) Name() string { return model.AgentRuntimeLLM }
+
+func (emptyDialogueRuntime) Respond(context.Context, agent.AgentRuntimeRequest, ...agent.AgentEventObserver) (agent.AgentRuntimeResponse, error) {
+	return agent.AgentRuntimeResponse{Content: "  \n\t"}, nil
+}
+
+func TestGuidedDialogueCooldownHonorsContextDeadline(t *testing.T) {
+	llmClient := &sequenceLLM{responses: []string{
+		"@Reviewer please continue.",
+		"must not be called",
+	}}
+	store := &dialogueStore{}
+	runner := agent.NewRunner(llmClient, store)
+	room := newDialogueRuntimeRoom(model.DialoguePolicy{
+		Mode:                      model.DialogueModeGuided,
+		MaxAutonomousTurns:        3,
+		MaxTurnsPerAgent:          2,
+		AllowSelfFollowup:         false,
+		AllowAgentToAgentMentions: true,
+		ResponseStrategy:          model.DialogueResponseStrategyMentionedFirst,
+		CooldownMS:                500,
+	}, []model.Agent{
+		testAgent("author", "Author"),
+		testAgent("reviewer", "Reviewer"),
+	})
+
+	trigger := room.newHumanMessage("Alice", "@Author start the review.")
+	room.AppendMessage(trigger)
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	defer cancel()
+	startedAt := time.Now()
+	runner.HandleHumanMessage(ctx, room, trigger)
+
+	if elapsed := time.Since(startedAt); elapsed >= 400*time.Millisecond {
+		t.Fatalf("expected deadline to interrupt cooldown, elapsed %s", elapsed)
+	}
+	if llmClient.calls != 1 || len(room.agentMessages()) != 1 {
+		t.Fatalf("expected one completed turn before cooldown cancellation, calls=%d messages=%#v", llmClient.calls, room.agentMessages())
+	}
+	if len(store.dialogueRuns) != 1 || store.dialogueRuns[0].Status != model.DialogueRunStatusTimeout || store.dialogueRuns[0].TurnCount != 1 {
+		t.Fatalf("expected timeout stop audit after cooldown cancellation, got %#v", store.dialogueRuns)
 	}
 }
 

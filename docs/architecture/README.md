@@ -57,6 +57,7 @@ Docker Compose 由三个服务组成：
 | [Agent Runtime 与模型](agent-runtime-and-models.md) | mention、对话策略、Runner、Go/DeepAgent Runtime、Model Profile、密钥 | `backend/internal/agent`、`llm`、模型 Profile、`deepagent/` |
 | [数据、实时与会议生命周期](data-realtime-lifecycle.md) | MySQL 与内存状态、建房快照、消息一致性、WebSocket、房间状态机 | schema、Repository、消息、房间、参与者、会议生命周期 |
 | [前端与部署](frontend-and-deployment.md) | React 路由、页面和 API Client、Docker 拓扑、部署与浏览器安全边界 | `frontend/`、Dockerfile、Compose、nginx、部署配置 |
+| [协作运行时迁移基线](collaboration-runtime-baseline.md) | mention/guided 行为、消息提交顺序、Runtime 取消、artifact 与脱敏基线 | Collaboration Runtime 迁移与回归测试 |
 
 ## 仓库模块地图
 

@@ -38,8 +38,9 @@ type GetMessagesResponse struct {
 }
 
 type RoomActivityResponse struct {
-	AgentRuns    []AgentRunActivity    `json:"agentRuns"`
-	DialogueRuns []DialogueRunActivity `json:"dialogueRuns"`
+	AgentRuns         []AgentRunActivity         `json:"agentRuns"`
+	DialogueRuns      []DialogueRunActivity      `json:"dialogueRuns"`
+	CollaborationRuns []CollaborationRunActivity `json:"collaborationRuns"`
 }
 
 type AgentRunActivity struct {
@@ -65,6 +66,22 @@ type DialogueRunActivity struct {
 	CompletedAt      *time.Time `json:"completedAt,omitempty"`
 }
 
+type CollaborationRunActivity struct {
+	ID            string     `json:"id"`
+	RoomID        string     `json:"roomID"`
+	RootMessageID string     `json:"rootMessageID"`
+	Engine        string     `json:"engine"`
+	EngineVersion string     `json:"engineVersion"`
+	PolicyVersion string     `json:"policyVersion"`
+	Status        string     `json:"status"`
+	StopReason    string     `json:"stopReason,omitempty"`
+	TurnCount     int        `json:"turnCount"`
+	ErrorText     string     `json:"errorText,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	StartedAt     *time.Time `json:"startedAt,omitempty"`
+	CompletedAt   *time.Time `json:"completedAt,omitempty"`
+}
+
 type GenerateMinutesResponse struct {
 	Markdown string                `json:"markdown"`
 	Minutes  *model.MeetingMinutes `json:"minutes,omitempty"`
@@ -75,13 +92,14 @@ type ListRoomsResponse struct {
 }
 
 type PublicRoomSummary struct {
-	ID             string               `json:"id"`
-	Name           string               `json:"name"`
-	Status         string               `json:"status"`
-	HasPasscode    bool                 `json:"hasPasscode"`
-	CreatedAt      time.Time            `json:"createdAt"`
-	DialoguePolicy model.DialoguePolicy `json:"dialoguePolicy"`
-	AgentCount     int                  `json:"agentCount"`
+	ID                  string                    `json:"id"`
+	Name                string                    `json:"name"`
+	Status              string                    `json:"status"`
+	HasPasscode         bool                      `json:"hasPasscode"`
+	CreatedAt           time.Time                 `json:"createdAt"`
+	DialoguePolicy      model.DialoguePolicy      `json:"dialoguePolicy"`
+	CollaborationPolicy model.CollaborationPolicy `json:"collaborationPolicy"`
+	AgentCount          int                       `json:"agentCount"`
 }
 
 type ListRecentRoomsResponse struct {

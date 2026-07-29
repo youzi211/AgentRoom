@@ -66,12 +66,20 @@ func main() {
 		}
 		logger.Info("database migrations applied")
 	}
-	interruptedRuns, err := store.ReconcileActiveAgentRuns(ctx, time.Now().UTC())
+	reconciledAt := time.Now().UTC()
+	interruptedRuns, err := store.ReconcileActiveAgentRuns(ctx, reconciledAt)
 	if err != nil {
 		fatal(logger, "reconcile interrupted agent runs", err)
 	}
 	if interruptedRuns > 0 {
 		logger.Warn("reconciled interrupted agent runs", "count", interruptedRuns)
+	}
+	interruptedCollaborationRuns, err := store.ReconcileActiveCollaborationRuns(ctx, reconciledAt)
+	if err != nil {
+		fatal(logger, "reconcile interrupted collaboration runs", err)
+	}
+	if interruptedCollaborationRuns > 0 {
+		logger.Warn("reconciled interrupted collaboration runs", "count", interruptedCollaborationRuns)
 	}
 
 	deepAgentRegistryPath := filepath.Join(deepAgentConfig.WorkDir, deepAgentConfig.Registry)

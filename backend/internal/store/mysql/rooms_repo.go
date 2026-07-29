@@ -19,20 +19,31 @@ func (s *MySQLStore) CreateRoom(ctx context.Context, input store.CreateRoomInput
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		policy := input.DialoguePolicy.WithDefaults()
+		collaborationPolicy := input.CollaborationPolicy.WithDefaults()
+		if err := collaborationPolicy.Validate(); err != nil {
+			return fmt.Errorf("validate collaboration policy: %w", err)
+		}
 		roomRecord := RoomModel{
-			ID:                        input.ID,
-			Name:                      input.Name,
-			Status:                    model.RoomStatusActive,
-			PasscodeHash:              input.PasscodeHash,
-			DialogueMode:              policy.Mode,
-			MaxAutonomousTurns:        policy.MaxAutonomousTurns,
-			MaxTurnsPerAgent:          policy.MaxTurnsPerAgent,
-			AllowSelfFollowup:         policy.AllowSelfFollowup,
-			AllowAgentToAgentMentions: policy.AllowAgentToAgentMentions,
-			ResponseStrategy:          policy.ResponseStrategy,
-			CooldownMS:                policy.CooldownMS,
-			CreatedAt:                 now,
-			UpdatedAt:                 now,
+			ID:                             input.ID,
+			Name:                           input.Name,
+			Status:                         model.RoomStatusActive,
+			PasscodeHash:                   input.PasscodeHash,
+			DialogueMode:                   policy.Mode,
+			MaxAutonomousTurns:             policy.MaxAutonomousTurns,
+			MaxTurnsPerAgent:               policy.MaxTurnsPerAgent,
+			AllowSelfFollowup:              policy.AllowSelfFollowup,
+			AllowAgentToAgentMentions:      policy.AllowAgentToAgentMentions,
+			ResponseStrategy:               policy.ResponseStrategy,
+			CooldownMS:                     policy.CooldownMS,
+			CollaborationEngine:            collaborationPolicy.Engine,
+			CollaborationTriggerMode:       collaborationPolicy.TriggerMode,
+			CollaborationMaxTurns:          collaborationPolicy.MaxTurns,
+			CollaborationMaxTurnsPerAgent:  collaborationPolicy.MaxTurnsPerAgent,
+			CollaborationAllowAgentHandoff: collaborationPolicy.AllowAgentHandoff,
+			CollaborationAllowSelfFollowup: collaborationPolicy.AllowSelfFollowup,
+			CollaborationCooldownMS:        collaborationPolicy.CooldownMS,
+			CreatedAt:                      now,
+			UpdatedAt:                      now,
 		}
 		if err := tx.Create(&roomRecord).Error; err != nil {
 			return fmt.Errorf("insert room: %w", err)
@@ -52,13 +63,14 @@ func (s *MySQLStore) CreateRoom(ctx context.Context, input store.CreateRoomInput
 	}
 
 	meta := model.RoomMeta{
-		ID:             input.ID,
-		Name:           input.Name,
-		CreatedAt:      now,
-		HasPasscode:    input.PasscodeHash != "",
-		PasscodeHash:   input.PasscodeHash,
-		DialoguePolicy: input.DialoguePolicy.WithDefaults(),
-		Status:         model.RoomStatusActive,
+		ID:                  input.ID,
+		Name:                input.Name,
+		CreatedAt:           now,
+		HasPasscode:         input.PasscodeHash != "",
+		PasscodeHash:        input.PasscodeHash,
+		DialoguePolicy:      input.DialoguePolicy.WithDefaults(),
+		CollaborationPolicy: input.CollaborationPolicy.WithDefaults(),
+		Status:              model.RoomStatusActive,
 	}
 	return meta, input.Agents, nil
 }
@@ -200,6 +212,7 @@ func (s *MySQLStore) ListRooms(ctx context.Context, query store.ListRoomsQuery) 
 			HasPasscode:         r.PasscodeHash != "",
 			CreatedAt:           r.CreatedAt,
 			DialoguePolicy:      r.toDomain().DialoguePolicy,
+			CollaborationPolicy: r.toDomain().CollaborationPolicy,
 			AgentCount:          agentCountByRoom[r.ID],
 			OwnerParticipantID:  strPtrDeref(r.OwnerParticipantID),
 			ClosedAt:            r.ClosedAt,

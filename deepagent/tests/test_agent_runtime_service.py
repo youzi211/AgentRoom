@@ -7,7 +7,7 @@ from grpc_health.v1 import health_pb2, health_pb2_grpc
 from agent_runtime.config import RuntimeSettings
 from agent_runtime.executors import FakeExecutor
 from agent_runtime.registry import ExecutorRegistry
-from agent_runtime.server import SERVICE_NAME, RuntimeServer
+from agent_runtime.server import COLLABORATION_SERVICE_NAME, SERVICE_NAME, RuntimeServer
 from agent_runtime.v1 import agent_runtime_pb2, agent_runtime_pb2_grpc
 
 
@@ -77,6 +77,10 @@ def test_server_reports_serving_and_streams_ordered_success(tmp_path):
             health_stub = health_pb2_grpc.HealthStub(channel)
             health = await health_stub.Check(health_pb2.HealthCheckRequest(service=SERVICE_NAME))
             assert health.status == health_pb2.HealthCheckResponse.SERVING
+            collaboration_health = await health_stub.Check(
+                health_pb2.HealthCheckRequest(service=COLLABORATION_SERVICE_NAME)
+            )
+            assert collaboration_health.status == health_pb2.HealthCheckResponse.NOT_SERVING
 
             events = [event async for event in stub.ExecuteAgent(request())]
             assert [event.sequence for event in events] == list(range(1, len(events) + 1))

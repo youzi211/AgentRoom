@@ -52,6 +52,7 @@ type roomStore interface {
 	ListMessagesPage(ctx context.Context, query store.ListMessagesQuery) (store.MessagePage, error)
 	ListAgentRuns(ctx context.Context, query store.ListRunsQuery) ([]store.AgentRun, error)
 	ListDialogueRuns(ctx context.Context, query store.ListRunsQuery) ([]store.DialogueRun, error)
+	ListCollaborationRuns(ctx context.Context, query store.ListRunsQuery) ([]store.CollaborationRun, error)
 	CreateMinutes(ctx context.Context, minutes model.MeetingMinutes) (model.MeetingMinutes, error)
 	ListMinutes(ctx context.Context, roomID string) ([]model.MeetingMinutes, error)
 	LatestMinutes(ctx context.Context, roomID string) (model.MeetingMinutes, bool, error)

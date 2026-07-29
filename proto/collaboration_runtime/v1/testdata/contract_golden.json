@@ -1,0 +1,141 @@
+{
+  "request": {
+    "protocolVersion": "v1",
+    "collaborationRunId": "collaboration_contract",
+    "traceId": "trace_contract",
+    "engine": "COLLABORATION_ENGINE_NATIVE",
+    "snapshot": {
+      "room": {
+        "id": "room_contract",
+        "name": "Contract room",
+        "status": "active"
+      },
+      "agents": [
+        {
+          "id": "agent_writer",
+          "name": "Writer",
+          "mention": "writer",
+          "role": "writer",
+          "description": "Drafts the answer",
+          "systemPrompt": "Write a concise response.",
+          "runtime": "llm",
+          "modelReferenceId": "model_primary",
+          "toolNames": ["search"]
+        }
+      ],
+      "trigger": {
+        "id": "message_human",
+        "senderId": "human_1",
+        "senderName": "Human",
+        "senderType": "SENDER_TYPE_HUMAN",
+        "content": "@writer draft the summary",
+        "createdAt": "2026-07-29T08:00:00Z"
+      },
+      "transcript": [
+        {
+          "id": "message_human",
+          "senderId": "human_1",
+          "senderName": "Human",
+          "senderType": "SENDER_TYPE_HUMAN",
+          "content": "@writer draft the summary",
+          "createdAt": "2026-07-29T08:00:00Z"
+        }
+      ],
+      "knowledgeChunks": [
+        {
+          "id": "chunk_1",
+          "documentId": "document_1",
+          "documentName": "Notes",
+          "scope": "room",
+          "scopeId": "room_contract",
+          "chunkIndex": 0,
+          "content": "Approved context"
+        }
+      ],
+      "modelReferences": [
+        {
+          "id": "model_primary",
+          "profileId": "profile_primary",
+          "source": "custom",
+          "protocol": "openai_chat_completions",
+          "modelName": "contract-model",
+          "runtimeScope": "python"
+        }
+      ],
+      "policy": {
+        "version": "v1",
+        "engine": "COLLABORATION_ENGINE_NATIVE",
+        "triggerMode": "TRIGGER_MODE_MENTION_ONLY",
+        "maxTurns": 3,
+        "maxTurnsPerAgent": 1,
+        "allowAgentHandoff": true,
+        "allowSelfFollowup": false,
+        "cooldown": "0.1s",
+        "stopOnEmptyOutput": true,
+        "stopOnRepeatedOutput": true
+      },
+      "limits": {
+        "timeout": "30s",
+        "maxOutputBytes": 1048576,
+        "maxArtifactBytes": 2097152,
+        "maxToolSteps": 8,
+        "maxRequestBytes": 8388608,
+        "maxEventBytes": 4194304,
+        "maxCheckpointBytes": 1048576
+      },
+      "initialCandidateAgentIds": ["agent_writer"]
+    }
+  },
+  "events": [
+    {
+      "protocolVersion": "v1",
+      "collaborationRunId": "collaboration_contract",
+      "sequence": "1",
+      "occurredAt": "2026-07-29T08:00:01Z",
+      "accepted": {}
+    },
+    {
+      "protocolVersion": "v1",
+      "collaborationRunId": "collaboration_contract",
+      "sequence": "2",
+      "occurredAt": "2026-07-29T08:00:02Z",
+      "turnId": "turn_1",
+      "agentId": "agent_writer",
+      "speakerSelected": {
+        "reasonCategory": "explicit_mention"
+      }
+    },
+    {
+      "protocolVersion": "v1",
+      "collaborationRunId": "collaboration_contract",
+      "sequence": "3",
+      "occurredAt": "2026-07-29T08:00:03Z",
+      "turnId": "turn_1",
+      "agentId": "agent_writer",
+      "agentMessageCompleted": {
+        "content": "Draft complete.",
+        "model": {
+          "modelReferenceId": "model_primary",
+          "profileId": "profile_primary",
+          "source": "custom",
+          "modelName": "contract-model"
+        },
+        "usage": {
+          "inputTokens": "10",
+          "outputTokens": "3",
+          "totalTokens": "13"
+        }
+      }
+    },
+    {
+      "protocolVersion": "v1",
+      "collaborationRunId": "collaboration_contract",
+      "sequence": "4",
+      "occurredAt": "2026-07-29T08:00:04Z",
+      "completed": {
+        "turnCount": 1,
+        "reason": "COLLABORATION_STOP_REASON_COMPLETED"
+      }
+    }
+  ]
+}

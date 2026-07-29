@@ -1,43 +1,43 @@
 ## 1. 锁定现状与迁移基线
 
-- [ ] 1.1 为 `mention_fanout` 的单 mention、多 mention、Agent-to-Agent mention、轮次限制和失败路径补齐 Go 黄金测试
-- [ ] 1.2 为 `guided_dialogue` 的选角顺序、空输出、重复输出、冷却、停止原因和 `dialogue_runs` 审计补齐 Go 黄金测试
-- [ ] 1.3 为普通人类消息无 mention 时不触发 Agent 的当前行为建立显式基线测试
-- [ ] 1.4 为人类消息先持久化和广播、再异步调度 Agent/Focus 的顺序补齐回归测试
-- [ ] 1.5 为 Agent 成功消息与 `agent_run` 终态事务提交、提交失败不广播补齐回归测试
-- [ ] 1.6 记录当前 Go/Python Runtime 的取消、超时、停机、artifact 和敏感字段扫描基线
+- [x] 1.1 为 `mention_fanout` 的单 mention、多 mention、Agent-to-Agent mention、轮次限制和失败路径补齐 Go 黄金测试
+- [x] 1.2 为 `guided_dialogue` 的选角顺序、空输出、重复输出、冷却、停止原因和 `dialogue_runs` 审计补齐 Go 黄金测试
+- [x] 1.3 为普通人类消息无 mention 时不触发 Agent 的当前行为建立显式基线测试
+- [x] 1.4 为人类消息先持久化和广播、再异步调度 Agent/Focus 的顺序补齐回归测试
+- [x] 1.5 为 Agent 成功消息与 `agent_run` 终态事务提交、提交失败不广播补齐回归测试
+- [x] 1.6 记录当前 Go/Python Runtime 的取消、超时、停机、artifact 和敏感字段扫描基线
 
 ## 2. 建立协作策略与持久化模型
 
-- [ ] 2.1 定义框架中立的 `CollaborationPolicy`、engine、trigger mode、停止原因和默认值，并增加领域验证测试
-- [ ] 2.2 实现旧 `DialoguePolicy` 到新协作策略的兼容映射，保证旧房间默认为 `native + mention_only`
-- [ ] 2.3 新增 `collaboration_runs` GORM 模型、Store 类型和状态转换，覆盖唯一终态与 interrupted 启动治理
-- [ ] 2.4 为 `agent_runs` 增加可空 collaboration run ID、turn index 和 parent message ID，并更新转换与测试 Store
-- [ ] 2.5 实现 collaboration run 创建、完成、失败、取消和幂等终态的 MySQL Repository 与事务测试
-- [ ] 2.6 更新建房快照、冷加载和房间 DTO，使协作策略在重启后保持一致
-- [ ] 2.7 保留旧 `dialogue_runs` 历史读取，增加新旧审计结果兼容查询测试
+- [x] 2.1 定义框架中立的 `CollaborationPolicy`、engine、trigger mode、停止原因和默认值，并增加领域验证测试
+- [x] 2.2 实现旧 `DialoguePolicy` 到新协作策略的兼容映射，保证旧房间默认为 `native + mention_only`
+- [x] 2.3 新增 `collaboration_runs` GORM 模型、Store 类型和状态转换，覆盖唯一终态与 interrupted 启动治理
+- [x] 2.4 为 `agent_runs` 增加可空 collaboration run ID、turn index 和 parent message ID，并更新转换与测试 Store
+- [x] 2.5 实现 collaboration run 创建、完成、失败、取消和幂等终态的 MySQL Repository 与事务测试
+- [x] 2.6 更新建房快照、冷加载和房间 DTO，使协作策略在重启后保持一致
+- [x] 2.7 保留旧 `dialogue_runs` 历史读取，增加新旧审计结果兼容查询测试
 
 ## 3. 定义 Collaboration Runtime Protobuf 合约
 
-- [ ] 3.1 在版本化 proto 包中定义房间、Agent、触发消息、transcript、知识、模型引用、策略和执行限制快照
-- [ ] 3.2 定义 `CollaborationRuntimeService.ExecuteConversation` 服务端流式 RPC 与请求校验字段
-- [ ] 3.3 定义 accepted、选角、turn、模型、工具、artifact、handoff、消息完成、checkpoint 和唯一终态事件
-- [ ] 3.4 定义稳定的停止/错误分类、事件序号、collaboration run ID、turn ID 和 Agent ID 关联规则
-- [ ] 3.5 定义 opaque checkpoint 的 engine/version/format/hash/size 元数据和资源限制
-- [ ] 3.6 生成并提交 Go/Python Protobuf 代码，更新生成脚本与生成物一致性检查
-- [ ] 3.7 增加 Go/Python 跨语言 JSON/golden 契约测试，覆盖未知字段、版本拒绝、乱序、重复终态和敏感字段
-- [ ] 3.8 增加 deadline、取消、请求/事件/artifact/checkpoint 大小限制和 gRPC 状态映射测试
+- [x] 3.1 在版本化 proto 包中定义房间、Agent、触发消息、transcript、知识、模型引用、策略和执行限制快照
+- [x] 3.2 定义 `CollaborationRuntimeService.ExecuteConversation` 服务端流式 RPC 与请求校验字段
+- [x] 3.3 定义 accepted、选角、turn、模型、工具、artifact、handoff、消息完成、checkpoint 和唯一终态事件
+- [x] 3.4 定义稳定的停止/错误分类、事件序号、collaboration run ID、turn ID 和 Agent ID 关联规则
+- [x] 3.5 定义 opaque checkpoint 的 engine/version/format/hash/size 元数据和资源限制
+- [x] 3.6 生成并提交 Go/Python Protobuf 代码，更新生成脚本与生成物一致性检查
+- [x] 3.7 增加 Go/Python 跨语言 JSON/golden 契约测试，覆盖未知字段、版本拒绝、乱序、重复终态和敏感字段
+- [x] 3.8 增加 deadline、取消、请求/事件/artifact/checkpoint 大小限制和 gRPC 状态映射测试
 
 ## 4. 建立 Python Collaboration Runtime 基础设施
 
-- [ ] 4.1 创建框架中立的 collaboration 请求、事件、Engine 接口和 `CollaborationEngineRegistry`
-- [ ] 4.2 实现独立的 collaboration run 上下文、活动注册表、取消句柄和 run ID 命名空间
-- [ ] 4.3 实现 Collaboration Runtime Servicer 的请求验证、事件顺序、唯一终态和异常脱敏
-- [ ] 4.4 实现全局协作容量、有界等待队列、每房间互斥和取消时容量释放
-- [ ] 4.5 在现有 Python gRPC Server 注册 Collaboration Runtime 与独立健康服务名
-- [ ] 4.6 扩展优雅关闭，使 Agent Runtime 与 Collaboration Runtime 分别退出就绪并清理活动调用
-- [ ] 4.7 增加协作运行结构化日志和指标，禁止记录 Prompt、凭据、完整 Provider 响应和框架内部状态
-- [ ] 4.8 增加 Engine 未注册、服务未就绪、容量耗尽、重复 run ID、重复 room run 和关闭竞态测试
+- [x] 4.1 创建框架中立的 collaboration 请求、事件、Engine 接口和 `CollaborationEngineRegistry`
+- [x] 4.2 实现独立的 collaboration run 上下文、活动注册表、取消句柄和 run ID 命名空间
+- [x] 4.3 实现 Collaboration Runtime Servicer 的请求验证、事件顺序、唯一终态和异常脱敏
+- [x] 4.4 实现全局协作容量、有界等待队列、每房间互斥和取消时容量释放
+- [x] 4.5 在现有 Python gRPC Server 注册 Collaboration Runtime 与独立健康服务名
+- [x] 4.6 扩展优雅关闭，使 Agent Runtime 与 Collaboration Runtime 分别退出就绪并清理活动调用
+- [x] 4.7 增加协作运行结构化日志和指标，禁止记录 Prompt、凭据、完整 Provider 响应和框架内部状态
+- [x] 4.8 增加 Engine 未注册、服务未就绪、容量耗尽、重复 run ID、重复 room run 和关闭竞态测试
 
 ## 5. 实现 Native Collaboration Engine
 

@@ -21,6 +21,7 @@ type Store struct {
 	ActiveParticipants  map[string][]model.Participant
 	AgentRuns           []store.AgentRun
 	DialogueRuns        []store.DialogueRun
+	CollaborationRuns   []store.CollaborationRun
 	Documents           []model.KnowledgeDocument
 	Chunks              []model.KnowledgeChunk
 	Minutes             []model.MeetingMinutes
@@ -205,13 +206,14 @@ func (s *Store) DeleteModelProfile(_ context.Context, id string) error {
 func (s *Store) CreateRoom(_ context.Context, input store.CreateRoomInput) (model.RoomMeta, []model.Agent, error) {
 	s.ensureMaps()
 	meta := model.RoomMeta{
-		ID:             input.ID,
-		Name:           input.Name,
-		CreatedAt:      input.CreatedAt,
-		HasPasscode:    input.PasscodeHash != "",
-		PasscodeHash:   input.PasscodeHash,
-		DialoguePolicy: input.DialoguePolicy.WithDefaults(),
-		Status:         model.RoomStatusActive,
+		ID:                  input.ID,
+		Name:                input.Name,
+		CreatedAt:           input.CreatedAt,
+		HasPasscode:         input.PasscodeHash != "",
+		PasscodeHash:        input.PasscodeHash,
+		DialoguePolicy:      input.DialoguePolicy.WithDefaults(),
+		CollaborationPolicy: input.CollaborationPolicy.WithDefaults(),
+		Status:              model.RoomStatusActive,
 	}
 	s.Rooms[input.ID] = meta
 	s.RoomAgents[input.ID] = append([]model.Agent(nil), input.Agents...)
@@ -291,6 +293,7 @@ func (s *Store) ListRooms(_ context.Context, query store.ListRoomsQuery) ([]mode
 			HasPasscode:         meta.PasscodeHash != "",
 			CreatedAt:           meta.CreatedAt,
 			DialoguePolicy:      meta.DialoguePolicy.WithDefaults(),
+			CollaborationPolicy: meta.CollaborationPolicy.WithDefaults(),
 			AgentCount:          len(s.RoomAgents[meta.ID]),
 			OwnerParticipantID:  meta.OwnerParticipantID,
 			ClosedAt:            cloneTimePtr(meta.ClosedAt),
@@ -602,6 +605,106 @@ func (s *Store) ListDialogueRuns(_ context.Context, query store.ListRunsQuery) (
 		}
 	}
 	sortRuns(result, func(i int) time.Time { return result[i].StartedAt })
+	if limit := normalizedTestRunLimit(query.Limit, len(result)); limit < len(result) {
+		return result[:limit], nil
+	}
+	return result, nil
+}
+
+func (s *Store) CreateCollaborationRun(_ context.Context, run store.CollaborationRun) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if run.Status == "" {
+		run.Status = model.CollaborationRunStatusCreated
+	}
+	if run.PolicyVersion == "" {
+		run.PolicyVersion = model.CollaborationPolicyVersion
+	}
+	if !model.IsValidCollaborationEngine(run.Engine) || run.Status != model.CollaborationRunStatusCreated {
+		return fmt.Errorf("%w: invalid collaboration run creation", store.ErrCollaborationRunTransition)
+	}
+	s.CollaborationRuns = append(s.CollaborationRuns, run)
+	return nil
+}
+
+func (s *Store) StartCollaborationRun(_ context.Context, runID string, engineVersion string, startedAt time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.CollaborationRuns {
+		run := &s.CollaborationRuns[i]
+		if run.ID != runID {
+			continue
+		}
+		if run.Status == model.CollaborationRunStatusRunning {
+			return nil
+		}
+		if !model.CanTransitionCollaborationRunStatus(run.Status, model.CollaborationRunStatusRunning) {
+			return fmt.Errorf("%w: %s is %s", store.ErrCollaborationRunFinished, runID, run.Status)
+		}
+		run.Status = model.CollaborationRunStatusRunning
+		run.EngineVersion = engineVersion
+		run.StartedAt = &startedAt
+		return nil
+	}
+	return fmt.Errorf("%w: %s", store.ErrCollaborationRunNotFound, runID)
+}
+
+func (s *Store) FinishCollaborationRun(_ context.Context, input store.FinishCollaborationRunInput) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !model.IsTerminalCollaborationRunStatus(input.Status) || !model.IsCollaborationStopReasonForStatus(input.Status, input.StopReason) || input.TurnCount < 0 {
+		return fmt.Errorf("%w: invalid terminal state", store.ErrCollaborationRunTransition)
+	}
+	for i := range s.CollaborationRuns {
+		run := &s.CollaborationRuns[i]
+		if run.ID != input.RunID {
+			continue
+		}
+		if model.IsTerminalCollaborationRunStatus(run.Status) {
+			if run.Status == input.Status && run.StopReason == input.StopReason && run.TurnCount == input.TurnCount && run.Error == input.Error {
+				return nil
+			}
+			return fmt.Errorf("%w: %s is %s", store.ErrCollaborationRunFinished, input.RunID, run.Status)
+		}
+		if !model.CanTransitionCollaborationRunStatus(run.Status, input.Status) {
+			return fmt.Errorf("%w: %s to %s", store.ErrCollaborationRunTransition, run.Status, input.Status)
+		}
+		run.Status = input.Status
+		run.StopReason = input.StopReason
+		run.TurnCount = input.TurnCount
+		run.Error = input.Error
+		run.CompletedAt = &input.CompletedAt
+		return nil
+	}
+	return fmt.Errorf("%w: %s", store.ErrCollaborationRunNotFound, input.RunID)
+}
+
+func (s *Store) ReconcileActiveCollaborationRuns(_ context.Context, completedAt time.Time) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var count int64
+	for i := range s.CollaborationRuns {
+		run := &s.CollaborationRuns[i]
+		if run.Status != model.CollaborationRunStatusCreated && run.Status != model.CollaborationRunStatusRunning {
+			continue
+		}
+		run.Status = model.CollaborationRunStatusInterrupted
+		run.StopReason = model.CollaborationStopReasonInterrupted
+		run.Error = "backend restarted during collaboration execution"
+		run.CompletedAt = &completedAt
+		count++
+	}
+	return count, nil
+}
+
+func (s *Store) ListCollaborationRuns(_ context.Context, query store.ListRunsQuery) ([]store.CollaborationRun, error) {
+	result := make([]store.CollaborationRun, 0)
+	for _, run := range s.CollaborationRuns {
+		if run.RoomID == query.RoomID {
+			result = append(result, run)
+		}
+	}
+	sortRuns(result, func(i int) time.Time { return result[i].CreatedAt })
 	if limit := normalizedTestRunLimit(query.Limit, len(result)); limit < len(result) {
 		return result[:limit], nil
 	}

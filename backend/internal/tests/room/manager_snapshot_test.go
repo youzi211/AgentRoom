@@ -98,3 +98,33 @@ func TestManagerPreservesAgentRuntimeInRoomSnapshot(t *testing.T) {
 		t.Fatalf("expected deepagent runtime to survive room snapshot, got %#v", loadedAgents)
 	}
 }
+
+func TestManagerPersistsAndColdLoadsCompatibleCollaborationPolicy(t *testing.T) {
+	backingStore := &teststore.Store{}
+	manager := room.NewManager(backingStore, func([]string) []model.Agent { return nil })
+	legacy := model.DialoguePolicy{
+		Mode:                      model.DialogueModeGuided,
+		MaxAutonomousTurns:        5,
+		MaxTurnsPerAgent:          2,
+		AllowSelfFollowup:         true,
+		AllowAgentToAgentMentions: true,
+		CooldownMS:                25,
+	}
+	created, err := manager.CreateRoom(context.Background(), "Collaboration room", nil, "", legacy)
+	if err != nil {
+		t.Fatalf("create room: %v", err)
+	}
+	want := legacy.ToCollaborationPolicy()
+	if got := created.Info().CollaborationPolicy; got != want {
+		t.Fatalf("expected created room collaboration policy %#v, got %#v", want, got)
+	}
+
+	manager = room.NewManager(backingStore, func([]string) []model.Agent { return nil })
+	loaded, ok := manager.GetRoom(context.Background(), created.Info().ID)
+	if !ok {
+		t.Fatal("expected persisted room to cold load")
+	}
+	if got := loaded.Info().CollaborationPolicy; got != want {
+		t.Fatalf("expected collaboration policy to survive cold load: want %#v, got %#v", want, got)
+	}
+}

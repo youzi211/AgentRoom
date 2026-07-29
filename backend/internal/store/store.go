@@ -66,6 +66,11 @@ type Store interface {
 	CreateDialogueRun(ctx context.Context, run DialogueRun) error
 	FinishDialogueRun(ctx context.Context, runID string, status string, turnCount int, completedAt time.Time) error
 	ListDialogueRuns(ctx context.Context, query ListRunsQuery) ([]DialogueRun, error)
+	CreateCollaborationRun(ctx context.Context, run CollaborationRun) error
+	StartCollaborationRun(ctx context.Context, runID string, engineVersion string, startedAt time.Time) error
+	FinishCollaborationRun(ctx context.Context, input FinishCollaborationRunInput) error
+	ReconcileActiveCollaborationRuns(ctx context.Context, completedAt time.Time) (int64, error)
+	ListCollaborationRuns(ctx context.Context, query ListRunsQuery) ([]CollaborationRun, error)
 
 	// Knowledge documents
 	CreateKnowledgeDocument(ctx context.Context, document model.KnowledgeDocument, chunks []model.KnowledgeChunk) (model.KnowledgeDocument, error)
@@ -76,12 +81,13 @@ type Store interface {
 
 // CreateRoomInput holds the data needed to create a new room with agent snapshots.
 type CreateRoomInput struct {
-	ID             string
-	Name           string
-	Agents         []model.Agent
-	PasscodeHash   string
-	CreatedAt      time.Time
-	DialoguePolicy model.DialoguePolicy
+	ID                  string
+	Name                string
+	Agents              []model.Agent
+	PasscodeHash        string
+	CreatedAt           time.Time
+	DialoguePolicy      model.DialoguePolicy
+	CollaborationPolicy model.CollaborationPolicy
 }
 
 // AddParticipantInput holds the data needed to add a participant to a room.
@@ -149,17 +155,20 @@ type ListRunsQuery struct {
 
 // AgentRun records a single agent execution within a room.
 type AgentRun struct {
-	ID               string
-	RoomID           string
-	AgentID          string
-	TriggerMessageID string
-	Status           string
-	Error            string
-	StartedAt        time.Time
-	CompletedAt      *time.Time
-	ModelProfileID   string
-	ModelSource      string
-	ModelName        string
+	ID                 string
+	RoomID             string
+	AgentID            string
+	TriggerMessageID   string
+	CollaborationRunID string
+	TurnIndex          int
+	ParentMessageID    string
+	Status             string
+	Error              string
+	StartedAt          time.Time
+	CompletedAt        *time.Time
+	ModelProfileID     string
+	ModelSource        string
+	ModelName          string
 }
 
 type CommitAgentRunSuccessInput struct {
@@ -180,6 +189,31 @@ type DialogueRun struct {
 	Status           string
 	StartedAt        time.Time
 	CompletedAt      *time.Time
+}
+
+type CollaborationRun struct {
+	ID            string
+	RoomID        string
+	RootMessageID string
+	Engine        string
+	EngineVersion string
+	PolicyVersion string
+	Status        string
+	StopReason    string
+	TurnCount     int
+	Error         string
+	CreatedAt     time.Time
+	StartedAt     *time.Time
+	CompletedAt   *time.Time
+}
+
+type FinishCollaborationRunInput struct {
+	RunID       string
+	Status      string
+	StopReason  string
+	TurnCount   int
+	Error       string
+	CompletedAt time.Time
 }
 
 type ListKnowledgeDocumentsQuery struct {

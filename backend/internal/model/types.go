@@ -46,18 +46,19 @@ type Room struct {
 }
 
 type RoomMeta struct {
-	ID                  string         `json:"id"`
-	Name                string         `json:"name"`
-	CreatedAt           time.Time      `json:"createdAt"`
-	HasPasscode         bool           `json:"hasPasscode"`
-	PasscodeHash        string         `json:"-"`
-	DialoguePolicy      DialoguePolicy `json:"dialoguePolicy"`
-	Status              string         `json:"status,omitempty"`
-	OwnerParticipantID  string         `json:"ownerParticipantID,omitempty"`
-	ClosedAt            *time.Time     `json:"closedAt,omitempty"`
-	ClosedReason        string         `json:"closedReason,omitempty"`
-	AutoCloseDeadlineAt *time.Time     `json:"autoCloseDeadlineAt,omitempty"`
-	ArchivedAt          *time.Time     `json:"archivedAt,omitempty"`
+	ID                  string              `json:"id"`
+	Name                string              `json:"name"`
+	CreatedAt           time.Time           `json:"createdAt"`
+	HasPasscode         bool                `json:"hasPasscode"`
+	PasscodeHash        string              `json:"-"`
+	DialoguePolicy      DialoguePolicy      `json:"dialoguePolicy"`
+	CollaborationPolicy CollaborationPolicy `json:"collaborationPolicy"`
+	Status              string              `json:"status,omitempty"`
+	OwnerParticipantID  string              `json:"ownerParticipantID,omitempty"`
+	ClosedAt            *time.Time          `json:"closedAt,omitempty"`
+	ClosedReason        string              `json:"closedReason,omitempty"`
+	AutoCloseDeadlineAt *time.Time          `json:"autoCloseDeadlineAt,omitempty"`
+	ArchivedAt          *time.Time          `json:"archivedAt,omitempty"`
 }
 
 // IsArchived reports whether the room has been archived and should reject new turns.
@@ -77,20 +78,21 @@ func (r RoomMeta) IsActive() bool {
 
 // RoomSummary is a lightweight room listing entry for the admin meeting list.
 type RoomSummary struct {
-	ID                  string         `json:"id"`
-	Name                string         `json:"name"`
-	Status              string         `json:"status"`
-	HasPasscode         bool           `json:"hasPasscode"`
-	CreatedAt           time.Time      `json:"createdAt"`
-	DialoguePolicy      DialoguePolicy `json:"dialoguePolicy,omitempty"`
-	AgentCount          int            `json:"agentCount"`
-	OwnerParticipantID  string         `json:"ownerParticipantID,omitempty"`
-	ClosedAt            *time.Time     `json:"closedAt,omitempty"`
-	ClosedReason        string         `json:"closedReason,omitempty"`
-	AutoCloseDeadlineAt *time.Time     `json:"autoCloseDeadlineAt,omitempty"`
-	ArchivedAt          *time.Time     `json:"archivedAt,omitempty"`
-	MessageCount        int            `json:"messageCount"`
-	LastMessageAt       *time.Time     `json:"lastMessageAt,omitempty"`
+	ID                  string              `json:"id"`
+	Name                string              `json:"name"`
+	Status              string              `json:"status"`
+	HasPasscode         bool                `json:"hasPasscode"`
+	CreatedAt           time.Time           `json:"createdAt"`
+	DialoguePolicy      DialoguePolicy      `json:"dialoguePolicy,omitempty"`
+	CollaborationPolicy CollaborationPolicy `json:"collaborationPolicy,omitempty"`
+	AgentCount          int                 `json:"agentCount"`
+	OwnerParticipantID  string              `json:"ownerParticipantID,omitempty"`
+	ClosedAt            *time.Time          `json:"closedAt,omitempty"`
+	ClosedReason        string              `json:"closedReason,omitempty"`
+	AutoCloseDeadlineAt *time.Time          `json:"autoCloseDeadlineAt,omitempty"`
+	ArchivedAt          *time.Time          `json:"archivedAt,omitempty"`
+	MessageCount        int                 `json:"messageCount"`
+	LastMessageAt       *time.Time          `json:"lastMessageAt,omitempty"`
 }
 
 // MeetingMinutes is a persisted, versioned meeting minutes record.
