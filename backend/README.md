@@ -1,6 +1,6 @@
 # AgentRoom Backend
 
-The backend is AgentRoom's Go control plane. It exposes HTTP/WebSocket APIs, owns room and dialogue orchestration, resolves model Profiles, commits messages and run state to MySQL, and calls the Python Agent Runtime over gRPC when remote transport is enabled.
+The backend is AgentRoom's Go control plane. It exposes HTTP/WebSocket APIs, owns room and collaboration orchestration, resolves model Profiles, commits messages and run state to MySQL, and calls the Python Agent Runtime over gRPC when remote transport is enabled.
 
 Rooms support two dialogue modes:
 
@@ -56,6 +56,17 @@ The server loads `../.env` when started from `backend/`, then reads environment 
 | `AGENT_RUNTIME_TRANSPORT` | No | `local` | Explicit `local` or `grpc` Agent execution. No automatic fallback occurs. |
 | `AGENT_RUNTIME_GRPC_ADDRESS` | For `grpc` | `127.0.0.1:50051` | Long-lived Python Runtime connection target. |
 | `AGENT_RUNTIME_GRPC_INSECURE` | No | `false` | Explicit plaintext development mode; use CA/server identity in production. |
+| `COLLABORATION_RUNTIME_MODE` | No | `legacy` | `legacy` keeps the Go Runner path; `remote` uses the Python Collaboration Runtime. |
+| `COLLABORATION_RUNTIME_GRPC_ADDRESS` | For `remote` | `127.0.0.1:50051` | Collaboration Runtime gRPC target. |
+| `COLLABORATION_RUNTIME_GRPC_INSECURE` | No | `false` | Explicit plaintext development mode for the collaboration client. |
+| `COLLABORATION_RUNTIME_TIMEOUT_SECONDS` | No | `300` | Deadline for one collaboration run. |
+| `COLLABORATION_RUNTIME_MAX_REQUEST_BYTES` | No | `8388608` | Maximum collaboration request size. |
+| `COLLABORATION_RUNTIME_MAX_EVENT_BYTES` | No | `4194304` | Maximum collaboration event size. |
+| `COLLABORATION_RUNTIME_MAX_CHECKPOINT_BYTES` | No | `1048576` | Maximum opaque checkpoint size accepted from engines. |
+| `COLLABORATION_MAX_CONCURRENCY` | No | `4` | Backend collaboration scheduler concurrency. |
+| `COLLABORATION_MAX_PENDING` | No | `64` | Backend collaboration scheduler queue depth. |
+| `COLLABORATION_DEFAULT_ENGINE` | No | `native` | Default room collaboration engine when the request omits one. |
+| `COLLABORATION_DEFAULT_TRIGGER_MODE` | No | `mention_only` | Default room trigger mode; use `automatic` only for gray allowlist rooms. |
 | `DEEPAGENT_COMMAND` | Local rollback only | `uv` | Legacy command used only by the local DeepAgent adapter. |
 | `DEEPAGENT_WORKDIR` | No | `../deepagent` | Working directory for the DeepAgent uv project when backend starts from `backend/`. |
 | `DEEPAGENT_CONFIG` | No | `deepagent.toml` | DeepAgent config file path, resolved relative to `DEEPAGENT_WORKDIR` unless absolute. |
@@ -118,7 +129,7 @@ Legacy non-`/api` routes are still registered for compatibility.
 
 `GET /api/rooms/:roomID/minutes.md` is now a pure read endpoint. It downloads the latest persisted minutes and returns `404` when no saved minutes exist.
 
-Agents include `runtime` and `source` fields. Existing agents default to `llm`/`builtin`; DeepAgent agents use `runtime=deepagent`. In `grpc` mode both ordinary LLM and DeepAgent turns execute in the long-running Python service and return a unified event stream.
+Agents include `runtime` and `source` fields. Existing agents default to `llm`/`builtin`; DeepAgent agents use `runtime=deepagent`. In `grpc` mode both ordinary LLM and DeepAgent turns execute in the long-running Python service and return a unified event stream. When `COLLABORATION_RUNTIME_MODE=remote`, room collaboration runs use the separate `CollaborationRuntimeService` in the same Python process; Go still validates events and commits final messages.
 
 Room lifecycle semantics:
 
@@ -133,7 +144,7 @@ Live-room WebSocket control events now include:
 - `{"type":"close_room"}`
 - `{"type":"transfer_owner","participantID":"participant_123"}`
 
-`POST /api/rooms` accepts an optional `dialoguePolicy` object. For example:
+`POST /api/rooms` accepts optional `dialoguePolicy` and `collaborationPolicy` objects. If `collaborationPolicy` is omitted, backend `COLLABORATION_DEFAULT_*` settings provide the compatibility default. For example:
 
 ```json
 {

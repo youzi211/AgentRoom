@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, Badge, Button, Group, Paper, ScrollArea, Table, Text, Title } from '@mantine/core'
-import { archiveRoom, listRooms, reopenRoom, restoreRoom } from '../api/roomClient'
+import { RefreshCw } from 'lucide-react'
+import {
+  archiveRoom,
+  getCollaborationRuntimeCapabilities,
+  listRooms,
+  reopenRoom,
+  restoreRoom,
+} from '../api/roomClient'
+import {
+  labelForCollaborationEngine,
+  labelForTriggerMode,
+  normalizeCollaborationCapabilities,
+} from '../collaborationRuntime'
 import MeetingRoomDetail from './MeetingRoomDetail'
 import {
   actionsForRoomStatus,
@@ -35,6 +47,11 @@ function MeetingAdmin() {
   const [busyRoomId, setBusyRoomId] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [selectedRoom, setSelectedRoom] = useState(null)
+  const [runtimeState, setRuntimeState] = useState({
+    capabilities: null,
+    isLoading: true,
+    errorMessage: '',
+  })
 
   const loadRooms = useCallback(async (status) => {
     setIsLoading(true)
@@ -52,6 +69,28 @@ function MeetingAdmin() {
   useEffect(() => {
     void loadRooms(statusFilter)
   }, [loadRooms, statusFilter])
+
+  const loadRuntimeCapabilities = useCallback(async () => {
+    setRuntimeState((current) => ({ ...current, isLoading: true, errorMessage: '' }))
+    try {
+      const response = await getCollaborationRuntimeCapabilities()
+      setRuntimeState({
+        capabilities: normalizeCollaborationCapabilities(response),
+        isLoading: false,
+        errorMessage: '',
+      })
+    } catch (error) {
+      setRuntimeState({
+        capabilities: null,
+        isLoading: false,
+        errorMessage: error.message || '加载 Collaboration Runtime 状态失败。',
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadRuntimeCapabilities()
+  }, [loadRuntimeCapabilities])
 
   const handleRoomAction = async (roomItem, action) => {
     if (!roomItem?.id) {
@@ -108,6 +147,79 @@ function MeetingAdmin() {
       </section>
 
       {errorMessage ? <Alert color="red" variant="light">{errorMessage}</Alert> : null}
+
+      <Paper className="panel collaboration-runtime-panel" withBorder radius="md" shadow="xs">
+        <div className="panel-header panel-header--horizontal">
+          <div className="panel-title-row">
+            <Title order={2}>Collaboration Runtime</Title>
+            {runtimeState.capabilities ? (
+              <Badge color={runtimeState.capabilities.ready ? 'teal' : 'yellow'} variant="light">
+                {runtimeState.capabilities.ready ? '已就绪' : '未就绪'}
+              </Badge>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            size="xs"
+            variant="subtle"
+            color="gray"
+            leftSection={<RefreshCw size={15} />}
+            onClick={() => void loadRuntimeCapabilities()}
+            loading={runtimeState.isLoading}
+          >
+            刷新
+          </Button>
+        </div>
+
+        {runtimeState.errorMessage ? (
+          <Alert color="red" variant="light">{runtimeState.errorMessage}</Alert>
+        ) : runtimeState.isLoading ? (
+          <Text className="sidebar-empty">正在加载...</Text>
+        ) : runtimeState.capabilities ? (
+          <div className="collaboration-runtime-summary">
+            <div>
+              <Text component="span" size="sm" c="dimmed">部署模式</Text>
+              <Text component="strong">{runtimeState.capabilities.mode}</Text>
+            </div>
+            <div>
+              <Text component="span" size="sm" c="dimmed">协议版本</Text>
+              <Group gap={6}>
+                {runtimeState.capabilities.supportedProtocolVersions.length > 0
+                  ? runtimeState.capabilities.supportedProtocolVersions.map((version) => <Badge key={version} color="gray" variant="light">{version}</Badge>)
+                  : <Text size="sm">—</Text>}
+              </Group>
+            </div>
+            <div>
+              <Text component="span" size="sm" c="dimmed">触发方式</Text>
+              <Group gap={6}>
+                {runtimeState.capabilities.supportedTriggerModes.length > 0
+                  ? runtimeState.capabilities.supportedTriggerModes.map((mode) => <Badge key={mode} color="blue" variant="light">{labelForTriggerMode(mode)}</Badge>)
+                  : <Text size="sm">—</Text>}
+              </Group>
+            </div>
+            <div className="collaboration-runtime-engines">
+              <Text component="span" size="sm" c="dimmed">引擎</Text>
+              <Group gap={8}>
+                {runtimeState.capabilities.engines.length > 0
+                  ? runtimeState.capabilities.engines.map((engine) => (
+                    <Group className="collaboration-runtime-engine" gap={5} key={engine.engine}>
+                      <Text component="strong" size="sm">
+                        {labelForCollaborationEngine(engine.engine)}{engine.version ? ` · ${engine.version}` : ''}
+                      </Text>
+                      <Badge color={engine.enabled ? 'teal' : 'gray'} variant="light">
+                        {engine.enabled ? '已启用' : '未启用'}
+                      </Badge>
+                      <Badge color={engine.ready ? 'blue' : 'yellow'} variant="light">
+                        {engine.ready ? '就绪' : '未就绪'}
+                      </Badge>
+                    </Group>
+                  ))
+                  : <Text size="sm">—</Text>}
+              </Group>
+            </div>
+          </div>
+        ) : null}
+      </Paper>
 
       <Paper className="panel" withBorder radius="md" shadow="xs">
         <div className="panel-header panel-header--horizontal">

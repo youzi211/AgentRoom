@@ -14,6 +14,7 @@ import (
 
 	"agentroom/backend/internal/agent"
 	"agentroom/backend/internal/api/contracts"
+	"agentroom/backend/internal/collaboration"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/service"
 	"agentroom/backend/internal/store"
@@ -48,6 +49,44 @@ func (s *Server) handleReady(c *gin.Context) {
 			"ok": runtimeOK,
 		},
 	})
+}
+
+func (s *Server) handleCollaborationRuntimeCapabilities(c *gin.Context) {
+	mode := strings.ToLower(strings.TrimSpace(s.config.CollaborationRuntimeMode))
+	if mode == "" {
+		mode = "legacy"
+	}
+	capabilities := collaboration.LegacyRuntimeCapabilities()
+	if mode == "remote" {
+		capabilities = collaboration.RuntimeCapabilities{
+			SupportedProtocolVersions: []string{},
+			Engines:                   []collaboration.EngineCapability{},
+			SupportedTriggerModes:     []collaboration.TriggerMode{},
+		}
+		if s.collaborationRuntime != nil {
+			remoteCapabilities, err := s.collaborationRuntime.Capabilities(c.Request.Context())
+			if err == nil {
+				capabilities = remoteCapabilities
+			}
+		}
+	}
+
+	response := contracts.CollaborationRuntimeCapabilitiesResponse{
+		Mode:                      mode,
+		Ready:                     capabilities.Ready,
+		SupportedProtocolVersions: append([]string(nil), capabilities.SupportedProtocolVersions...),
+		Engines:                   make([]contracts.CollaborationRuntimeEngineCapability, 0, len(capabilities.Engines)),
+		SupportedTriggerModes:     make([]string, 0, len(capabilities.SupportedTriggerModes)),
+	}
+	for _, engine := range capabilities.Engines {
+		response.Engines = append(response.Engines, contracts.CollaborationRuntimeEngineCapability{
+			Engine: string(engine.Engine), Version: engine.Version, Enabled: engine.Enabled, Ready: engine.Ready,
+		})
+	}
+	for _, triggerMode := range capabilities.SupportedTriggerModes {
+		response.SupportedTriggerModes = append(response.SupportedTriggerModes, string(triggerMode))
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 func (s *Server) handleAgents(c *gin.Context) {
@@ -257,8 +296,17 @@ func (s *Server) handleCreateRoom(c *gin.Context) {
 	}
 
 	dialoguePolicy := request.DialoguePolicy.Resolve()
+	defaultCollaborationPolicy := s.config.DefaultCollaborationPolicy.WithDefaults()
+	if s.config.DefaultCollaborationPolicy == (model.CollaborationPolicy{}) {
+		defaultCollaborationPolicy = dialoguePolicy.ToCollaborationPolicy()
+	}
+	collaborationPolicy, err := request.CollaborationPolicy.Resolve(defaultCollaborationPolicy)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "invalid collaboration policy")
+		return
+	}
 
-	currentRoom, err := s.roomCommands.CreateRoom(c.Request.Context(), request.Name, request.AgentIDs, request.Passcode, dialoguePolicy)
+	currentRoom, err := s.roomCommands.CreateRoom(c.Request.Context(), request.Name, request.AgentIDs, request.Passcode, dialoguePolicy, collaborationPolicy)
 	if err != nil {
 		s.logger.Error("create room", "room_name", request.Name, "error", err)
 		writeError(c, http.StatusInternalServerError, "failed to create room")
@@ -476,13 +524,14 @@ func (s *Server) handleListRecentRooms(c *gin.Context) {
 	publicRooms := make([]contracts.PublicRoomSummary, 0, len(rooms))
 	for _, room := range rooms {
 		publicRooms = append(publicRooms, contracts.PublicRoomSummary{
-			ID:             room.ID,
-			Name:           room.Name,
-			Status:         room.Status,
-			HasPasscode:    room.HasPasscode,
-			CreatedAt:      room.CreatedAt,
-			DialoguePolicy: room.DialoguePolicy.WithDefaults(),
-			AgentCount:     room.AgentCount,
+			ID:                  room.ID,
+			Name:                room.Name,
+			Status:              room.Status,
+			HasPasscode:         room.HasPasscode,
+			CreatedAt:           room.CreatedAt,
+			DialoguePolicy:      room.DialoguePolicy.WithDefaults(),
+			CollaborationPolicy: room.CollaborationPolicy.WithDefaults(),
+			AgentCount:          room.AgentCount,
 		})
 	}
 	c.JSON(http.StatusOK, contracts.ListRecentRoomsResponse{Rooms: publicRooms})
@@ -675,8 +724,9 @@ func readMarkdownUpload(c *gin.Context) (string, []byte, bool) {
 
 func roomActivityResponse(activity service.RoomActivity) contracts.RoomActivityResponse {
 	response := contracts.RoomActivityResponse{
-		AgentRuns:    make([]contracts.AgentRunActivity, 0, len(activity.AgentRuns)),
-		DialogueRuns: make([]contracts.DialogueRunActivity, 0, len(activity.DialogueRuns)),
+		AgentRuns:         make([]contracts.AgentRunActivity, 0, len(activity.AgentRuns)),
+		DialogueRuns:      make([]contracts.DialogueRunActivity, 0, len(activity.DialogueRuns)),
+		CollaborationRuns: make([]contracts.CollaborationRunActivity, 0, len(activity.CollaborationRuns)),
 	}
 	for _, run := range activity.AgentRuns {
 		response.AgentRuns = append(response.AgentRuns, contracts.AgentRunActivity{
@@ -701,6 +751,14 @@ func roomActivityResponse(activity service.RoomActivity) contracts.RoomActivityR
 			Status:           run.Status,
 			CreatedAt:        run.CreatedAt,
 			CompletedAt:      run.CompletedAt,
+		})
+	}
+	for _, run := range activity.CollaborationRuns {
+		response.CollaborationRuns = append(response.CollaborationRuns, contracts.CollaborationRunActivity{
+			ID: run.ID, RoomID: run.RoomID, RootMessageID: run.RootMessageID,
+			Engine: run.Engine, EngineVersion: run.EngineVersion, PolicyVersion: run.PolicyVersion,
+			Status: run.Status, StopReason: run.StopReason, TurnCount: run.TurnCount, ErrorText: run.ErrorText,
+			CreatedAt: run.CreatedAt, StartedAt: run.StartedAt, CompletedAt: run.CompletedAt,
 		})
 	}
 	return response

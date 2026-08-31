@@ -11,10 +11,10 @@ import (
 )
 
 type RealtimeSession struct {
-	currentRoom  *room.Room
-	participant  model.Participant
-	client       *room.Client
-	cleanupOnce  sync.Once
+	currentRoom *room.Room
+	participant model.Participant
+	client      *room.Client
+	cleanupOnce sync.Once
 }
 
 func (s *RealtimeSession) Events() <-chan realtime.Event {
@@ -108,7 +108,7 @@ func (s *RoomService) PostRealtimeMessage(ctx context.Context, session *Realtime
 		return ErrRoomNotFound
 	}
 
-	savedMessage, focusPoints, err := s.HandleHumanMessage(ctx, session.currentRoom, session.participant, strings.TrimSpace(content))
+	savedMessage, _, err := s.HandleHumanMessage(ctx, session.currentRoom, session.participant, strings.TrimSpace(content))
 	if err != nil {
 		return err
 	}
@@ -117,17 +117,12 @@ func (s *RoomService) PostRealtimeMessage(ctx context.Context, session *Realtime
 		Type:    realtime.EventTypeMessage,
 		Message: &savedMessage,
 	})
-	if len(focusPoints) > 0 {
-		session.currentRoom.Events().BroadcastEvent(realtime.Event{
-			Type:        realtime.EventTypeFocusUpdate,
-			FocusPoints: focusPoints,
-		})
-	}
 
 	triggerCtx := context.Background()
 	if ctx != nil {
 		triggerCtx = context.WithoutCancel(ctx)
 	}
+	s.ScheduleFocusAnalysis(triggerCtx, session.currentRoom, savedMessage)
 	s.TriggerAgentResponses(triggerCtx, session.currentRoom, savedMessage)
 	return nil
 }

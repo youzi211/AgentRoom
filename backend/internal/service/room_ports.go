@@ -103,8 +103,8 @@ func (c *RoomCommands) UploadAgentKnowledge(ctx context.Context, agentID string,
 	return c.root.UploadAgentKnowledge(ctx, agentID, fileName, content)
 }
 
-func (c *RoomCommands) CreateRoom(ctx context.Context, name string, agentIDs []string, passcode string, dialoguePolicy model.DialoguePolicy) (*room.Room, error) {
-	return c.root.CreateRoom(ctx, name, agentIDs, passcode, dialoguePolicy)
+func (c *RoomCommands) CreateRoom(ctx context.Context, name string, agentIDs []string, passcode string, dialoguePolicy model.DialoguePolicy, collaborationPolicy model.CollaborationPolicy) (*room.Room, error) {
+	return c.root.CreateRoom(ctx, name, agentIDs, passcode, dialoguePolicy, collaborationPolicy)
 }
 
 func (c *RoomCommands) GenerateMinutes(ctx context.Context, currentRoom *room.Room) (string, model.MeetingMinutes, error) {

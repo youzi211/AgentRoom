@@ -14,8 +14,12 @@ import (
 )
 
 const (
-	defaultAgentResponseWorkers = 4
-	defaultAgentResponseQueue   = 64
+	defaultAgentResponseWorkers       = 4
+	defaultAgentResponseQueue         = 64
+	defaultFocusAnalysisWorkers       = 2
+	defaultFocusAnalysisQueue         = 64
+	defaultFocusAnalysisTimeout       = 30 * time.Second
+	defaultCollaborationCancelTimeout = 5 * time.Second
 )
 
 // RoomService coordinates room use cases across runtime room state, persistence, and agents.
@@ -28,11 +32,14 @@ type RoomService struct {
 	runner        *agent.Runner
 	focus         *FocusService
 	minutes       *MinutesService
+	collaboration CollaborationScheduler
 	store         roomStore
 	logger        *slog.Logger
 	lifecycle     *MeetingLifecycle
 	responseJobs  chan agentResponseJob
 	responseStart sync.Once
+	focusJobs     chan focusWorkerJob
+	focusStart    sync.Once
 }
 
 type roomStore interface {
@@ -47,10 +54,15 @@ type roomStore interface {
 	ListMessagesPage(ctx context.Context, query store.ListMessagesQuery) (store.MessagePage, error)
 	ListAgentRuns(ctx context.Context, query store.ListRunsQuery) ([]store.AgentRun, error)
 	ListDialogueRuns(ctx context.Context, query store.ListRunsQuery) ([]store.DialogueRun, error)
+	ListCollaborationRuns(ctx context.Context, query store.ListRunsQuery) ([]store.CollaborationRun, error)
 	CreateMinutes(ctx context.Context, minutes model.MeetingMinutes) (model.MeetingMinutes, error)
 	ListMinutes(ctx context.Context, roomID string) ([]model.MeetingMinutes, error)
 	LatestMinutes(ctx context.Context, roomID string) (model.MeetingMinutes, bool, error)
 	UpdateRoomLifecycle(ctx context.Context, input store.UpdateRoomLifecycleInput) error
+}
+
+type collaborationCanceler interface {
+	CancelRoom(context.Context, string) error
 }
 
 type agentResponseJob struct {
@@ -59,10 +71,16 @@ type agentResponseJob struct {
 	message model.Message
 }
 
+type focusWorkerJob struct {
+	ctx      context.Context
+	room     *room.Room
+	analysis focusAnalysisJob
+}
+
 func NewRoomService(manager *room.Manager, agents *AgentService, knowledge *KnowledgeService, runner *agent.Runner, focus *FocusService, s roomStore) *RoomService {
 	lifecycle := NewMeetingLifecycle(s)
 	if runner != nil {
-		lifecycle.WithRoomStopped(func(roomID string) {
+		lifecycle.WithRoomStopped(func(_ context.Context, roomID string) {
 			runner.CancelRoom(roomID)
 		})
 	}
@@ -76,6 +94,25 @@ func NewRoomService(manager *room.Manager, agents *AgentService, knowledge *Know
 		logger:    logging.Component("room_service"),
 		lifecycle: lifecycle,
 	}
+}
+
+func (s *RoomService) WithCollaborationCanceler(canceler collaborationCanceler) *RoomService {
+	if canceler == nil {
+		return s
+	}
+	s.lifecycle.WithRoomStopped(func(ctx context.Context, roomID string) {
+		cancelCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultCollaborationCancelTimeout)
+		defer cancel()
+		if err := canceler.CancelRoom(cancelCtx, roomID); err != nil {
+			s.logger.Warn("cancel room collaboration", "room_id", roomID, "error", err)
+		}
+	})
+	return s
+}
+
+func (s *RoomService) WithCollaborationScheduler(scheduler CollaborationScheduler) *RoomService {
+	s.collaboration = scheduler
+	return s
 }
 
 func (s *RoomService) WithMinutes(minutes *MinutesService) *RoomService {

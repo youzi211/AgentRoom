@@ -68,3 +68,19 @@ func (p DialoguePolicy) WithDefaults() DialoguePolicy {
 func (p DialoguePolicy) IsGuided() bool {
 	return p.WithDefaults().Mode == DialogueModeGuided
 }
+
+func (p DialoguePolicy) ToCollaborationPolicy() CollaborationPolicy {
+	if p == (DialoguePolicy{}) {
+		return DefaultCollaborationPolicy()
+	}
+	p = p.WithDefaults()
+	return CollaborationPolicy{
+		Engine:            CollaborationEngineNative,
+		TriggerMode:       CollaborationTriggerMentionOnly,
+		MaxTurns:          p.MaxAutonomousTurns,
+		MaxTurnsPerAgent:  p.MaxTurnsPerAgent,
+		AllowAgentHandoff: p.AllowAgentToAgentMentions,
+		AllowSelfFollowup: p.AllowSelfFollowup,
+		CooldownMS:        p.CooldownMS,
+	}
+}

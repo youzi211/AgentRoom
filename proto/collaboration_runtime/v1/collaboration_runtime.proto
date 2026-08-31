@@ -1,0 +1,343 @@
+syntax = "proto3";
+
+package agentroom.collaboration.v1;
+
+option go_package = "agentroom/backend/internal/collaborationproto/v1;collaborationruntimev1";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// CollaborationRuntimeService executes one immutable, multi-turn room
+// collaboration. Go remains responsible for persistence and broadcasting.
+service CollaborationRuntimeService {
+  rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
+  rpc ExecuteConversation(ExecuteConversationRequest) returns (stream CollaborationEvent);
+}
+
+message GetCapabilitiesRequest {}
+
+message CollaborationEngineCapability {
+  string engine = 1;
+  string version = 2;
+  bool enabled = 3;
+  bool ready = 4;
+}
+
+message GetCapabilitiesResponse {
+  bool ready = 1;
+  repeated string supported_protocol_versions = 2;
+  repeated CollaborationEngineCapability engines = 3;
+  repeated string supported_trigger_modes = 4;
+}
+
+enum CollaborationEngine {
+  COLLABORATION_ENGINE_UNSPECIFIED = 0;
+  COLLABORATION_ENGINE_NATIVE = 1;
+  COLLABORATION_ENGINE_AUTOGEN = 2;
+}
+
+enum TriggerMode {
+  TRIGGER_MODE_UNSPECIFIED = 0;
+  TRIGGER_MODE_MENTION_ONLY = 1;
+  TRIGGER_MODE_AUTOMATIC = 2;
+}
+
+enum SenderType {
+  SENDER_TYPE_UNSPECIFIED = 0;
+  SENDER_TYPE_HUMAN = 1;
+  SENDER_TYPE_AGENT = 2;
+  SENDER_TYPE_SYSTEM = 3;
+}
+
+enum CollaborationStopReason {
+  COLLABORATION_STOP_REASON_UNSPECIFIED = 0;
+  COLLABORATION_STOP_REASON_COMPLETED = 1;
+  COLLABORATION_STOP_REASON_MAX_TURNS = 2;
+  COLLABORATION_STOP_REASON_MAX_TURNS_PER_AGENT = 3;
+  COLLABORATION_STOP_REASON_EMPTY_OUTPUT = 4;
+  COLLABORATION_STOP_REASON_DUPLICATE_OUTPUT = 5;
+  COLLABORATION_STOP_REASON_NO_ELIGIBLE_AGENT = 6;
+  COLLABORATION_STOP_REASON_CANCELLED = 7;
+  COLLABORATION_STOP_REASON_DEADLINE_EXCEEDED = 8;
+  COLLABORATION_STOP_REASON_INTERRUPTED = 9;
+  COLLABORATION_STOP_REASON_ENGINE_FAILURE = 10;
+  COLLABORATION_STOP_REASON_PROTOCOL_ERROR = 11;
+}
+
+enum CollaborationErrorCode {
+  COLLABORATION_ERROR_CODE_UNSPECIFIED = 0;
+  COLLABORATION_ERROR_CODE_INVALID_REQUEST = 1;
+  COLLABORATION_ERROR_CODE_UNSUPPORTED_VERSION = 2;
+  COLLABORATION_ERROR_CODE_ENGINE_UNAVAILABLE = 3;
+  COLLABORATION_ERROR_CODE_RESOURCE_EXHAUSTED = 4;
+  COLLABORATION_ERROR_CODE_DUPLICATE_RUN = 5;
+  COLLABORATION_ERROR_CODE_ROOM_BUSY = 6;
+  COLLABORATION_ERROR_CODE_MODEL_NOT_CONFIGURED = 7;
+  COLLABORATION_ERROR_CODE_MODEL_AUTHENTICATION_FAILED = 8;
+  COLLABORATION_ERROR_CODE_MODEL_RATE_LIMITED = 9;
+  COLLABORATION_ERROR_CODE_MODEL_TIMEOUT = 10;
+  COLLABORATION_ERROR_CODE_TOOL_FAILED = 11;
+  COLLABORATION_ERROR_CODE_OUTPUT_INVALID = 12;
+  COLLABORATION_ERROR_CODE_CHECKPOINT_INVALID = 13;
+  COLLABORATION_ERROR_CODE_PROTOCOL_ERROR = 14;
+  COLLABORATION_ERROR_CODE_CANCELLED = 15;
+  COLLABORATION_ERROR_CODE_DEADLINE_EXCEEDED = 16;
+  COLLABORATION_ERROR_CODE_INTERNAL = 17;
+}
+
+message RoomSnapshot {
+  string id = 1;
+  string name = 2;
+  string status = 3;
+}
+
+message AgentSnapshot {
+  string id = 1;
+  string name = 2;
+  string mention = 3;
+  string role = 4;
+  string description = 5;
+  string system_prompt = 6;
+  string runtime = 7;
+  string model_reference_id = 8;
+  repeated string tool_names = 9;
+}
+
+message MessageSnapshot {
+  string id = 1;
+  string sender_id = 2;
+  string sender_name = 3;
+  SenderType sender_type = 4;
+  string content = 5;
+  google.protobuf.Timestamp created_at = 6;
+  string collaboration_run_id = 7;
+  uint32 turn_index = 8;
+  string parent_message_id = 9;
+}
+
+message KnowledgeChunk {
+  string id = 1;
+  string document_id = 2;
+  string document_name = 3;
+  string scope = 4;
+  string scope_id = 5;
+  uint32 chunk_index = 6;
+  string content = 7;
+}
+
+// ModelReference identifies a control-plane approved model profile. Credentials
+// and provider clients are resolved behind the framework-neutral model port.
+message ModelReference {
+  string id = 1;
+  string profile_id = 2;
+  string source = 3;
+  string protocol = 4;
+  string model_name = 5;
+  string runtime_scope = 6;
+}
+
+message CollaborationPolicySnapshot {
+  string version = 1;
+  CollaborationEngine engine = 2;
+  TriggerMode trigger_mode = 3;
+  uint32 max_turns = 4;
+  uint32 max_turns_per_agent = 5;
+  bool allow_agent_handoff = 6;
+  bool allow_self_followup = 7;
+  google.protobuf.Duration cooldown = 8;
+  bool stop_on_empty_output = 9;
+  bool stop_on_repeated_output = 10;
+}
+
+message ExecutionLimits {
+  google.protobuf.Duration timeout = 1;
+  uint32 max_output_bytes = 2;
+  uint32 max_artifact_bytes = 3;
+  uint32 max_tool_steps = 4;
+  uint32 max_request_bytes = 5;
+  uint32 max_event_bytes = 6;
+  uint32 max_checkpoint_bytes = 7;
+}
+
+// OpaqueCheckpoint is optional engine state. Peers validate all metadata and
+// the SHA-256 digest before use; Go never parses payload contents.
+message OpaqueCheckpoint {
+  CollaborationEngine engine = 1;
+  string engine_version = 2;
+  string format_version = 3;
+  string sha256 = 4;
+  uint64 size_bytes = 5;
+  bytes payload = 6;
+}
+
+message ConversationSnapshot {
+  RoomSnapshot room = 1;
+  repeated AgentSnapshot agents = 2;
+  MessageSnapshot trigger = 3;
+  repeated MessageSnapshot transcript = 4;
+  repeated KnowledgeChunk knowledge_chunks = 5;
+  repeated ModelReference model_references = 6;
+  CollaborationPolicySnapshot policy = 7;
+  ExecutionLimits limits = 8;
+  repeated string initial_candidate_agent_ids = 9;
+}
+
+message ExecuteConversationRequest {
+  string protocol_version = 1;
+  string collaboration_run_id = 2;
+  string trace_id = 3;
+  CollaborationEngine engine = 4;
+  ConversationSnapshot snapshot = 5;
+  OpaqueCheckpoint checkpoint = 6;
+}
+
+message Usage {
+  uint64 input_tokens = 1;
+  uint64 output_tokens = 2;
+  uint64 total_tokens = 3;
+}
+
+message ModelAudit {
+  string model_reference_id = 1;
+  string profile_id = 2;
+  string source = 3;
+  string model_name = 4;
+}
+
+message KnowledgeSource {
+  string document_id = 1;
+  string document_name = 2;
+  string scope = 3;
+}
+
+message Artifact {
+  string id = 1;
+  string type = 2;
+  string title = 3;
+  string file_name = 4;
+  string mime_type = 5;
+  bytes content = 6;
+  string external_uri = 7;
+}
+
+message CollaborationFailure {
+  CollaborationErrorCode code = 1;
+  string message = 2;
+  bool retryable = 3;
+}
+
+message AcceptedEvent {}
+
+message CollaborationStartedEvent {}
+
+message SpeakerSelectedEvent {
+  string reason_category = 1;
+}
+
+message AgentTurnStartedEvent {}
+
+message ModelStartedEvent {
+  string model_reference_id = 1;
+}
+
+message ModelCompletedEvent {
+  string model_reference_id = 1;
+  Usage usage = 2;
+}
+
+message ToolStartedEvent {
+  string tool_call_id = 1;
+  string tool_name = 2;
+  string input_summary = 3;
+}
+
+message ToolCompletedEvent {
+  string tool_call_id = 1;
+  string tool_name = 2;
+  string output_summary = 3;
+}
+
+message ToolFailedEvent {
+  string tool_call_id = 1;
+  string tool_name = 2;
+  CollaborationFailure failure = 3;
+}
+
+message OutputDeltaEvent {
+  string text = 1;
+}
+
+message ArtifactReadyEvent {
+  Artifact artifact = 1;
+}
+
+message HandoffRequestedEvent {
+  string target_agent_id = 1;
+  string reason_category = 2;
+}
+
+message AgentMessageCompletedEvent {
+  string content = 1;
+  repeated Artifact artifacts = 2;
+  repeated KnowledgeSource knowledge_sources = 3;
+  ModelAudit model = 4;
+  Usage usage = 5;
+}
+
+message CheckpointEvent {
+  OpaqueCheckpoint checkpoint = 1;
+}
+
+message CompletedEvent {
+  uint32 turn_count = 1;
+  CollaborationStopReason reason = 2;
+}
+
+message StoppedEvent {
+  uint32 turn_count = 1;
+  CollaborationStopReason reason = 2;
+}
+
+message CancelledEvent {
+  uint32 turn_count = 1;
+  CollaborationStopReason reason = 2;
+}
+
+message FailedEvent {
+  uint32 turn_count = 1;
+  CollaborationStopReason reason = 2;
+  CollaborationFailure failure = 3;
+}
+
+message CollaborationEvent {
+  string protocol_version = 1;
+  string collaboration_run_id = 2;
+  uint64 sequence = 3;
+  google.protobuf.Timestamp occurred_at = 4;
+
+  // Turn-scoped events set both fields. Run-scoped and terminal events leave
+  // both empty. speaker_selected identifies the turn it is selecting.
+  string turn_id = 5;
+  string agent_id = 6;
+
+  oneof payload {
+    AcceptedEvent accepted = 10;
+    CollaborationStartedEvent collaboration_started = 11;
+    SpeakerSelectedEvent speaker_selected = 12;
+    AgentTurnStartedEvent agent_turn_started = 13;
+    ModelStartedEvent model_started = 14;
+    ModelCompletedEvent model_completed = 15;
+    ToolStartedEvent tool_started = 16;
+    ToolCompletedEvent tool_completed = 17;
+    ToolFailedEvent tool_failed = 18;
+    OutputDeltaEvent output_delta = 19;
+    ArtifactReadyEvent artifact_ready = 20;
+    HandoffRequestedEvent handoff_requested = 21;
+    AgentMessageCompletedEvent agent_message_completed = 22;
+    CheckpointEvent checkpoint = 23;
+    CompletedEvent completed = 24;
+    StoppedEvent stopped = 25;
+    CancelledEvent cancelled = 26;
+    FailedEvent failed = 27;
+  }
+}

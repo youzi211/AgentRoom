@@ -59,3 +59,39 @@ def test_runtime_settings_reject_unreadable_tls_material(monkeypatch, tmp_path):
             tls_cert_file=cert,
             tls_key_file=key,
         ).validate()
+
+
+def test_runtime_settings_load_collaboration_controls_from_env():
+    settings = RuntimeSettings.from_env(
+        {
+            "AGENT_RUNTIME_INSECURE": "true",
+            "COLLABORATION_RUNTIME_ENABLED": "false",
+            "COLLABORATION_ENGINE_ALLOWLIST": "native, autogen",
+            "COLLABORATION_AUTOGEN_ENABLED": "true",
+            "COLLABORATION_MAX_CONCURRENCY": "2",
+            "COLLABORATION_MAX_PENDING": "3",
+            "COLLABORATION_CHECKPOINT_MAX_BYTES": "4096",
+            "COLLABORATION_DEFAULT_ENGINE": "autogen",
+            "COLLABORATION_DEFAULT_TRIGGER_MODE": "automatic",
+        }
+    )
+
+    assert settings.collaboration_enabled is False
+    assert settings.collaboration_engine_allowlist == ("native", "autogen")
+    assert settings.collaboration_autogen_enabled is True
+    assert settings.collaboration_max_concurrency == 2
+    assert settings.collaboration_max_pending == 3
+    assert settings.collaboration_checkpoint_max_bytes == 4096
+    assert settings.collaboration_default_engine == "autogen"
+    assert settings.collaboration_default_trigger_mode == "automatic"
+
+
+def test_runtime_settings_reject_collaboration_default_outside_allowlist():
+    with pytest.raises(RuntimeConfigError, match="DEFAULT_ENGINE"):
+        RuntimeSettings.from_env(
+            {
+                "AGENT_RUNTIME_INSECURE": "true",
+                "COLLABORATION_ENGINE_ALLOWLIST": "native",
+                "COLLABORATION_DEFAULT_ENGINE": "autogen",
+            }
+        )

@@ -33,24 +33,31 @@ func (AgentModel) TableName() string { return "agents" }
 
 // RoomModel maps to the `rooms` table.
 type RoomModel struct {
-	ID                        string     `gorm:"primaryKey;size:64"`
-	Name                      string     `gorm:"size:255;not null"`
-	Status                    string     `gorm:"size:32;not null;default:'active'"`
-	OwnerParticipantID        *string    `gorm:"column:owner_participant_id;size:64"`
-	PasscodeHash              string     `gorm:"column:passcode_hash;size:128;not null;default:''"`
-	DialogueMode              string     `gorm:"column:dialogue_mode;size:32;not null;default:'mention_fanout'"`
-	MaxAutonomousTurns        int        `gorm:"column:max_autonomous_turns;not null;default:3"`
-	MaxTurnsPerAgent          int        `gorm:"column:max_turns_per_agent;not null;default:1"`
-	AllowSelfFollowup         bool       `gorm:"column:allow_self_followup;not null;default:false"`
-	AllowAgentToAgentMentions bool       `gorm:"column:allow_agent_to_agent_mentions;not null;default:true"`
-	ResponseStrategy          string     `gorm:"column:response_strategy;size:32;not null;default:'mentioned_first'"`
-	CooldownMS                int        `gorm:"column:cooldown_ms;not null;default:0"`
-	ClosedAt                  *time.Time `gorm:"column:closed_at"`
-	ClosedReason              string     `gorm:"column:closed_reason;size:32;not null;default:''"`
-	AutoCloseDeadlineAt       *time.Time `gorm:"column:auto_close_deadline_at"`
-	CreatedAt                 time.Time  `gorm:"not null;index:idx_rooms_created_at"`
-	UpdatedAt                 time.Time  `gorm:"not null"`
-	ArchivedAt                *time.Time `gorm:""`
+	ID                             string     `gorm:"primaryKey;size:64"`
+	Name                           string     `gorm:"size:255;not null"`
+	Status                         string     `gorm:"size:32;not null;default:'active'"`
+	OwnerParticipantID             *string    `gorm:"column:owner_participant_id;size:64"`
+	PasscodeHash                   string     `gorm:"column:passcode_hash;size:128;not null;default:''"`
+	DialogueMode                   string     `gorm:"column:dialogue_mode;size:32;not null;default:'mention_fanout'"`
+	MaxAutonomousTurns             int        `gorm:"column:max_autonomous_turns;not null;default:3"`
+	MaxTurnsPerAgent               int        `gorm:"column:max_turns_per_agent;not null;default:1"`
+	AllowSelfFollowup              bool       `gorm:"column:allow_self_followup;not null;default:false"`
+	AllowAgentToAgentMentions      bool       `gorm:"column:allow_agent_to_agent_mentions;not null;default:true"`
+	ResponseStrategy               string     `gorm:"column:response_strategy;size:32;not null;default:'mentioned_first'"`
+	CooldownMS                     int        `gorm:"column:cooldown_ms;not null;default:0"`
+	CollaborationEngine            string     `gorm:"column:collaboration_engine;size:32;not null;default:'native'"`
+	CollaborationTriggerMode       string     `gorm:"column:collaboration_trigger_mode;size:32;not null;default:'mention_only'"`
+	CollaborationMaxTurns          int        `gorm:"column:collaboration_max_turns;not null;default:3"`
+	CollaborationMaxTurnsPerAgent  int        `gorm:"column:collaboration_max_turns_per_agent;not null;default:1"`
+	CollaborationAllowAgentHandoff bool       `gorm:"column:collaboration_allow_agent_handoff;not null;default:true"`
+	CollaborationAllowSelfFollowup bool       `gorm:"column:collaboration_allow_self_followup;not null;default:false"`
+	CollaborationCooldownMS        int        `gorm:"column:collaboration_cooldown_ms;not null;default:0"`
+	ClosedAt                       *time.Time `gorm:"column:closed_at"`
+	ClosedReason                   string     `gorm:"column:closed_reason;size:32;not null;default:''"`
+	AutoCloseDeadlineAt            *time.Time `gorm:"column:auto_close_deadline_at"`
+	CreatedAt                      time.Time  `gorm:"not null;index:idx_rooms_created_at"`
+	UpdatedAt                      time.Time  `gorm:"not null"`
+	ArchivedAt                     *time.Time `gorm:""`
 }
 
 func (RoomModel) TableName() string { return "rooms" }
@@ -120,19 +127,40 @@ type DialogueRunModel struct {
 
 func (DialogueRunModel) TableName() string { return "dialogue_runs" }
 
+type CollaborationRunModel struct {
+	ID            string     `gorm:"primaryKey;size:64"`
+	RoomID        string     `gorm:"column:room_id;size:64;not null;index:idx_collaboration_runs_room"`
+	RootMessageID string     `gorm:"column:root_message_id;size:64;not null;index:idx_collaboration_runs_root_message"`
+	Engine        string     `gorm:"size:32;not null"`
+	EngineVersion string     `gorm:"column:engine_version;size:64;not null;default:''"`
+	PolicyVersion string     `gorm:"column:policy_version;size:32;not null;default:'v1'"`
+	Status        string     `gorm:"size:32;not null"`
+	StopReason    string     `gorm:"column:stop_reason;size:64;not null;default:''"`
+	TurnCount     int        `gorm:"column:turn_count;not null;default:0"`
+	Error         *string    `gorm:"type:text"`
+	CreatedAt     time.Time  `gorm:"not null"`
+	StartedAt     *time.Time `gorm:""`
+	CompletedAt   *time.Time `gorm:""`
+}
+
+func (CollaborationRunModel) TableName() string { return "collaboration_runs" }
+
 // AgentRunModel maps to the `agent_runs` table.
 type AgentRunModel struct {
-	ID               string     `gorm:"primaryKey;size:64"`
-	RoomID           string     `gorm:"size:64;not null;index:idx_agent_runs_room"`
-	AgentID          string     `gorm:"size:64;not null"`
-	TriggerMessageID string     `gorm:"size:64;not null;index:idx_agent_runs_trigger"`
-	Status           string     `gorm:"size:32;not null"`
-	Error            *string    `gorm:"type:text"`
-	StartedAt        time.Time  `gorm:"not null"`
-	CompletedAt      *time.Time `gorm:""`
-	ModelProfileID   *string    `gorm:"column:model_profile_id;size:64;index"`
-	ModelSource      string     `gorm:"column:model_source;size:32;not null;default:''"`
-	ModelName        string     `gorm:"column:model_name;size:255;not null;default:''"`
+	ID                 string     `gorm:"primaryKey;size:64"`
+	RoomID             string     `gorm:"size:64;not null;index:idx_agent_runs_room"`
+	AgentID            string     `gorm:"size:64;not null"`
+	TriggerMessageID   string     `gorm:"size:64;not null;index:idx_agent_runs_trigger"`
+	CollaborationRunID *string    `gorm:"column:collaboration_run_id;size:64;index:idx_agent_runs_collaboration"`
+	TurnIndex          *int       `gorm:"column:turn_index"`
+	ParentMessageID    *string    `gorm:"column:parent_message_id;size:64;index"`
+	Status             string     `gorm:"size:32;not null"`
+	Error              *string    `gorm:"type:text"`
+	StartedAt          time.Time  `gorm:"not null"`
+	CompletedAt        *time.Time `gorm:""`
+	ModelProfileID     *string    `gorm:"column:model_profile_id;size:64;index"`
+	ModelSource        string     `gorm:"column:model_source;size:32;not null;default:''"`
+	ModelName          string     `gorm:"column:model_name;size:255;not null;default:''"`
 }
 
 func (AgentRunModel) TableName() string { return "agent_runs" }
@@ -293,6 +321,15 @@ func agentRunToModel(run store.AgentRun) AgentRunModel {
 	if run.ModelProfileID != "" {
 		m.ModelProfileID = strPtr(run.ModelProfileID)
 	}
+	if run.CollaborationRunID != "" {
+		m.CollaborationRunID = strPtr(run.CollaborationRunID)
+	}
+	if run.TurnIndex > 0 {
+		m.TurnIndex = intPtr(run.TurnIndex)
+	}
+	if run.ParentMessageID != "" {
+		m.ParentMessageID = strPtr(run.ParentMessageID)
+	}
 	if run.Error != "" {
 		m.Error = strPtr(run.Error)
 	}
@@ -314,6 +351,27 @@ func dialogueRunToModel(run store.DialogueRun) DialogueRunModel {
 	}
 	if run.CompletedAt != nil {
 		m.CompletedAt = run.CompletedAt
+	}
+	return m
+}
+
+func collaborationRunToModel(run store.CollaborationRun) CollaborationRunModel {
+	m := CollaborationRunModel{
+		ID:            run.ID,
+		RoomID:        run.RoomID,
+		RootMessageID: run.RootMessageID,
+		Engine:        run.Engine,
+		EngineVersion: run.EngineVersion,
+		PolicyVersion: run.PolicyVersion,
+		Status:        run.Status,
+		StopReason:    run.StopReason,
+		TurnCount:     run.TurnCount,
+		CreatedAt:     run.CreatedAt,
+		StartedAt:     run.StartedAt,
+		CompletedAt:   run.CompletedAt,
+	}
+	if run.Error != "" {
+		m.Error = strPtr(run.Error)
 	}
 	return m
 }
@@ -403,17 +461,20 @@ func (m MessageModel) toDomain() model.Message {
 
 func (m AgentRunModel) toStore() store.AgentRun {
 	return store.AgentRun{
-		ID:               m.ID,
-		RoomID:           m.RoomID,
-		AgentID:          m.AgentID,
-		TriggerMessageID: m.TriggerMessageID,
-		Status:           m.Status,
-		Error:            strPtrDeref(m.Error),
-		StartedAt:        m.StartedAt,
-		CompletedAt:      m.CompletedAt,
-		ModelProfileID:   strPtrDeref(m.ModelProfileID),
-		ModelSource:      m.ModelSource,
-		ModelName:        m.ModelName,
+		ID:                 m.ID,
+		RoomID:             m.RoomID,
+		AgentID:            m.AgentID,
+		TriggerMessageID:   m.TriggerMessageID,
+		CollaborationRunID: strPtrDeref(m.CollaborationRunID),
+		TurnIndex:          intPtrDeref(m.TurnIndex),
+		ParentMessageID:    strPtrDeref(m.ParentMessageID),
+		Status:             m.Status,
+		Error:              strPtrDeref(m.Error),
+		StartedAt:          m.StartedAt,
+		CompletedAt:        m.CompletedAt,
+		ModelProfileID:     strPtrDeref(m.ModelProfileID),
+		ModelSource:        m.ModelSource,
+		ModelName:          m.ModelName,
 	}
 }
 
@@ -442,6 +503,24 @@ func (m DialogueRunModel) toStore() store.DialogueRun {
 	}
 }
 
+func (m CollaborationRunModel) toStore() store.CollaborationRun {
+	return store.CollaborationRun{
+		ID:            m.ID,
+		RoomID:        m.RoomID,
+		RootMessageID: m.RootMessageID,
+		Engine:        m.Engine,
+		EngineVersion: m.EngineVersion,
+		PolicyVersion: m.PolicyVersion,
+		Status:        m.Status,
+		StopReason:    m.StopReason,
+		TurnCount:     m.TurnCount,
+		Error:         strPtrDeref(m.Error),
+		CreatedAt:     m.CreatedAt,
+		StartedAt:     m.StartedAt,
+		CompletedAt:   m.CompletedAt,
+	}
+}
+
 func (m RoomModel) toDomain() model.RoomMeta {
 	return model.RoomMeta{
 		ID:                  m.ID,
@@ -463,6 +542,15 @@ func (m RoomModel) toDomain() model.RoomMeta {
 			AllowAgentToAgentMentions: m.AllowAgentToAgentMentions,
 			ResponseStrategy:          m.ResponseStrategy,
 			CooldownMS:                m.CooldownMS,
+		}.WithDefaults(),
+		CollaborationPolicy: model.CollaborationPolicy{
+			Engine:            m.CollaborationEngine,
+			TriggerMode:       m.CollaborationTriggerMode,
+			MaxTurns:          m.CollaborationMaxTurns,
+			MaxTurnsPerAgent:  m.CollaborationMaxTurnsPerAgent,
+			AllowAgentHandoff: m.CollaborationAllowAgentHandoff,
+			AllowSelfFollowup: m.CollaborationAllowSelfFollowup,
+			CooldownMS:        m.CollaborationCooldownMS,
 		}.WithDefaults(),
 	}
 }
@@ -520,6 +608,17 @@ func (m MeetingMinutesModel) toDomain() model.MeetingMinutes {
 
 func strPtr(s string) *string {
 	return &s
+}
+
+func intPtr(value int) *int {
+	return &value
+}
+
+func intPtrDeref(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 func strPtrDeref(s *string) string {

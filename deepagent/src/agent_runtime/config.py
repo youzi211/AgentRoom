@@ -32,6 +32,14 @@ class RuntimeSettings:
     shutdown_grace_seconds: float = 10.0
     work_dir: Path = Path("runs/runtime")
     enable_fake_executor: bool = False
+    collaboration_enabled: bool = True
+    collaboration_engine_allowlist: tuple[str, ...] = ("native",)
+    collaboration_autogen_enabled: bool = False
+    collaboration_max_concurrency: int = 4
+    collaboration_max_pending: int = 16
+    collaboration_checkpoint_max_bytes: int = MIB
+    collaboration_default_engine: str = "native"
+    collaboration_default_trigger_mode: str = "mention_only"
 
     @property
     def bind_address(self) -> str:
@@ -66,6 +74,20 @@ class RuntimeSettings:
             raise RuntimeConfigError("AGENT_RUNTIME_MAX_PENDING must not be negative")
         if self.shutdown_grace_seconds < 0:
             raise RuntimeConfigError("AGENT_RUNTIME_SHUTDOWN_GRACE_SECONDS must not be negative")
+        if not self.collaboration_engine_allowlist:
+            raise RuntimeConfigError("COLLABORATION_ENGINE_ALLOWLIST must contain at least one engine")
+        if self.collaboration_default_engine not in self.collaboration_engine_allowlist:
+            raise RuntimeConfigError("COLLABORATION_DEFAULT_ENGINE must be in the engine allowlist")
+        if self.collaboration_default_trigger_mode not in {"mention_only", "automatic"}:
+            raise RuntimeConfigError("COLLABORATION_DEFAULT_TRIGGER_MODE must be mention_only or automatic")
+        if self.collaboration_autogen_enabled and "autogen" not in self.collaboration_engine_allowlist:
+            raise RuntimeConfigError("COLLABORATION_AUTOGEN_ENABLED requires autogen in the engine allowlist")
+        if self.collaboration_max_concurrency <= 0:
+            raise RuntimeConfigError("COLLABORATION_MAX_CONCURRENCY must be positive")
+        if self.collaboration_max_pending < 0:
+            raise RuntimeConfigError("COLLABORATION_MAX_PENDING must not be negative")
+        if self.collaboration_checkpoint_max_bytes <= 0:
+            raise RuntimeConfigError("COLLABORATION_CHECKPOINT_MAX_BYTES must be positive")
         if self.insecure:
             if not _is_loopback(self.host) and self.host not in {"0.0.0.0", "::"}:
                 raise RuntimeConfigError("insecure runtime must bind loopback or an explicit container interface")
@@ -104,6 +126,30 @@ class RuntimeSettings:
             shutdown_grace_seconds=_float(values.get("AGENT_RUNTIME_SHUTDOWN_GRACE_SECONDS"), 10.0),
             work_dir=Path(_string(values.get("AGENT_RUNTIME_WORK_DIR")) or "runs/runtime"),
             enable_fake_executor=_bool(values.get("AGENT_RUNTIME_ENABLE_FAKE_EXECUTOR"), False),
+            collaboration_enabled=_bool(values.get("COLLABORATION_RUNTIME_ENABLED"), True),
+            collaboration_engine_allowlist=_split_comma_list(
+                values.get("COLLABORATION_ENGINE_ALLOWLIST"), ("native",)
+            ),
+            collaboration_autogen_enabled=_bool(
+                values.get("COLLABORATION_AUTOGEN_ENABLED"), False
+            ),
+            collaboration_max_concurrency=_int(
+                values.get("COLLABORATION_MAX_CONCURRENCY"), 4
+            ),
+            collaboration_max_pending=_int(
+                values.get("COLLABORATION_MAX_PENDING"), 16
+            ),
+            collaboration_checkpoint_max_bytes=_int(
+                values.get("COLLABORATION_CHECKPOINT_MAX_BYTES"), MIB
+            ),
+            collaboration_default_engine=_string(
+                values.get("COLLABORATION_DEFAULT_ENGINE")
+            )
+            or "native",
+            collaboration_default_trigger_mode=_string(
+                values.get("COLLABORATION_DEFAULT_TRIGGER_MODE")
+            )
+            or "mention_only",
         )
         settings.validate()
         return settings
@@ -143,6 +189,14 @@ def _bool(value: object, default: bool) -> bool:
 def _path(value: object) -> Path | None:
     text = _string(value)
     return Path(text) if text else None
+
+
+def _split_comma_list(value: object, default: tuple[str, ...]) -> tuple[str, ...]:
+    text = _string(value)
+    if not text:
+        return default
+    items = tuple(item for item in (s.strip() for s in text.split(",")) if item)
+    return items or default
 
 
 def _is_loopback(host: str) -> bool:

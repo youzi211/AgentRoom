@@ -5,6 +5,8 @@ description = "Isolated DeepAgents research prototype for AgentRoom."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "autogen-agentchat==0.4.7",
+    "autogen-core==0.4.7",
     "deepagents",
     "grpcio>=1.82.1",
     "grpcio-health-checking>=1.82.1",
@@ -24,6 +26,17 @@ agent-runtime = "agent_runtime.server:main"
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+# AutoGen 0.4.7 declares ``protobuf~=5.29.3``, but its runtime is compatible
+# with the protobuf 7.x line that the generated gRPC code requires
+# (ValidateProtobufRuntimeVersion enforces 7.35). The verified working
+# combination is autogen 0.4.7 + protobuf 7.x, so override the transitive
+# constraint instead of downgrading protobuf and breaking the Collaboration
+# Runtime contract.
+[tool.uv]
+override-dependencies = [
+    "protobuf>=7.35.1",
+]
 
 [dependency-groups]
 dev = [

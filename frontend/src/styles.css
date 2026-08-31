@@ -1539,6 +1539,13 @@ textarea::placeholder {
   min-height: 54px;
 }
 
+.entry-collaboration-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.48fr);
+  gap: 12px;
+  align-items: end;
+}
+
 .entry-mode-control .mantine-SegmentedControl-root {
   border: 1px solid #d9e1e8;
   background: #f7fafc;
@@ -1904,6 +1911,39 @@ textarea::placeholder {
 .admin-dashboard .panel-header,
 .workbench--admin .panel-header {
   margin-bottom: 16px;
+}
+
+.collaboration-runtime-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 24px;
+}
+
+.collaboration-runtime-summary > div {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.collaboration-runtime-summary > div > strong {
+  color: #172033;
+  font-size: 0.94rem;
+}
+
+.collaboration-runtime-engines {
+  grid-column: 1 / -1;
+}
+
+.collaboration-runtime-engine {
+  min-height: 30px;
+  border-right: 1px solid #e1e8ee;
+  padding-right: 12px;
+}
+
+.collaboration-runtime-engine:last-child {
+  border-right: 0;
+  padding-right: 0;
 }
 
 .admin-dashboard .panel h2,
@@ -2416,6 +2456,15 @@ body {
 
   .entry-dashboard-aside {
     grid-template-columns: 1fr;
+  }
+
+  .entry-collaboration-grid,
+  .collaboration-runtime-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .collaboration-runtime-engines {
+    grid-column: auto;
   }
 
   .entry-dashboard-hero h1 {

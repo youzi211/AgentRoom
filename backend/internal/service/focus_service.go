@@ -30,6 +30,14 @@ type roomFocusState struct {
 	analyzing    bool
 }
 
+const focusAnalysisThreshold = 3
+
+type focusAnalysisJob struct {
+	roomID      string
+	messages    []model.Message
+	targetCount int
+}
+
 var focusPromptTemplate = prompts.NewChatPromptTemplate([]prompts.MessageFormatter{
 	prompts.NewSystemMessagePromptTemplate(
 		"你是一个会议分析助手，负责提取会议对话的关键焦点话题。只返回 JSON 数组。",
@@ -55,8 +63,9 @@ func NewFocusService(llmClient llm.Client) *FocusService {
 	}
 }
 
-func (s *FocusService) AddMessage(ctx context.Context, roomID string, message model.Message) []model.FocusPoint {
+func (s *FocusService) ObserveMessage(roomID string, message model.Message) (focusAnalysisJob, bool) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	state, exists := s.rooms[roomID]
 	if !exists {
@@ -66,44 +75,86 @@ func (s *FocusService) AddMessage(ctx context.Context, roomID string, message mo
 
 	state.messages = append(state.messages, message)
 	messageCount := len(state.messages)
-	threshold := 3
-	currentFocus := cloneFocusPoints(state.focusPoints)
 
 	s.logger.Info("focus: message added",
 		"room_id", roomID,
 		"total_messages", messageCount,
 		"last_analyzed", state.lastAnalyzed,
 		"diff", messageCount-state.lastAnalyzed,
-		"threshold", threshold)
+		"threshold", focusAnalysisThreshold)
 
-	if messageCount-state.lastAnalyzed >= threshold && !state.analyzing {
+	if messageCount-state.lastAnalyzed >= focusAnalysisThreshold && !state.analyzing {
 		s.logger.Info("focus: triggering analysis", "room_id", roomID)
 		state.analyzing = true
-		messagesSnapshot := append([]model.Message(nil), state.messages...)
-		targetCount := messageCount
-		s.mu.Unlock()
-
-		focusPoints := s.analyzeMessages(ctx, roomID, messagesSnapshot)
-
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		state = s.rooms[roomID]
-		if state == nil {
-			return currentFocus
-		}
-		state.analyzing = false
-		if len(focusPoints) > 0 {
-			state.focusPoints = focusPoints
-			state.lastAnalyzed = targetCount
-			s.logger.Info("focus: analysis complete", "room_id", roomID, "points_count", len(focusPoints))
-			return cloneFocusPoints(state.focusPoints)
-		}
-		s.logger.Warn("focus: analysis returned no points", "room_id", roomID)
-		return cloneFocusPoints(state.focusPoints)
+		return focusAnalysisJob{
+			roomID:      roomID,
+			messages:    append([]model.Message(nil), state.messages...),
+			targetCount: messageCount,
+		}, true
 	}
 
-	s.mu.Unlock()
-	return currentFocus
+	return focusAnalysisJob{}, false
+}
+
+func (s *FocusService) AddMessage(ctx context.Context, roomID string, message model.Message) []model.FocusPoint {
+	job, scheduled := s.ObserveMessage(roomID, message)
+	if !scheduled {
+		return s.GetFocusPoints(roomID)
+	}
+
+	for scheduled {
+		focusPoints := s.analyzeMessages(ctx, job.roomID, job.messages)
+		next, _ := s.CompleteAnalysis(job, focusPoints)
+		if next == nil {
+			break
+		}
+		job = *next
+	}
+	return s.GetFocusPoints(roomID)
+}
+
+func (s *FocusService) CompleteAnalysis(job focusAnalysisJob, focusPoints []model.FocusPoint) (*focusAnalysisJob, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, exists := s.rooms[job.roomID]
+	if !exists || job.targetCount < state.lastAnalyzed {
+		return nil, false
+	}
+
+	state.analyzing = false
+	state.lastAnalyzed = job.targetCount
+	publish := len(focusPoints) > 0
+	if publish {
+		state.focusPoints = cloneFocusPoints(focusPoints)
+		s.logger.Info("focus: analysis complete", "room_id", job.roomID, "points_count", len(focusPoints), "target_count", job.targetCount)
+	} else {
+		s.logger.Warn("focus: analysis returned no points", "room_id", job.roomID, "target_count", job.targetCount)
+	}
+
+	if len(state.messages)-state.lastAnalyzed < focusAnalysisThreshold {
+		return nil, publish
+	}
+
+	state.analyzing = true
+	return &focusAnalysisJob{
+		roomID:      job.roomID,
+		messages:    append([]model.Message(nil), state.messages...),
+		targetCount: len(state.messages),
+	}, publish
+}
+
+func (s *FocusService) SkipAnalysis(job focusAnalysisJob) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, exists := s.rooms[job.roomID]
+	if !exists || job.targetCount < state.lastAnalyzed {
+		return
+	}
+	state.analyzing = false
+	state.lastAnalyzed = job.targetCount
+	s.logger.Warn("focus: analysis skipped", "room_id", job.roomID, "target_count", job.targetCount)
 }
 
 func (s *FocusService) GetFocusPoints(roomID string) []model.FocusPoint {

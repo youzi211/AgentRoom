@@ -9,6 +9,7 @@ import {
   Paper,
   PasswordInput,
   SegmentedControl,
+  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -30,6 +31,7 @@ import {
   Lock,
   LogIn,
   MessageSquare,
+  Network,
   Plus,
   Settings,
   ShieldCheck,
@@ -37,7 +39,21 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react'
-import { getAgentRoleSets, getAgents, getEntrySummary, listRecentRooms } from '../api/roomClient'
+import {
+  getAgentRoleSets,
+  getAgents,
+  getCollaborationRuntimeCapabilities,
+  getEntrySummary,
+  listRecentRooms,
+} from '../api/roomClient'
+import {
+  collaborationChoices,
+  COMPATIBLE_COLLABORATION_POLICY,
+  labelForCollaborationEngine,
+  legacyCollaborationCapabilities,
+  normalizeCollaborationCapabilities,
+  reconcileCollaborationPolicy,
+} from '../collaborationRuntime'
 
 const TEMPLATE_AGENT_MATCHERS = {
   product_manager: ['pm', '产品经理', 'Product Manager'],
@@ -46,33 +62,6 @@ const TEMPLATE_AGENT_MATCHERS = {
   risk_reviewer: ['risk', '风险评审', 'Risk Reviewer'],
   meeting_scribe: ['secretary', '会议纪要', 'Meeting Scribe'],
 }
-
-const DIALOGUE_MODE_OPTIONS = [
-  {
-    label: (
-      <span className="entry-segment-label">
-        <Users size={16} />
-        <span>
-          <strong>多 Agent 协作</strong>
-          <small>多角色协同讨论与产出</small>
-        </span>
-      </span>
-    ),
-    value: 'mention_fanout',
-  },
-  {
-    label: (
-      <span className="entry-segment-label">
-        <MessageSquare size={16} />
-        <span>
-          <strong>单 Agent 对话</strong>
-          <small>与单一 Agent 深度对话</small>
-        </span>
-      </span>
-    ),
-    value: 'guided_dialogue',
-  },
-]
 
 const CAPABILITY_ITEMS = [
   {
@@ -114,7 +103,12 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
   const [roomName, setRoomName] = useState('')
   const [roomId, setRoomId] = useState('')
   const [createPasscode, setCreatePasscode] = useState('')
-  const [dialogueMode, setDialogueMode] = useState('mention_fanout')
+  const [collaborationPolicy, setCollaborationPolicy] = useState(COMPATIBLE_COLLABORATION_POLICY)
+  const [collaborationState, setCollaborationState] = useState({
+    capabilities: legacyCollaborationCapabilities(),
+    isLoading: true,
+    isAuthoritative: false,
+  })
   const [joinPasscode, setJoinPasscode] = useState('')
   const [showAdvancedCreate, setShowAdvancedCreate] = useState(false)
   const [availableAgents, setAvailableAgents] = useState([])
@@ -137,6 +131,44 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
   const trimmedRoomId = roomId.trim()
   const trimmedCreatePasscode = createPasscode.trim()
   const trimmedJoinPasscode = joinPasscode.trim()
+  const collaborationOptions = collaborationChoices(collaborationState.capabilities)
+  const automaticSupported = collaborationOptions.triggerModes.includes('automatic')
+  const collaborationAvailable = collaborationOptions.engines.length > 0 && collaborationOptions.triggerModes.length > 0
+  const canCreateRoom = Boolean(trimmedCreateDisplayName) && !isSubmitting && !collaborationState.isLoading
+    && (selectedAgentIds.size === 0 || collaborationAvailable)
+
+  useEffect(() => {
+    let isCurrent = true
+    const loadCollaborationCapabilities = async () => {
+      try {
+        const response = await getCollaborationRuntimeCapabilities()
+        if (!isCurrent) {
+          return
+        }
+        const capabilities = normalizeCollaborationCapabilities(response)
+        const nextPolicy = reconcileCollaborationPolicy(capabilities, collaborationPolicy)
+        setCollaborationState({ capabilities, isLoading: false, isAuthoritative: true })
+        if (nextPolicy) {
+          setCollaborationPolicy(nextPolicy)
+        }
+      } catch {
+        if (!isCurrent) {
+          return
+        }
+        setCollaborationState({
+          capabilities: legacyCollaborationCapabilities(),
+          isLoading: false,
+          isAuthoritative: false,
+        })
+        setCollaborationPolicy(COMPATIBLE_COLLABORATION_POLICY)
+      }
+    }
+    void loadCollaborationCapabilities()
+    return () => {
+      isCurrent = false
+    }
+  }, [])
+
   useEffect(() => {
     let isCurrent = true
     const loadAgents = async () => {
@@ -257,7 +289,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
       roomName: trimmedRoomName,
       agentIds: Array.from(selectedAgentIds),
       passcode: trimmedCreatePasscode,
-      dialogueMode,
+      collaborationPolicy,
     })
   }
 
@@ -406,16 +438,40 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
                   maxLength={60}
                 />
 
-                <Text className="entry-field-label">Agent 对话模式</Text>
-                <SegmentedControl
-                  id="dialogue-mode"
-                  className="entry-mode-control"
-                  value={dialogueMode}
-                  onChange={setDialogueMode}
-                  data={DIALOGUE_MODE_OPTIONS}
-                  disabled={isSubmitting}
-                  fullWidth
-                />
+                <div className="entry-collaboration-grid">
+                  <div>
+                    <Text className="entry-field-label">协作方式</Text>
+                    <SegmentedControl
+                      id="collaboration-trigger-mode"
+                      className="entry-mode-control"
+                      value={collaborationPolicy.triggerMode}
+                      onChange={(triggerMode) => setCollaborationPolicy((current) => ({ ...current, triggerMode }))}
+                      data={collaborationModeOptions(automaticSupported)}
+                      disabled={isSubmitting || collaborationState.isLoading || !collaborationAvailable}
+                      fullWidth
+                    />
+                  </div>
+                  <Select
+                    id="collaboration-engine"
+                    label="协作引擎"
+                    leftSection={<Network size={17} />}
+                    value={collaborationPolicy.engine}
+                    onChange={(engine) => engine && setCollaborationPolicy((current) => ({ ...current, engine }))}
+                    data={collaborationOptions.engines.map((item) => ({
+                      value: item.engine,
+                      label: item.version
+                        ? `${labelForCollaborationEngine(item.engine)} · ${item.version}`
+                        : labelForCollaborationEngine(item.engine),
+                    }))}
+                    disabled={isSubmitting || collaborationState.isLoading || collaborationOptions.engines.length < 2}
+                    placeholder={collaborationState.isLoading ? '正在检查' : '暂无可用引擎'}
+                    allowDeselect={false}
+                  />
+                </div>
+
+                {collaborationState.isAuthoritative && !collaborationAvailable ? (
+                  <Alert color="yellow" variant="light">协作 Runtime 暂不可用，仍可创建不包含 Agent 的会议。</Alert>
+                ) : null}
 
                 {showAdvancedCreate ? (
                   <PasswordInput
@@ -511,7 +567,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
                   >
                     高级设置
                   </Button>
-                  <Button type="submit" color="teal" rightSection={<ArrowRight size={17} />} disabled={isSubmitting || !trimmedCreateDisplayName}>
+                  <Button type="submit" color="teal" rightSection={<ArrowRight size={17} />} disabled={!canCreateRoom}>
                     {isSubmitting ? '正在创建...' : '创建会议室'}
                   </Button>
                 </Group>
@@ -666,6 +722,36 @@ function ExistingRoomsTable({ canJoin, errorMessage, isLoading, onCopyRoomId, on
 function matchesTemplate(agent, templateID) {
   const matchers = TEMPLATE_AGENT_MATCHERS[templateID] ?? [templateID]
   return matchers.some((matcher) => agent.id === matcher || agent.name === matcher || agent.role === matcher)
+}
+
+function collaborationModeOptions(automaticSupported) {
+  return [
+    {
+      label: (
+        <span className="entry-segment-label">
+          <MessageSquare size={16} />
+          <span>
+            <strong>兼容模式</strong>
+            <small>显式 @ 后响应</small>
+          </span>
+        </span>
+      ),
+      value: 'mention_only',
+    },
+    {
+      label: (
+        <span className="entry-segment-label">
+          <Users size={16} />
+          <span>
+            <strong>自动协作</strong>
+            <small>自动选择首位 Agent</small>
+          </span>
+        </span>
+      ),
+      value: 'automatic',
+      disabled: !automaticSupported,
+    },
+  ]
 }
 
 function formatEntryStatValue(value) {

@@ -24,6 +24,7 @@ type Room struct {
 	autoCloseDeadlineAt *time.Time
 	archivedAt          *time.Time
 	dialoguePolicy      model.DialoguePolicy
+	collaborationPolicy model.CollaborationPolicy
 	participants        map[string]*model.Participant
 	agents              map[string]*model.Agent
 	agentOrder          []string
@@ -52,16 +53,17 @@ func New(id string, name string, agents []model.Agent) *Room {
 	}
 
 	return &Room{
-		id:             id,
-		name:           normalizeRoomName(name, id),
-		createdAt:      createdAt,
-		status:         model.RoomStatusActive,
-		dialoguePolicy: model.DefaultDialoguePolicy(),
-		participants:   make(map[string]*model.Participant),
-		agents:         agentMap,
-		agentOrder:     agentOrder,
-		messages:       make([]model.Message, 0),
-		events:         NewHub(),
+		id:                  id,
+		name:                normalizeRoomName(name, id),
+		createdAt:           createdAt,
+		status:              model.RoomStatusActive,
+		dialoguePolicy:      model.DefaultDialoguePolicy(),
+		collaborationPolicy: model.DefaultCollaborationPolicy(),
+		participants:        make(map[string]*model.Participant),
+		agents:              agentMap,
+		agentOrder:          agentOrder,
+		messages:            make([]model.Message, 0),
+		events:              NewHub(),
 	}
 }
 
@@ -88,6 +90,7 @@ func NewFromState(meta model.RoomMeta, agents []model.Agent) *Room {
 		autoCloseDeadlineAt: cloneTimePtr(meta.AutoCloseDeadlineAt),
 		archivedAt:          cloneTimePtr(meta.ArchivedAt),
 		dialoguePolicy:      meta.DialoguePolicy.WithDefaults(),
+		collaborationPolicy: meta.CollaborationPolicy.WithDefaults(),
 		participants:        make(map[string]*model.Participant),
 		agents:              agentMap,
 		agentOrder:          agentOrder,
@@ -129,6 +132,7 @@ func NewFromSnapshot(meta model.RoomMeta, agents []model.Agent, messages []model
 		autoCloseDeadlineAt: cloneTimePtr(meta.AutoCloseDeadlineAt),
 		archivedAt:          cloneTimePtr(meta.ArchivedAt),
 		dialoguePolicy:      meta.DialoguePolicy.WithDefaults(),
+		collaborationPolicy: meta.CollaborationPolicy.WithDefaults(),
 		participants:        participantMap,
 		agents:              agentMap,
 		agentOrder:          agentOrder,
@@ -161,6 +165,7 @@ func (r *Room) Info() model.RoomMeta {
 		AutoCloseDeadlineAt: cloneTimePtr(r.autoCloseDeadlineAt),
 		ArchivedAt:          cloneTimePtr(r.archivedAt),
 		DialoguePolicy:      r.dialoguePolicy.WithDefaults(),
+		CollaborationPolicy: r.collaborationPolicy.WithDefaults(),
 	}
 }
 
@@ -208,6 +213,12 @@ func (r *Room) SetDialoguePolicy(policy model.DialoguePolicy) {
 	r.mu.Unlock()
 }
 
+func (r *Room) SetCollaborationPolicy(policy model.CollaborationPolicy) {
+	r.mu.Lock()
+	r.collaborationPolicy = policy.WithDefaults()
+	r.mu.Unlock()
+}
+
 func (r *Room) Snapshot() Snapshot {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -226,6 +237,7 @@ func (r *Room) Snapshot() Snapshot {
 			AutoCloseDeadlineAt: cloneTimePtr(r.autoCloseDeadlineAt),
 			ArchivedAt:          cloneTimePtr(r.archivedAt),
 			DialoguePolicy:      r.dialoguePolicy.WithDefaults(),
+			CollaborationPolicy: r.collaborationPolicy.WithDefaults(),
 		},
 		Participants: cloneParticipants(r.participants),
 		Agents:       cloneAgents(r.agents, r.agentOrder),

@@ -12,8 +12,8 @@ function AgentActivityPanel({ activities = [], errorMessage = '', isLoading = fa
       <Paper component="section" className="sidebar-section agent-activity-panel" withBorder radius="md" shadow="none">
         <div className="sidebar-header">
           <div>
-            <Title order={2}>当前活动</Title>
-            <Text className="sidebar-note">只显示正在响应的 Agent</Text>
+            <Title order={2}>协作活动</Title>
+            <Text className="sidebar-note">当前运行、发言与交接</Text>
           </div>
           <Badge className="sidebar-count" color="teal" variant="light">{currentActivities.length}</Badge>
         </div>
@@ -25,19 +25,19 @@ function AgentActivityPanel({ activities = [], errorMessage = '', isLoading = fa
         </Group>
         {errorMessage ? <Alert color="red" variant="light">{errorMessage}</Alert> : null}
         {isLoading ? <Text className="agent-activity-notice">正在加载 Agent 活动...</Text> : null}
-        {!isLoading && visibleActivities.length === 0 ? <Text className="agent-activity-notice">暂无正在活动的 Agent</Text> : null}
+        {!isLoading && visibleActivities.length === 0 ? <Text className="agent-activity-notice">暂无正在进行的协作</Text> : null}
         {visibleActivities.length > 0 ? <ActivityList activities={visibleActivities} /> : null}
       </Paper>
 
       <Modal
         opened={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
-        title="Agent 活动历史"
+        title="协作活动历史"
         size="lg"
         centered
       >
         {activities.length === 0 ? (
-          <Text className="agent-activity-notice">暂无 Agent 活动历史。</Text>
+          <Text className="agent-activity-notice">暂无协作活动历史。</Text>
         ) : (
           <ActivityList activities={activities} history />
         )}
@@ -72,6 +72,9 @@ function ActivityList({ activities, history = false }) {
 }
 
 function titleForActivity(activity) {
+  if (activity.kind === 'collaboration_run') {
+    return '协作运行'
+  }
   if (activity.kind === 'dialogue_run') {
     return '对话链路'
   }

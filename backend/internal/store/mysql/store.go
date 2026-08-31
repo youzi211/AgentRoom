@@ -68,6 +68,7 @@ func (s *MySQLStore) Migrate(ctx context.Context) error {
 		&MessageModel{},
 		&AgentRunModel{},
 		&DialogueRunModel{},
+		&CollaborationRunModel{},
 		&KnowledgeDocumentModel{},
 		&KnowledgeChunkModel{},
 		&MeetingMinutesModel{},

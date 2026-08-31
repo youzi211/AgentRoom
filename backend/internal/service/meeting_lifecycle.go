@@ -39,14 +39,16 @@ type MeetingLifecycle struct {
 	now        func() time.Time
 	schedule   scheduleFunc
 	closeDelay time.Duration
-	onStopped  func(string)
+	onStopped  []func(context.Context, string)
 
 	mu     sync.Mutex
 	timers map[string]timerHandle
 }
 
-func (l *MeetingLifecycle) WithRoomStopped(onStopped func(string)) *MeetingLifecycle {
-	l.onStopped = onStopped
+func (l *MeetingLifecycle) WithRoomStopped(onStopped func(context.Context, string)) *MeetingLifecycle {
+	if onStopped != nil {
+		l.onStopped = append(l.onStopped, onStopped)
+	}
 	return l
 }
 
@@ -414,8 +416,10 @@ func (l *MeetingLifecycle) applyLifecycle(ctx context.Context, currentRoom *room
 	}
 
 	currentRoom.ApplyLifecycle(state)
-	if state.Status != model.RoomStatusActive && l.onStopped != nil {
-		l.onStopped(info.ID)
+	if state.Status != model.RoomStatusActive {
+		for _, onStopped := range l.onStopped {
+			onStopped(ctx, info.ID)
+		}
 	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package contracts
 
 import (
+	"fmt"
 	"time"
 
 	"agentroom/backend/internal/model"
@@ -15,10 +16,11 @@ type UploadKnowledgeResponse struct {
 }
 
 type CreateRoomRequest struct {
-	Name           string               `json:"name"`
-	AgentIDs       []string             `json:"agentIds"`
-	Passcode       string               `json:"passcode"`
-	DialoguePolicy *DialoguePolicyInput `json:"dialoguePolicy,omitempty"`
+	Name                string                    `json:"name"`
+	AgentIDs            []string                  `json:"agentIds"`
+	Passcode            string                    `json:"passcode"`
+	DialoguePolicy      *DialoguePolicyInput      `json:"dialoguePolicy,omitempty"`
+	CollaborationPolicy *CollaborationPolicyInput `json:"collaborationPolicy,omitempty"`
 }
 
 type CreateRoomResponse struct {
@@ -38,8 +40,9 @@ type GetMessagesResponse struct {
 }
 
 type RoomActivityResponse struct {
-	AgentRuns    []AgentRunActivity    `json:"agentRuns"`
-	DialogueRuns []DialogueRunActivity `json:"dialogueRuns"`
+	AgentRuns         []AgentRunActivity         `json:"agentRuns"`
+	DialogueRuns      []DialogueRunActivity      `json:"dialogueRuns"`
+	CollaborationRuns []CollaborationRunActivity `json:"collaborationRuns"`
 }
 
 type AgentRunActivity struct {
@@ -65,6 +68,22 @@ type DialogueRunActivity struct {
 	CompletedAt      *time.Time `json:"completedAt,omitempty"`
 }
 
+type CollaborationRunActivity struct {
+	ID            string     `json:"id"`
+	RoomID        string     `json:"roomID"`
+	RootMessageID string     `json:"rootMessageID"`
+	Engine        string     `json:"engine"`
+	EngineVersion string     `json:"engineVersion"`
+	PolicyVersion string     `json:"policyVersion"`
+	Status        string     `json:"status"`
+	StopReason    string     `json:"stopReason,omitempty"`
+	TurnCount     int        `json:"turnCount"`
+	ErrorText     string     `json:"errorText,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	StartedAt     *time.Time `json:"startedAt,omitempty"`
+	CompletedAt   *time.Time `json:"completedAt,omitempty"`
+}
+
 type GenerateMinutesResponse struct {
 	Markdown string                `json:"markdown"`
 	Minutes  *model.MeetingMinutes `json:"minutes,omitempty"`
@@ -75,13 +94,14 @@ type ListRoomsResponse struct {
 }
 
 type PublicRoomSummary struct {
-	ID             string               `json:"id"`
-	Name           string               `json:"name"`
-	Status         string               `json:"status"`
-	HasPasscode    bool                 `json:"hasPasscode"`
-	CreatedAt      time.Time            `json:"createdAt"`
-	DialoguePolicy model.DialoguePolicy `json:"dialoguePolicy"`
-	AgentCount     int                  `json:"agentCount"`
+	ID                  string                    `json:"id"`
+	Name                string                    `json:"name"`
+	Status              string                    `json:"status"`
+	HasPasscode         bool                      `json:"hasPasscode"`
+	CreatedAt           time.Time                 `json:"createdAt"`
+	DialoguePolicy      model.DialoguePolicy      `json:"dialoguePolicy"`
+	CollaborationPolicy model.CollaborationPolicy `json:"collaborationPolicy"`
+	AgentCount          int                       `json:"agentCount"`
 }
 
 type ListRecentRoomsResponse struct {
@@ -150,4 +170,62 @@ func (in *DialoguePolicyInput) Resolve() model.DialoguePolicy {
 		policy.CooldownMS = *in.CooldownMS
 	}
 	return policy.WithDefaults()
+}
+
+// CollaborationPolicyInput overlays explicitly supplied collaboration fields
+// onto the compatibility policy derived from dialoguePolicy.
+type CollaborationPolicyInput struct {
+	Engine            *string `json:"engine"`
+	TriggerMode       *string `json:"triggerMode"`
+	MaxTurns          *int    `json:"maxTurns"`
+	MaxTurnsPerAgent  *int    `json:"maxTurnsPerAgent"`
+	AllowAgentHandoff *bool   `json:"allowAgentHandoff"`
+	AllowSelfFollowup *bool   `json:"allowSelfFollowup"`
+	CooldownMS        *int    `json:"cooldownMs"`
+}
+
+func (in *CollaborationPolicyInput) Resolve(base model.CollaborationPolicy) (model.CollaborationPolicy, error) {
+	policy := base.WithDefaults()
+	if in == nil {
+		return policy, policy.Validate()
+	}
+	if in.Engine != nil {
+		if !model.IsValidCollaborationEngine(*in.Engine) {
+			return model.CollaborationPolicy{}, fmt.Errorf("unsupported collaboration engine %q", *in.Engine)
+		}
+		policy.Engine = *in.Engine
+	}
+	if in.TriggerMode != nil {
+		if !model.IsValidCollaborationTriggerMode(*in.TriggerMode) {
+			return model.CollaborationPolicy{}, fmt.Errorf("unsupported collaboration trigger mode %q", *in.TriggerMode)
+		}
+		policy.TriggerMode = *in.TriggerMode
+	}
+	if in.MaxTurns != nil {
+		if *in.MaxTurns < 1 {
+			return model.CollaborationPolicy{}, fmt.Errorf("collaboration max turns must be positive")
+		}
+		policy.MaxTurns = *in.MaxTurns
+	}
+	if in.MaxTurnsPerAgent != nil {
+		if *in.MaxTurnsPerAgent < 1 {
+			return model.CollaborationPolicy{}, fmt.Errorf("collaboration max turns per Agent must be positive")
+		}
+		policy.MaxTurnsPerAgent = *in.MaxTurnsPerAgent
+	}
+	if in.AllowAgentHandoff != nil {
+		policy.AllowAgentHandoff = *in.AllowAgentHandoff
+	}
+	if in.AllowSelfFollowup != nil {
+		policy.AllowSelfFollowup = *in.AllowSelfFollowup
+	}
+	if in.CooldownMS != nil {
+		if *in.CooldownMS < 0 {
+			return model.CollaborationPolicy{}, fmt.Errorf("collaboration cooldown must not be negative")
+		}
+		policy.CooldownMS = *in.CooldownMS
+	}
+
+	policy = policy.WithDefaults()
+	return policy, policy.Validate()
 }

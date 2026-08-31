@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import grpc
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
@@ -14,35 +14,74 @@ from .registry import ExecutorRegistry
 from .service import AgentRuntimeServicer
 from .security import install_sensitive_data_filter
 from .v1 import agent_runtime_pb2, agent_runtime_pb2_grpc
+from collaboration_runtime.agent_executor import RuntimeRegistryAgentExecutor
+from collaboration_runtime.registry import CollaborationEngineRegistry
+from collaboration_runtime.service import CollaborationRuntimeServicer
+from collaboration_runtime.v1 import collaboration_runtime_pb2_grpc
 
 
 LOGGER = logging.getLogger(__name__)
-SERVICE_NAME = "agentroom.runtime.v1.AgentRuntimeService"
+AGENT_SERVICE_NAME = "agentroom.runtime.v1.AgentRuntimeService"
+COLLABORATION_SERVICE_NAME = "agentroom.collaboration.v1.CollaborationRuntimeService"
+SERVICE_NAME = AGENT_SERVICE_NAME
 
 
 @dataclass
 class RuntimeServer:
     settings: RuntimeSettings
     registry: ExecutorRegistry
+    collaboration_registry: CollaborationEngineRegistry = field(
+        default_factory=CollaborationEngineRegistry
+    )
 
     def __post_init__(self) -> None:
         self.settings.validate()
         self.servicer = AgentRuntimeServicer(self.settings, self.registry)
+        self.collaboration_registry = (
+            self.collaboration_registry
+            if self.settings.collaboration_enabled
+            else CollaborationEngineRegistry()
+        )
+        if self.settings.collaboration_enabled and len(self.collaboration_registry) == 0:
+            self.collaboration_registry = build_collaboration_registry(
+                self.settings,
+                RuntimeRegistryAgentExecutor(self.registry, work_dir=self.settings.work_dir),
+            )
+        self.collaboration_servicer = CollaborationRuntimeServicer(
+            self.collaboration_registry,
+            max_concurrency=self.settings.collaboration_max_concurrency,
+            max_pending=self.settings.collaboration_max_pending,
+            max_request_bytes=self.settings.max_request_bytes,
+            max_event_bytes=self.settings.max_event_bytes,
+            max_artifact_bytes=self.settings.max_artifact_bytes,
+            max_output_bytes=self.settings.max_output_bytes,
+            max_checkpoint_bytes=self.settings.collaboration_checkpoint_max_bytes,
+        )
         self.health = health.aio.HealthServicer()
         self.server = grpc.aio.server(
             options=self.settings.server_options,
             # Leave one admission slot for the CapacityLimiter so callers see
             # its stable RESOURCE_EXHAUSTED semantics instead of a transport
             # level rejection racing the bounded wait queue.
-            maximum_concurrent_rpcs=self.settings.max_concurrency + self.settings.max_pending + 1,
+            maximum_concurrent_rpcs=(
+                2 * (self.settings.max_concurrency + self.settings.max_pending) + 1
+            ),
         )
         agent_runtime_pb2_grpc.add_AgentRuntimeServiceServicer_to_server(self.servicer, self.server)
+        collaboration_runtime_pb2_grpc.add_CollaborationRuntimeServiceServicer_to_server(
+            self.collaboration_servicer,
+            self.server,
+        )
         health_pb2_grpc.add_HealthServicer_to_server(self.health, self.server)
         self.bound_port = 0
 
     async def start(self) -> int:
         await self.health.set("", health_pb2.HealthCheckResponse.NOT_SERVING)
-        await self.health.set(SERVICE_NAME, health_pb2.HealthCheckResponse.NOT_SERVING)
+        await self.health.set(AGENT_SERVICE_NAME, health_pb2.HealthCheckResponse.NOT_SERVING)
+        await self.health.set(
+            COLLABORATION_SERVICE_NAME,
+            health_pb2.HealthCheckResponse.NOT_SERVING,
+        )
         if self.settings.insecure:
             self.bound_port = self.server.add_insecure_port(self.settings.bind_address)
         else:
@@ -53,19 +92,34 @@ class RuntimeServer:
         if self.bound_port == 0:
             raise RuntimeError(f"failed to bind Agent Runtime to {self.settings.bind_address}")
         await self.server.start()
-        if len(self.registry) > 0:
+        agent_ready = len(self.registry) > 0
+        collaboration_ready = self.collaboration_registry.ready()
+        if agent_ready or collaboration_ready:
             await self.health.set("", health_pb2.HealthCheckResponse.SERVING)
-            await self.health.set(SERVICE_NAME, health_pb2.HealthCheckResponse.SERVING)
+        if agent_ready:
+            await self.health.set(AGENT_SERVICE_NAME, health_pb2.HealthCheckResponse.SERVING)
+        if collaboration_ready:
+            await self.health.set(
+                COLLABORATION_SERVICE_NAME,
+                health_pb2.HealthCheckResponse.SERVING,
+            )
         return self.bound_port
 
     async def stop(self) -> None:
         await self.health.enter_graceful_shutdown()
-        await self.server.stop(self.settings.shutdown_grace_seconds)
+        await self.collaboration_servicer.cancel_active()
         await self.servicer.cancel_active()
+        await self.server.stop(self.settings.shutdown_grace_seconds)
         try:
             await self.servicer.active.wait_empty(timeout=1.0)
         except TimeoutError:
             LOGGER.warning("Timed out waiting for cancelled Agent Runtime calls to clean up")
+        try:
+            await self.collaboration_servicer.active.wait_empty(timeout=1.0)
+        except TimeoutError:
+            LOGGER.warning(
+                "Timed out waiting for cancelled Collaboration Runtime calls to clean up"
+            )
 
     async def wait_for_termination(self) -> None:
         await self.server.wait_for_termination()
@@ -93,6 +147,36 @@ def build_registry(settings: RuntimeSettings) -> ExecutorRegistry:
     else:
         registry.register(LLMExecutor())
         registry.register(DeepAgentExecutor())
+    return registry
+
+
+def build_collaboration_registry(settings: RuntimeSettings, executor=None) -> CollaborationEngineRegistry:
+    """Build the collaboration Engine Registry from runtime settings (11.1).
+
+    Only engines in ``COLLABORATION_ENGINE_ALLOWLIST`` are registered. The
+    AutoGen Engine additionally requires ``COLLABORATION_AUTOGEN_ENABLED``
+    so a default deployment never pulls the pinned AutoGen dependency into
+    the hot path until an operator explicitly opts in.
+    """
+    from collaboration_runtime.engines.native import NativeCollaborationEngine
+
+    registry = CollaborationEngineRegistry()
+    allowlist = set(settings.collaboration_engine_allowlist)
+    if "native" in allowlist:
+        registry.register(
+            "native",
+            lambda: NativeCollaborationEngine(executor),
+            version=NativeCollaborationEngine.version,
+        )
+    if "autogen" in allowlist and settings.collaboration_autogen_enabled:
+        from collaboration_runtime.engines.autogen import AutoGenCollaborationEngine
+
+        registry.register(
+            "autogen",
+            lambda: AutoGenCollaborationEngine(executor),
+            ready_when=lambda: False,  # production-ready only with Model Gateway
+            version=AutoGenCollaborationEngine.version,
+        )
     return registry
 
 

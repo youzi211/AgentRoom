@@ -14,6 +14,9 @@ import (
 
 	"agentroom/backend/internal/agent"
 	"agentroom/backend/internal/api"
+	"agentroom/backend/internal/collaboration"
+	"agentroom/backend/internal/collaborationcoordinator"
+	"agentroom/backend/internal/collaborationgrpc"
 	"agentroom/backend/internal/config"
 	"agentroom/backend/internal/llm"
 	"agentroom/backend/internal/logging"
@@ -44,6 +47,10 @@ func main() {
 	if err != nil {
 		fatal(logger, "configure Agent Runtime transport", err)
 	}
+	collaborationRuntimeConfig, err := config.LoadCollaborationRuntimeConfig()
+	if err != nil {
+		fatal(logger, "configure Collaboration Runtime mode", err)
+	}
 	if dbConfig.DSN == "" {
 		fatal(logger, "MYSQL_DSN is required. Set it in .env or environment variables.", nil)
 	}
@@ -66,12 +73,20 @@ func main() {
 		}
 		logger.Info("database migrations applied")
 	}
-	interruptedRuns, err := store.ReconcileActiveAgentRuns(ctx, time.Now().UTC())
+	reconciledAt := time.Now().UTC()
+	interruptedRuns, err := store.ReconcileActiveAgentRuns(ctx, reconciledAt)
 	if err != nil {
 		fatal(logger, "reconcile interrupted agent runs", err)
 	}
 	if interruptedRuns > 0 {
 		logger.Warn("reconciled interrupted agent runs", "count", interruptedRuns)
+	}
+	interruptedCollaborationRuns, err := store.ReconcileActiveCollaborationRuns(ctx, reconciledAt)
+	if err != nil {
+		fatal(logger, "reconcile interrupted collaboration runs", err)
+	}
+	if interruptedCollaborationRuns > 0 {
+		logger.Warn("reconciled interrupted collaboration runs", "count", interruptedCollaborationRuns)
 	}
 
 	deepAgentRegistryPath := filepath.Join(deepAgentConfig.WorkDir, deepAgentConfig.Registry)
@@ -138,18 +153,81 @@ func main() {
 			}),
 		))
 	}
+	var collaborationClient *collaborationgrpc.Client
+	var collaborationCoordinator *collaborationcoordinator.Coordinator
+	if collaborationRuntimeConfig.Mode == config.CollaborationRuntimeModeRemote {
+		collaborationClient, err = collaborationgrpc.NewClient(collaborationgrpc.ClientConfig{
+			Address:         collaborationRuntimeConfig.GRPCAddress,
+			Insecure:        collaborationRuntimeConfig.GRPCInsecure,
+			ServerName:      collaborationRuntimeConfig.ServerName,
+			CAFile:          collaborationRuntimeConfig.CAFile,
+			ClientCertFile:  collaborationRuntimeConfig.ClientCertFile,
+			ClientKeyFile:   collaborationRuntimeConfig.ClientKeyFile,
+			Timeout:         collaborationRuntimeConfig.Timeout,
+			MaxRequestBytes: collaborationRuntimeConfig.MaxRequestBytes,
+			MaxEventBytes:   collaborationRuntimeConfig.MaxEventBytes,
+		})
+		if err != nil {
+			fatal(logger, "create remote Collaboration Runtime client", err)
+		}
+		defer collaborationClient.Close()
+		collaborationCoordinator, err = collaborationcoordinator.New(collaborationClient, collaborationcoordinator.Config{
+			MaxConcurrent: collaborationRuntimeConfig.MaxConcurrent,
+			MaxPending:    collaborationRuntimeConfig.MaxPending,
+		})
+		if err != nil {
+			fatal(logger, "configure Collaboration Coordinator", err)
+		}
+		logger.Info("remote Collaboration Runtime configured", "address", collaborationRuntimeConfig.GRPCAddress)
+	} else {
+		logger.Info("legacy Go collaboration path configured", "agent_runtime_transport", agentRuntimeConfig.Transport)
+	}
 	focusService := service.NewFocusService(llmClient)
 	minutesService := service.NewMinutesService(llmClient)
 	roomService := service.NewRoomService(manager, agentService, knowledgeService, runner, focusService, store).WithMinutes(minutesService)
+	if collaborationCoordinator != nil {
+		collaborationScheduler, schedulerErr := service.NewRemoteCollaborationScheduler(
+			collaborationCoordinator,
+			store,
+			modelResolver,
+			knowledgeService,
+			service.RemoteCollaborationConfig{
+				TranscriptLimit: 30,
+				EngineVersions: map[string]string{
+					model.CollaborationEngineNative:  "native-v1",
+					model.CollaborationEngineAutoGen: "autogen-v1",
+				},
+				Limits: collaboration.ExecutionLimits{
+					Timeout:            collaborationRuntimeConfig.Timeout,
+					MaxOutputBytes:     1 << 20,
+					MaxArtifactBytes:   4 << 20,
+					MaxToolSteps:       32,
+					MaxRequestBytes:    uint32(collaborationRuntimeConfig.MaxRequestBytes),
+					MaxEventBytes:      uint32(collaborationRuntimeConfig.MaxEventBytes),
+					MaxCheckpointBytes: uint32(collaborationRuntimeConfig.MaxCheckpointBytes),
+				},
+			},
+		)
+		if schedulerErr != nil {
+			fatal(logger, "configure remote collaboration scheduler", schedulerErr)
+		}
+		roomService.WithCollaborationCanceler(collaborationCoordinator).WithCollaborationScheduler(collaborationScheduler)
+	}
 	server := api.NewServerWithConfig(api.Dependencies{
-		Queries:       roomService.Queries(),
-		Commands:      roomService.Commands(),
-		Access:        roomService.Access(),
-		ModelProfiles: modelProfileService,
-		AgentRuntime:  remoteClient,
+		Queries:              roomService.Queries(),
+		Commands:             roomService.Commands(),
+		Access:               roomService.Access(),
+		ModelProfiles:        modelProfileService,
+		AgentRuntime:         remoteClient,
+		CollaborationRuntime: collaborationClient,
 	}, api.Config{
-		AdminAPIKey:    securityConfig.AdminAPIKey,
-		AllowedOrigins: securityConfig.AllowedOrigins,
+		AdminAPIKey:              securityConfig.AdminAPIKey,
+		AllowedOrigins:           securityConfig.AllowedOrigins,
+		CollaborationRuntimeMode: collaborationRuntimeConfig.Mode,
+		DefaultCollaborationPolicy: model.CollaborationPolicy{
+			Engine:      collaborationRuntimeConfig.DefaultEngine,
+			TriggerMode: collaborationRuntimeConfig.DefaultTriggerMode,
+		},
 	})
 
 	now := time.Now().UTC()
@@ -182,11 +260,16 @@ func main() {
 	}
 
 	_ = listener.Close()
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShutdown()
+	if collaborationCoordinator != nil {
+		if err := collaborationCoordinator.Shutdown(shutdownCtx); err != nil {
+			logger.Warn("shutdown Collaboration Coordinator", "error", err)
+		}
+	}
 	if remoteClient != nil {
 		remoteClient.CancelAll()
 	}
-	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancelShutdown()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		logger.Warn("graceful backend shutdown", "error", err)
 	}

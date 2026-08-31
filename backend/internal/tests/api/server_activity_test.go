@@ -19,7 +19,7 @@ import (
 	"agentroom/backend/internal/tests/teststore"
 )
 
-func TestRoomActivityListsAgentAndDialogueRuns(t *testing.T) {
+func TestRoomActivityListsAgentDialogueAndCollaborationRuns(t *testing.T) {
 	server, _, backingStore := newActivityTestServer(t, api.Config{})
 	created := createActivityRoom(t, server, `{"name":"Activity room"}`)
 	completedAt := time.Date(2026, 6, 15, 10, 30, 1, 0, time.UTC)
@@ -43,6 +43,12 @@ func TestRoomActivityListsAgentAndDialogueRuns(t *testing.T) {
 		Status:           model.DialogueRunStatusStoppedLimit,
 		StartedAt:        startedAt,
 		CompletedAt:      &completedAt,
+	})
+	backingStore.CollaborationRuns = append(backingStore.CollaborationRuns, store.CollaborationRun{
+		ID: "collaboration_1", RoomID: created.Room.ID, RootMessageID: "msg_1",
+		Engine: model.CollaborationEngineNative, EngineVersion: "native-v1", PolicyVersion: model.CollaborationPolicyVersion,
+		TurnCount: 2, Status: model.CollaborationRunStatusStopped, StopReason: model.CollaborationStopReasonMaxTurns,
+		CreatedAt: startedAt, StartedAt: &startedAt, CompletedAt: &completedAt,
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/api/rooms/"+created.Room.ID+"/activity", nil)
@@ -75,6 +81,17 @@ func TestRoomActivityListsAgentAndDialogueRuns(t *testing.T) {
 			CreatedAt        time.Time  `json:"createdAt"`
 			CompletedAt      *time.Time `json:"completedAt"`
 		} `json:"dialogueRuns"`
+		CollaborationRuns []struct {
+			ID            string     `json:"id"`
+			RootMessageID string     `json:"rootMessageID"`
+			Engine        string     `json:"engine"`
+			EngineVersion string     `json:"engineVersion"`
+			PolicyVersion string     `json:"policyVersion"`
+			TurnCount     int        `json:"turnCount"`
+			Status        string     `json:"status"`
+			StopReason    string     `json:"stopReason"`
+			CompletedAt   *time.Time `json:"completedAt"`
+		} `json:"collaborationRuns"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode activity response: %v", err)
@@ -93,6 +110,12 @@ func TestRoomActivityListsAgentAndDialogueRuns(t *testing.T) {
 	}
 	if got := payload.DialogueRuns[0]; got.ID != "dialogue_1" || got.Mode != model.DialogueModeGuided || got.TurnCount != 2 || got.Status != model.DialogueRunStatusStoppedLimit {
 		t.Fatalf("unexpected dialogue run payload: %#v", got)
+	}
+	if len(payload.CollaborationRuns) != 1 {
+		t.Fatalf("expected one collaboration run alongside legacy dialogue history, got %#v", payload.CollaborationRuns)
+	}
+	if got := payload.CollaborationRuns[0]; got.ID != "collaboration_1" || got.RootMessageID != "msg_1" || got.Engine != model.CollaborationEngineNative || got.EngineVersion != "native-v1" || got.PolicyVersion != model.CollaborationPolicyVersion || got.TurnCount != 2 || got.Status != model.CollaborationRunStatusStopped || got.StopReason != model.CollaborationStopReasonMaxTurns || got.CompletedAt == nil {
+		t.Fatalf("unexpected collaboration run payload: %#v", got)
 	}
 }
 

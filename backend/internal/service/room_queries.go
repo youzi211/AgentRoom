@@ -141,6 +141,10 @@ func (s *RoomService) ListRoomActivity(ctx context.Context, currentRoom *room.Ro
 	if err != nil {
 		return RoomActivity{}, err
 	}
+	collaborationRuns, err := s.store.ListCollaborationRuns(ctx, query)
+	if err != nil {
+		return RoomActivity{}, err
+	}
 
 	agentNameByID := make(map[string]string)
 	for _, roomAgent := range currentRoom.Agents() {
@@ -148,8 +152,9 @@ func (s *RoomService) ListRoomActivity(ctx context.Context, currentRoom *room.Ro
 	}
 
 	activity := RoomActivity{
-		AgentRuns:    make([]AgentRunActivity, 0, len(agentRuns)),
-		DialogueRuns: make([]DialogueRunActivity, 0, len(dialogueRuns)),
+		AgentRuns:         make([]AgentRunActivity, 0, len(agentRuns)),
+		DialogueRuns:      make([]DialogueRunActivity, 0, len(dialogueRuns)),
+		CollaborationRuns: make([]CollaborationRunActivity, 0, len(collaborationRuns)),
 	}
 	for _, run := range agentRuns {
 		activity.AgentRuns = append(activity.AgentRuns, AgentRunActivity{
@@ -174,6 +179,14 @@ func (s *RoomService) ListRoomActivity(ctx context.Context, currentRoom *room.Ro
 			Status:           run.Status,
 			CreatedAt:        run.StartedAt,
 			CompletedAt:      run.CompletedAt,
+		})
+	}
+	for _, run := range collaborationRuns {
+		activity.CollaborationRuns = append(activity.CollaborationRuns, CollaborationRunActivity{
+			ID: run.ID, RoomID: run.RoomID, RootMessageID: run.RootMessageID,
+			Engine: run.Engine, EngineVersion: run.EngineVersion, PolicyVersion: run.PolicyVersion,
+			Status: run.Status, StopReason: run.StopReason, TurnCount: run.TurnCount, ErrorText: run.Error,
+			CreatedAt: run.CreatedAt, StartedAt: run.StartedAt, CompletedAt: run.CompletedAt,
 		})
 	}
 	return activity, nil

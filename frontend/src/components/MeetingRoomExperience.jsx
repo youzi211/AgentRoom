@@ -23,6 +23,7 @@ import MeetingMinutesPanel from './MeetingMinutesPanel'
 import MessageComposer from './MessageComposer'
 import { filterMessagesByKind } from './messageFilters'
 import MessageList from './MessageList'
+import { labelForCollaborationEngine, labelForTriggerMode } from '../collaborationRuntime'
 
 function MeetingRoomExperience({
   activityError,
@@ -105,13 +106,14 @@ function MeetingRoomExperience({
               <InfoItem label="创建者" value="公开加入" />
               <InfoItem label="Agent 数" value={String(activeAgentCount)} />
               <div className="meeting-room-v2__info-item">
-                <dt>会议模式</dt>
+                <dt>协作方式</dt>
                 <dd>
                   <Badge variant="light" color="teal">
-                    {labelForDialogueMode(room.dialoguePolicy?.mode)}
+                    {labelForTriggerMode(room.collaborationPolicy?.triggerMode)}
                   </Badge>
                 </dd>
               </div>
+              <InfoItem label="协作引擎" value={labelForCollaborationEngine(room.collaborationPolicy?.engine)} />
             </dl>
           </section>
 
@@ -258,10 +260,6 @@ function labelForConnectionState(connectionState) {
     default:
       return '连接中'
   }
-}
-
-function labelForDialogueMode(mode) {
-  return mode === 'guided_dialogue' ? '单 Agent 对话' : '多 Agent 协作'
 }
 
 export default MeetingRoomExperience

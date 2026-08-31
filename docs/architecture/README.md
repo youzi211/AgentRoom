@@ -18,7 +18,7 @@
 
 ## 系统概览
 
-AgentRoom 是一个 Go 模块化单体后端、React 单页前端和 MySQL 数据库组成的实时 AI 会议工作区。Go 后端同时承载 HTTP、WebSocket、房间运行时状态和 Agent 编排；DeepAgent 不是独立服务，而是由 Go 后端按次启动的 Python 子进程。
+AgentRoom 是一个 Go 模块化单体后端、React 单页前端、Python Agent Runtime 和 MySQL 数据库组成的实时 AI 会议工作区。Go 后端承载 HTTP、WebSocket、房间运行时状态和业务控制面；Python `agent-runtime` 作为内部 gRPC 执行面，托管单 Agent Executor 与 Collaboration Runtime，不直接访问 AgentRoom MySQL。
 
 ```text
                            Browser
@@ -33,20 +33,24 @@ AgentRoom 是一个 Go 模块化单体后端、React 单页前端和 MySQL 数�
                 backend container / process
         Go + Gin + gorilla/websocket + room Hub
                  |                       |
-                 |                       +--> OpenAI-compatible model API
+                 |                       +--> Model Profile / OpenAI-compatible API
                  |                       |
-                 |                       +--> Python DeepAgent child
-                 |                              |--> model API
-                 |                              |--> Tavily
-                 |                              `--> runs/<runID>/
+                 |                       +--> Python agent-runtime gRPC
+                 |                              |-- AgentRuntimeService
+                 |                              |   |-- LLMExecutor
+                 |                              |   `-- DeepAgentExecutor -> Tavily / report.md
+                 |                              `-- CollaborationRuntimeService
+                 |                                  |-- NativeCollaborationEngine
+                 |                                  `-- AutoGenCollaborationEngine (gated)
                  v
                     MySQL 8 / GORM
 ```
 
-Docker Compose 由三个服务组成：
+Docker Compose 由四个服务组成：
 
 - `frontend`：nginx 托管 Vite 构建，并代理 `/api` 与 WebSocket；
-- `backend`：Go 服务，以及镜像内置的 Python、`uv` 和 DeepAgent；
+- `backend`：Go 控制面，负责房间、权限、持久化、实时广播和运行治理；
+- `agent-runtime`：内部 Python gRPC 服务，负责单 Agent turn 与协作引擎执行；
 - `mysql`：房间、消息、配置和运行审计的持久化事实来源。
 
 ## 文档地图
@@ -57,6 +61,8 @@ Docker Compose 由三个服务组成：
 | [Agent Runtime 与模型](agent-runtime-and-models.md) | mention、对话策略、Runner、Go/DeepAgent Runtime、Model Profile、密钥 | `backend/internal/agent`、`llm`、模型 Profile、`deepagent/` |
 | [数据、实时与会议生命周期](data-realtime-lifecycle.md) | MySQL 与内存状态、建房快照、消息一致性、WebSocket、房间状态机 | schema、Repository、消息、房间、参与者、会议生命周期 |
 | [前端与部署](frontend-and-deployment.md) | React 路由、页面和 API Client、Docker 拓扑、部署与浏览器安全边界 | `frontend/`、Dockerfile、Compose、nginx、部署配置 |
+| [协作运行时迁移基线](collaboration-runtime-baseline.md) | mention/guided 行为、消息提交顺序、Runtime 取消、artifact 与脱敏基线 | Collaboration Runtime 迁移与回归测试 |
+| [Collaboration Runtime 真实模型隔离评估](collaboration-runtime-real-model-evaluation.md) | Native/AutoGen 真实模型隔离评估、延迟、token、费用与成功率 | Collaboration Runtime 灰度验收 |
 
 ## 仓库模块地图
 
@@ -102,9 +108,9 @@ MySQL 保存可恢复业务事实；当前进程保存 WebSocket 连接、Hub、
 
 房间快照中非空的 Profile ID 固定模型选择，而 Profile 的 Base URL、模型名和 API Key 在每次调用时重新读取。因此切换默认值不改变已有具体 Profile 快照，但更新同一 Profile 的连接内容会在旧房间下一次调用时生效。没有 Profile ID 的旧房间会在每次调用时解析当前数据库默认值，并在默认值不存在时使用环境迁移兜底。
 
-### 5. Agent Runtime 可替换
+### 5. Agent 与 Collaboration Runtime 可替换
 
-Runner 通过 Runtime Registry 将 `llm` Agent 交给 Go LLM Runtime，将 `deepagent` Agent 交给 Python 子进程适配器。两者共享后端的 Model Resolver 与审计链路。
+Runner 通过 Runtime Registry 将 `llm` / `deepagent` 单 Agent turn 交给 Go 本地实现或 Python Agent Runtime。房间多 Agent 协作在 `COLLABORATION_RUNTIME_MODE=remote` 时通过 Collaboration Coordinator 委托给 Python Collaboration Runtime；Go 仍保持房间、权限、MySQL 提交和 WebSocket 广播所有权。
 
 ### 6. `/api/*` 是规范协议面
 

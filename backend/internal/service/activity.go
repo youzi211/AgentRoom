@@ -3,8 +3,9 @@ package service
 import "time"
 
 type RoomActivity struct {
-	AgentRuns    []AgentRunActivity
-	DialogueRuns []DialogueRunActivity
+	AgentRuns         []AgentRunActivity
+	DialogueRuns      []DialogueRunActivity
+	CollaborationRuns []CollaborationRunActivity
 }
 
 type AgentRunActivity struct {
@@ -28,4 +29,20 @@ type DialogueRunActivity struct {
 	Status           string
 	CreatedAt        time.Time
 	CompletedAt      *time.Time
+}
+
+type CollaborationRunActivity struct {
+	ID            string
+	RoomID        string
+	RootMessageID string
+	Engine        string
+	EngineVersion string
+	PolicyVersion string
+	Status        string
+	StopReason    string
+	TurnCount     int
+	ErrorText     string
+	CreatedAt     time.Time
+	StartedAt     *time.Time
+	CompletedAt   *time.Time
 }
