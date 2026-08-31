@@ -80,7 +80,7 @@ def test_server_reports_serving_and_streams_ordered_success(tmp_path):
             collaboration_health = await health_stub.Check(
                 health_pb2.HealthCheckRequest(service=COLLABORATION_SERVICE_NAME)
             )
-            assert collaboration_health.status == health_pb2.HealthCheckResponse.NOT_SERVING
+            assert collaboration_health.status == health_pb2.HealthCheckResponse.SERVING
 
             events = [event async for event in stub.ExecuteAgent(request())]
             assert [event.sequence for event in events] == list(range(1, len(events) + 1))

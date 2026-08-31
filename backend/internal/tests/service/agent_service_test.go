@@ -113,7 +113,7 @@ func TestRoomCreationSnapshotsResolvedProfileID(t *testing.T) {
 	}
 	agentService := service.NewAgentService(backingStore, agents).WithModelProfiles(backingStore)
 	manager := room.NewManager(backingStore, agentService.ResolveForRoom)
-	firstRoom, err := manager.CreateRoom(context.Background(), "First", []string{"a"}, "", model.DialoguePolicy{})
+	firstRoom, err := manager.CreateRoom(context.Background(), "First", []string{"a"}, "", model.DialoguePolicy{}, model.DefaultCollaborationPolicy())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestRoomCreationSnapshotsResolvedProfileID(t *testing.T) {
 	if got := backingStore.RoomAgents[firstRoom.Info().ID][0].ModelProfileID; got != "default-old" {
 		t.Fatalf("existing room snapshot changed after agent rebind: %q", got)
 	}
-	secondRoom, err := manager.CreateRoom(context.Background(), "Second", []string{"a"}, "", model.DialoguePolicy{})
+	secondRoom, err := manager.CreateRoom(context.Background(), "Second", []string{"a"}, "", model.DialoguePolicy{}, model.DefaultCollaborationPolicy())
 	if err != nil {
 		t.Fatal(err)
 	}

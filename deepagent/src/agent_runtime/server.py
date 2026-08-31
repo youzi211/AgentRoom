@@ -14,6 +14,7 @@ from .registry import ExecutorRegistry
 from .service import AgentRuntimeServicer
 from .security import install_sensitive_data_filter
 from .v1 import agent_runtime_pb2, agent_runtime_pb2_grpc
+from collaboration_runtime.agent_executor import RuntimeRegistryAgentExecutor
 from collaboration_runtime.registry import CollaborationEngineRegistry
 from collaboration_runtime.service import CollaborationRuntimeServicer
 from collaboration_runtime.v1 import collaboration_runtime_pb2_grpc
@@ -36,14 +37,25 @@ class RuntimeServer:
     def __post_init__(self) -> None:
         self.settings.validate()
         self.servicer = AgentRuntimeServicer(self.settings, self.registry)
+        self.collaboration_registry = (
+            self.collaboration_registry
+            if self.settings.collaboration_enabled
+            else CollaborationEngineRegistry()
+        )
+        if self.settings.collaboration_enabled and len(self.collaboration_registry) == 0:
+            self.collaboration_registry = build_collaboration_registry(
+                self.settings,
+                RuntimeRegistryAgentExecutor(self.registry, work_dir=self.settings.work_dir),
+            )
         self.collaboration_servicer = CollaborationRuntimeServicer(
             self.collaboration_registry,
-            max_concurrency=self.settings.max_concurrency,
-            max_pending=self.settings.max_pending,
+            max_concurrency=self.settings.collaboration_max_concurrency,
+            max_pending=self.settings.collaboration_max_pending,
             max_request_bytes=self.settings.max_request_bytes,
             max_event_bytes=self.settings.max_event_bytes,
             max_artifact_bytes=self.settings.max_artifact_bytes,
             max_output_bytes=self.settings.max_output_bytes,
+            max_checkpoint_bytes=self.settings.collaboration_checkpoint_max_bytes,
         )
         self.health = health.aio.HealthServicer()
         self.server = grpc.aio.server(
@@ -81,7 +93,7 @@ class RuntimeServer:
             raise RuntimeError(f"failed to bind Agent Runtime to {self.settings.bind_address}")
         await self.server.start()
         agent_ready = len(self.registry) > 0
-        collaboration_ready = len(self.collaboration_registry) > 0
+        collaboration_ready = self.collaboration_registry.ready()
         if agent_ready or collaboration_ready:
             await self.health.set("", health_pb2.HealthCheckResponse.SERVING)
         if agent_ready:
@@ -135,6 +147,36 @@ def build_registry(settings: RuntimeSettings) -> ExecutorRegistry:
     else:
         registry.register(LLMExecutor())
         registry.register(DeepAgentExecutor())
+    return registry
+
+
+def build_collaboration_registry(settings: RuntimeSettings, executor=None) -> CollaborationEngineRegistry:
+    """Build the collaboration Engine Registry from runtime settings (11.1).
+
+    Only engines in ``COLLABORATION_ENGINE_ALLOWLIST`` are registered. The
+    AutoGen Engine additionally requires ``COLLABORATION_AUTOGEN_ENABLED``
+    so a default deployment never pulls the pinned AutoGen dependency into
+    the hot path until an operator explicitly opts in.
+    """
+    from collaboration_runtime.engines.native import NativeCollaborationEngine
+
+    registry = CollaborationEngineRegistry()
+    allowlist = set(settings.collaboration_engine_allowlist)
+    if "native" in allowlist:
+        registry.register(
+            "native",
+            lambda: NativeCollaborationEngine(executor),
+            version=NativeCollaborationEngine.version,
+        )
+    if "autogen" in allowlist and settings.collaboration_autogen_enabled:
+        from collaboration_runtime.engines.autogen import AutoGenCollaborationEngine
+
+        registry.register(
+            "autogen",
+            lambda: AutoGenCollaborationEngine(executor),
+            ready_when=lambda: False,  # production-ready only with Model Gateway
+            version=AutoGenCollaborationEngine.version,
+        )
     return registry
 
 

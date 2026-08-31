@@ -2,22 +2,24 @@
 
 ## 当前远程执行拓扑
 
-`AGENT_RUNTIME_TRANSPORT=grpc` 时，Go 是控制面，长驻 Python 服务是单 Turn 执行面：
+`AGENT_RUNTIME_TRANSPORT=grpc` 时，Go 是控制面，长驻 Python 服务是执行面。它同时注册两个逻辑服务：
 
 ```text
-Go Runner
-  -> 选择 Agent / 执行 Mention 与 Guided Dialogue 策略
-  -> 创建 agent_run，检索历史和知识，解析并解密 Model Profile
-  -> RemotePythonRuntime.ExecuteAgent(不可变快照)
-       -> Python Executor Registry
-            |-- LLMExecutor
-            `-- DeepAgentExecutor -> Tavily / report.md
-  <- accepted / model / tool / progress / artifact / terminal events
-  -> 事务提交最终消息、artifact、模型审计和 succeeded 终态
-  -> WebSocket Activity / 最终消息广播
+Go control plane
+  |-- Agent Runtime client
+  |     `-- AgentRuntimeService.ExecuteAgent
+  |           -> Python Executor Registry
+  |                |-- LLMExecutor
+  |                `-- DeepAgentExecutor -> Tavily / report.md
+  |
+  `-- Collaboration Coordinator
+        `-- CollaborationRuntimeService.ExecuteConversation
+              -> Python CollaborationEngineRegistry
+                   |-- NativeCollaborationEngine
+                   `-- AutoGenCollaborationEngine (allowlist + feature flag)
 ```
 
-Python 不读取 AgentRoom MySQL，不选择其他房间 Agent，也不持久化业务终态。每个请求使用独立 RunContext、模型客户端和工作目录；API Key 只存在于受保护的 gRPC 请求与该上下文内存，结束时清理。Go 保持长生命周期 ClientConn，并用同一 Context 传播 deadline、房间关闭、归档和停机取消。
+Go 不把房间、权限、消息或运行审计所有权迁移给 Python。Python 不读取 AgentRoom MySQL，也不广播房间事件。每次请求使用不可变快照、独立运行上下文、取消句柄和模型引用；最终聊天消息、artifact、`agent_runs` 和 `collaboration_runs` 仍由 Go 事务提交。
 
 Runtime Registry 的当前映射：
 
@@ -26,15 +28,24 @@ Runtime Registry 的当前映射：
 | `llm` | `LLMAgentRuntime` | Python `LLMExecutor` | `go` |
 | `deepagent` | `DeepAgentRuntime` 子进程回退 | Python `DeepAgentExecutor` | `deepagent` |
 
-远程流发生 `UNAVAILABLE`、连接重置或协议错误时不会自动调用 local Runtime 重做同一 `run_id`。Python 总容量和 DeepAgent 专属容量负责执行限流；超过内联限制的 artifact 明确失败，不截断。旧 Go LLM Agent Runtime、DeepAgent 子进程 Adapter 和 `DEEPAGENT_*` 配置仅在稳定观察期结束前保留用于显式回滚。
+Collaboration Runtime 的当前映射：
+
+| Collaboration Engine | 启用条件 | 模型端口 | 说明 |
+| --- | --- | --- | --- |
+| `native` | `COLLABORATION_ENGINE_ALLOWLIST` 包含 `native` | Agent Executor / Model Resolver | Python 中复现当前协作策略，是灰度与回滚基线 |
+| `autogen` | allowlist 包含 `autogen` 且 `COLLABORATION_AUTOGEN_ENABLED=true` | 框架中立 Model Gateway 端口 | AutoGen 依赖隔离在 engine 模块；无生产模型网关时不报告 ready |
+
+远程流发生 `UNAVAILABLE`、连接重置或协议错误时不会自动调用 local Runtime 重做同一 `run_id` 或 `collaboration_run_id`。Python 总容量、DeepAgent 专属容量和 Collaboration Runtime 容量分别负责执行限流；超过内联限制的 artifact/checkpoint 明确失败或被丢弃，不截断。旧 Go LLM Agent Runtime、DeepAgent 子进程 Adapter 和 `DEEPAGENT_*` 配置仅在稳定观察期结束前保留用于显式回滚。
 
 主要代码：
 
 - `proto/agent_runtime/v1/agent_runtime.proto`
 - `backend/internal/agent/runtime_remote.go`
 - `deepagent/src/agent_runtime/service.py`
-- `deepagent/src/agent_runtime/executors/llm.py`
-- `deepagent/src/agent_runtime/executors/deepagent.py`
+- `deepagent/src/agent_runtime/server.py`
+- `deepagent/src/collaboration_runtime/service.py`
+- `deepagent/src/collaboration_runtime/engines/native.py`
+- `deepagent/src/collaboration_runtime/engines/autogen.py`
 - `docs/architecture/agent-runtime-rollout.md`
 
 [返回架构索引](README.md)
@@ -80,7 +91,7 @@ global Agent
 
 ## 2. 触发与 mention 规则
 
-`agent.Runner.HandleHumanMessage` 是入口。默认原则是：人类消息没有显式 mention 时，不触发 Agent。
+`agent.Runner.HandleHumanMessage` 是 legacy 协作入口。默认原则是：人类消息没有显式 mention 时，不触发 Agent。`COLLABORATION_RUNTIME_MODE=remote` 时，已持久化的人类消息改由 `CollaborationCoordinator` 创建 collaboration run；显式 mention 只作为高优先级选角信号，`automatic` 触发模式允许无 mention 消息由协作引擎选择单一首发 Agent。
 
 Mention 检测会：
 
@@ -99,7 +110,7 @@ Mention 检测会：
 
 ## 3. Dialogue Policy
 
-每个房间持有经过 `WithDefaults()` 规范化的 `DialoguePolicy`。Runner 根据 Policy 分为两条路径。
+每个房间持有经过 `WithDefaults()` 规范化的 `DialoguePolicy` 与 `CollaborationPolicy`。在 legacy 模式下 Runner 根据 Dialogue Policy 分为两条路径；在 remote 模式下，Dialogue Policy 只作为迁移兼容输入映射到 Collaboration Policy。
 
 ### 3.1 `mention_fanout`
 
@@ -157,6 +168,40 @@ Guided Dialogue 创建整段 `dialogue_runs` 审计，每一轮仍创建单独 `
 - `backend/internal/agent/prompt_composer.go`
 
 当前 `ResponseStrategy` 会进入 Prompt Context，但实际 speaker 选择仍主要由 pending 顺序和 eligibility 决定；不要假设它已经对应多种调度算法。
+
+### 3.3 Remote Collaboration Runtime
+
+```text
+persist human message
+  -> broadcast message immediately
+  -> cancel previous room collaboration if active
+  -> create collaboration_run
+  -> build immutable room / Agent / transcript / knowledge / policy snapshot
+  -> ExecuteConversation over gRPC
+  -> validate ordered events and turn identity
+  -> commit only valid agent_message_completed events
+  -> converge collaboration_run terminal state
+```
+
+控制项包括：
+
+- `engine`: `native` / `autogen`;
+- `triggerMode`: `mention_only` / `automatic`;
+- `MaxTurns` 与 `MaxTurnsPerAgent`;
+- `AllowAgentHandoff` / `AllowSelfFollowup`;
+- `CooldownMs`;
+- 请求、事件、artifact、checkpoint 大小限制;
+- backend 与 Python 的协作容量和等待队列。
+
+关键代码：
+
+- `backend/internal/service/collaboration_scheduler.go`
+- `backend/internal/collaborationcoordinator`
+- `backend/internal/collaborationgrpc`
+- `deepagent/src/collaboration_runtime/service.py`
+- `deepagent/src/collaboration_runtime/registry.py`
+
+新协作运行写入 `collaboration_runs`，每个远程 Agent turn 仍写入 `agent_runs`。旧 `dialogue_runs` 在迁移期保持历史读取和兼容展示；停止新写入与隔离 legacy fanout/guided 主链需要完成灰度观察后再执行。
 
 ## 4. Runner 执行链
 

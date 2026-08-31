@@ -14,6 +14,7 @@ import (
 
 	"agentroom/backend/internal/agent"
 	"agentroom/backend/internal/api/contracts"
+	"agentroom/backend/internal/collaboration"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/service"
 	"agentroom/backend/internal/store"
@@ -48,6 +49,44 @@ func (s *Server) handleReady(c *gin.Context) {
 			"ok": runtimeOK,
 		},
 	})
+}
+
+func (s *Server) handleCollaborationRuntimeCapabilities(c *gin.Context) {
+	mode := strings.ToLower(strings.TrimSpace(s.config.CollaborationRuntimeMode))
+	if mode == "" {
+		mode = "legacy"
+	}
+	capabilities := collaboration.LegacyRuntimeCapabilities()
+	if mode == "remote" {
+		capabilities = collaboration.RuntimeCapabilities{
+			SupportedProtocolVersions: []string{},
+			Engines:                   []collaboration.EngineCapability{},
+			SupportedTriggerModes:     []collaboration.TriggerMode{},
+		}
+		if s.collaborationRuntime != nil {
+			remoteCapabilities, err := s.collaborationRuntime.Capabilities(c.Request.Context())
+			if err == nil {
+				capabilities = remoteCapabilities
+			}
+		}
+	}
+
+	response := contracts.CollaborationRuntimeCapabilitiesResponse{
+		Mode:                      mode,
+		Ready:                     capabilities.Ready,
+		SupportedProtocolVersions: append([]string(nil), capabilities.SupportedProtocolVersions...),
+		Engines:                   make([]contracts.CollaborationRuntimeEngineCapability, 0, len(capabilities.Engines)),
+		SupportedTriggerModes:     make([]string, 0, len(capabilities.SupportedTriggerModes)),
+	}
+	for _, engine := range capabilities.Engines {
+		response.Engines = append(response.Engines, contracts.CollaborationRuntimeEngineCapability{
+			Engine: string(engine.Engine), Version: engine.Version, Enabled: engine.Enabled, Ready: engine.Ready,
+		})
+	}
+	for _, triggerMode := range capabilities.SupportedTriggerModes {
+		response.SupportedTriggerModes = append(response.SupportedTriggerModes, string(triggerMode))
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 func (s *Server) handleAgents(c *gin.Context) {
@@ -257,8 +296,17 @@ func (s *Server) handleCreateRoom(c *gin.Context) {
 	}
 
 	dialoguePolicy := request.DialoguePolicy.Resolve()
+	defaultCollaborationPolicy := s.config.DefaultCollaborationPolicy.WithDefaults()
+	if s.config.DefaultCollaborationPolicy == (model.CollaborationPolicy{}) {
+		defaultCollaborationPolicy = dialoguePolicy.ToCollaborationPolicy()
+	}
+	collaborationPolicy, err := request.CollaborationPolicy.Resolve(defaultCollaborationPolicy)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "invalid collaboration policy")
+		return
+	}
 
-	currentRoom, err := s.roomCommands.CreateRoom(c.Request.Context(), request.Name, request.AgentIDs, request.Passcode, dialoguePolicy)
+	currentRoom, err := s.roomCommands.CreateRoom(c.Request.Context(), request.Name, request.AgentIDs, request.Passcode, dialoguePolicy, collaborationPolicy)
 	if err != nil {
 		s.logger.Error("create room", "room_name", request.Name, "error", err)
 		writeError(c, http.StatusInternalServerError, "failed to create room")

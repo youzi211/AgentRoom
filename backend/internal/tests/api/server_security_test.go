@@ -302,6 +302,183 @@ func TestCreateRoomPersistsDialoguePolicy(t *testing.T) {
 	}
 }
 
+func TestCreateRoomPersistsCollaborationPolicy(t *testing.T) {
+	server := newTestServer(t, api.Config{})
+
+	createBody := bytes.NewBufferString(`{
+		"name":"Automatic collaboration",
+		"collaborationPolicy":{
+			"engine":"autogen",
+			"triggerMode":"automatic",
+			"maxTurns":6,
+			"maxTurnsPerAgent":2,
+			"allowAgentHandoff":false,
+			"allowSelfFollowup":true,
+			"cooldownMs":40
+		}
+	}`)
+	createRequest := httptest.NewRequest(http.MethodPost, "/api/rooms", createBody)
+	createRequest.Header.Set("Content-Type", "application/json")
+	createResponse := httptest.NewRecorder()
+	server.Routes().ServeHTTP(createResponse, createRequest)
+	if createResponse.Code != http.StatusCreated {
+		t.Fatalf("create room failed: %d body=%s", createResponse.Code, createResponse.Body.String())
+	}
+
+	var created struct {
+		Room struct {
+			ID                  string                    `json:"id"`
+			CollaborationPolicy model.CollaborationPolicy `json:"collaborationPolicy"`
+		} `json:"room"`
+	}
+	if err := json.Unmarshal(createResponse.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	want := model.CollaborationPolicy{
+		Engine:            model.CollaborationEngineAutoGen,
+		TriggerMode:       model.CollaborationTriggerAutomatic,
+		MaxTurns:          6,
+		MaxTurnsPerAgent:  2,
+		AllowAgentHandoff: false,
+		AllowSelfFollowup: true,
+		CooldownMS:        40,
+	}
+	if created.Room.CollaborationPolicy != want {
+		t.Fatalf("expected created collaboration policy %#v, got %#v", want, created.Room.CollaborationPolicy)
+	}
+
+	getRequest := httptest.NewRequest(http.MethodGet, "/api/rooms/"+created.Room.ID, nil)
+	getResponse := httptest.NewRecorder()
+	server.Routes().ServeHTTP(getResponse, getRequest)
+	if getResponse.Code != http.StatusOK {
+		t.Fatalf("get room failed: %d body=%s", getResponse.Code, getResponse.Body.String())
+	}
+	var fetched struct {
+		Room struct {
+			CollaborationPolicy model.CollaborationPolicy `json:"collaborationPolicy"`
+		} `json:"room"`
+	}
+	if err := json.Unmarshal(getResponse.Body.Bytes(), &fetched); err != nil {
+		t.Fatalf("decode get response: %v", err)
+	}
+	if fetched.Room.CollaborationPolicy != want {
+		t.Fatalf("expected fetched collaboration policy %#v, got %#v", want, fetched.Room.CollaborationPolicy)
+	}
+}
+
+func TestCreateRoomDefaultsToCompatibleCollaborationPolicy(t *testing.T) {
+	server := newTestServer(t, api.Config{})
+	request := httptest.NewRequest(http.MethodPost, "/api/rooms", bytes.NewBufferString(`{"name":"Compatible room"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	server.Routes().ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create room failed: %d body=%s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Room struct {
+			CollaborationPolicy model.CollaborationPolicy `json:"collaborationPolicy"`
+		} `json:"room"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if payload.Room.CollaborationPolicy != model.DefaultCollaborationPolicy() {
+		t.Fatalf("expected compatible default collaboration policy, got %#v", payload.Room.CollaborationPolicy)
+	}
+}
+
+func TestCreateRoomSupportsPerRoomCollaborationRolloutPolicies(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want model.CollaborationPolicy
+	}{
+		{
+			name: "remote Native allowlist room",
+			body: `{"name":"Native allowlist","collaborationPolicy":{"engine":"native","triggerMode":"mention_only","maxTurns":3,"maxTurnsPerAgent":1}}`,
+			want: model.CollaborationPolicy{Engine: model.CollaborationEngineNative, TriggerMode: model.CollaborationTriggerMentionOnly, MaxTurns: 3, MaxTurnsPerAgent: 1, AllowAgentHandoff: true},
+		},
+		{
+			name: "AutoGen automatic gray room",
+			body: `{"name":"AutoGen gray","collaborationPolicy":{"engine":"autogen","triggerMode":"automatic","maxTurns":4,"maxTurnsPerAgent":2,"allowAgentHandoff":true,"allowSelfFollowup":false}}`,
+			want: model.CollaborationPolicy{Engine: model.CollaborationEngineAutoGen, TriggerMode: model.CollaborationTriggerAutomatic, MaxTurns: 4, MaxTurnsPerAgent: 2, AllowAgentHandoff: true, AllowSelfFollowup: false},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := newTestServer(t, api.Config{})
+			request := httptest.NewRequest(http.MethodPost, "/api/rooms", bytes.NewBufferString(tt.body))
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			server.Routes().ServeHTTP(response, request)
+			if response.Code != http.StatusCreated {
+				t.Fatalf("create room failed: %d body=%s", response.Code, response.Body.String())
+			}
+
+			var payload struct {
+				Room struct {
+					CollaborationPolicy model.CollaborationPolicy `json:"collaborationPolicy"`
+				} `json:"room"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("decode create response: %v", err)
+			}
+			if payload.Room.CollaborationPolicy != tt.want {
+				t.Fatalf("expected rollout policy %#v, got %#v", tt.want, payload.Room.CollaborationPolicy)
+			}
+		})
+	}
+}
+
+func TestCreateRoomDefaultsToConfiguredCollaborationPolicy(t *testing.T) {
+	server := newTestServer(t, api.Config{
+		DefaultCollaborationPolicy: model.CollaborationPolicy{
+			Engine:           model.CollaborationEngineAutoGen,
+			TriggerMode:      model.CollaborationTriggerAutomatic,
+			MaxTurns:         4,
+			MaxTurnsPerAgent: 2,
+		},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/rooms", bytes.NewBufferString(`{"name":"Configured room"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	server.Routes().ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create room failed: %d body=%s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Room struct {
+			CollaborationPolicy model.CollaborationPolicy `json:"collaborationPolicy"`
+		} `json:"room"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if payload.Room.CollaborationPolicy.Engine != model.CollaborationEngineAutoGen || payload.Room.CollaborationPolicy.TriggerMode != model.CollaborationTriggerAutomatic || payload.Room.CollaborationPolicy.MaxTurns != 4 || payload.Room.CollaborationPolicy.MaxTurnsPerAgent != 2 {
+		t.Fatalf("expected configured default collaboration policy, got %#v", payload.Room.CollaborationPolicy)
+	}
+}
+
+func TestCreateRoomRejectsInvalidCollaborationPolicy(t *testing.T) {
+	server := newTestServer(t, api.Config{})
+	tests := []string{
+		`{"name":"Invalid engine","collaborationPolicy":{"engine":"unknown"}}`,
+		`{"name":"Invalid trigger","collaborationPolicy":{"triggerMode":"fanout"}}`,
+		`{"name":"Invalid turns","collaborationPolicy":{"maxTurns":0}}`,
+	}
+	for _, body := range tests {
+		request := httptest.NewRequest(http.MethodPost, "/api/rooms", bytes.NewBufferString(body))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		server.Routes().ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("expected invalid policy to return 400, got %d body=%s", response.Code, response.Body.String())
+		}
+	}
+}
+
 func TestMeetingMinutesCanBeGeneratedAsMarkdown(t *testing.T) {
 	server, roomService := newTestServerWithRuntime(t, api.Config{})
 

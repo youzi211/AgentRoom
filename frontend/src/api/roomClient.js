@@ -78,21 +78,22 @@ function filenameFromContentDisposition(value = '') {
   return match?.[1] || ''
 }
 
-export async function createRoom(name, agentIds, passcode = '', dialogueMode = 'mention_fanout') {
+export async function createRoom(name, agentIds, passcode = '', collaborationPolicy) {
   const response = await fetch(`${API_BASE_PATH}/rooms`, {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify(buildCreateRoomPayload(name, agentIds, passcode, dialogueMode)),
+    body: JSON.stringify(buildCreateRoomPayload(name, agentIds, passcode, collaborationPolicy)),
   })
 
   return parseResponse(response)
 }
 
-export function buildCreateRoomPayload(name, agentIds, passcode = '', dialogueMode = 'mention_fanout') {
+export function buildCreateRoomPayload(name, agentIds, passcode = '', collaborationPolicy) {
   const payload = { name, agentIds, passcode }
-  if (dialogueMode === 'guided_dialogue') {
-    payload.dialoguePolicy = {
-      mode: dialogueMode,
+  if (collaborationPolicy?.engine && collaborationPolicy?.triggerMode) {
+    payload.collaborationPolicy = {
+      engine: collaborationPolicy.engine,
+      triggerMode: collaborationPolicy.triggerMode,
     }
   }
   return payload
@@ -286,6 +287,13 @@ export async function deleteKnowledgeDocument(documentId) {
 
 export async function verifyAdminKey() {
   const response = await fetch(`${API_BASE_PATH}/admin/verify`, {
+    headers: withAdminKey(),
+  })
+  return parseResponse(response)
+}
+
+export async function getCollaborationRuntimeCapabilities() {
+  const response = await fetch(`${API_BASE_PATH}/admin/collaboration-runtime`, {
     headers: withAdminKey(),
   })
   return parseResponse(response)

@@ -67,6 +67,8 @@ Browser
 
 Go 新增 `CollaborationRuntime` 端口，面向中立的请求与事件；远程实现使用 gRPC，测试使用 Fake，迁移期可保留本地兼容实现。Python 暴露逻辑独立的 `CollaborationRuntimeService`，并由 `CollaborationEngineRegistry` 选择 Native 或 AutoGen Engine。
 
+迁移期组合根使用显式的 `legacy` / `remote` 部署模式。`legacy` 保留现有 Go Runner，其单 Agent turn 仍可通过 `AGENT_RUNTIME_TRANSPORT=local|grpc` 选择本地或远程 Executor，因此同时承担旧 Go 路径和本地兼容路径；`remote` 只装配新的 Collaboration Coordinator 与远程 Collaboration Runtime。这里不再新增一套 Go 本地 `CollaborationRuntime` 状态机。模式在一次 run 开始前确定，远程调用失败后不得在同一 run 内回落到 `legacy`。
+
 备选方案是在 Go Runner 中调用一个“路由 Agent”后继续执行现有 fanout。它能较快解决无 mention 不回复，但不会统一多轮状态、交接、终止、框架状态和替换边界，因此不采用。
 
 备选方案是让 Go 直接理解 AutoGen Team 与消息类型。Go/Python 之间将产生框架耦合，版本升级需要修改 Protobuf 和业务层，因此不采用。

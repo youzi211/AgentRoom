@@ -11,6 +11,7 @@ from agent_runtime.server import (
     COLLABORATION_SERVICE_NAME,
     SERVICE_NAME,
     RuntimeServer,
+    build_collaboration_registry,
 )
 from agent_runtime.v1 import agent_runtime_pb2
 from collaboration_runtime.models import EngineEvent, EventKind
@@ -92,6 +93,12 @@ def test_server_registers_collaboration_runtime_with_independent_health(tmp_path
             [FakeExecutor(agent_runtime_pb2.EXECUTOR_KIND_LLM)]
         )
         collaboration_registry = CollaborationEngineRegistry()
+        collaboration_registry.register(
+            "autogen",
+            FakeCollaborationEngine,
+            ready_when=lambda: False,
+            version="fake-v1",
+        )
         collaboration_registry.register("native", FakeCollaborationEngine)
         runtime = RuntimeServer(settings, agent_registry, collaboration_registry)
         port = await runtime.start()
@@ -108,6 +115,23 @@ def test_server_registers_collaboration_runtime_with_independent_health(tmp_path
             assert collaboration_health.status == health_pb2.HealthCheckResponse.SERVING
 
             stub = collaboration_runtime_pb2_grpc.CollaborationRuntimeServiceStub(channel)
+            capabilities = await stub.GetCapabilities(
+                collaboration_runtime_pb2.GetCapabilitiesRequest()
+            )
+            assert capabilities.ready is True
+            assert capabilities.supported_protocol_versions == ["v1"]
+            assert capabilities.supported_trigger_modes == [
+                "mention_only",
+                "automatic",
+            ]
+            assert [
+                (engine.engine, engine.version, engine.enabled, engine.ready)
+                for engine in capabilities.engines
+            ] == [
+                ("autogen", "fake-v1", True, False),
+                ("native", "fake-v1", True, True),
+            ]
+
             events = [event async for event in stub.ExecuteConversation(collaboration_request())]
             assert [event.WhichOneof("payload") for event in events] == [
                 "accepted",
@@ -118,6 +142,31 @@ def test_server_registers_collaboration_runtime_with_independent_health(tmp_path
             await runtime.stop()
 
     asyncio.run(scenario())
+
+
+def test_build_collaboration_registry_honors_allowlist_and_autogen_flag():
+    native_only = build_collaboration_registry(
+        RuntimeSettings(
+            insecure=True,
+            collaboration_engine_allowlist=("native", "autogen"),
+            collaboration_autogen_enabled=False,
+        )
+    )
+    assert [(item.name, item.enabled, item.ready) for item in native_only.capabilities()] == [
+        ("native", True, True),
+    ]
+
+    with_autogen = build_collaboration_registry(
+        RuntimeSettings(
+            insecure=True,
+            collaboration_engine_allowlist=("native", "autogen"),
+            collaboration_autogen_enabled=True,
+        )
+    )
+    assert sorted((item.name, item.enabled, item.ready) for item in with_autogen.capabilities()) == [
+        ("autogen", True, False),
+        ("native", True, True),
+    ]
 
 
 def test_graceful_stop_cancels_and_cleans_collaboration_calls(tmp_path):

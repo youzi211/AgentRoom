@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	CollaborationRuntimeService_GetCapabilities_FullMethodName     = "/agentroom.collaboration.v1.CollaborationRuntimeService/GetCapabilities"
 	CollaborationRuntimeService_ExecuteConversation_FullMethodName = "/agentroom.collaboration.v1.CollaborationRuntimeService/ExecuteConversation"
 )
 
@@ -29,6 +30,7 @@ const (
 // CollaborationRuntimeService executes one immutable, multi-turn room
 // collaboration. Go remains responsible for persistence and broadcasting.
 type CollaborationRuntimeServiceClient interface {
+	GetCapabilities(ctx context.Context, in *GetCapabilitiesRequest, opts ...grpc.CallOption) (*GetCapabilitiesResponse, error)
 	ExecuteConversation(ctx context.Context, in *ExecuteConversationRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CollaborationEvent], error)
 }
 
@@ -38,6 +40,16 @@ type collaborationRuntimeServiceClient struct {
 
 func NewCollaborationRuntimeServiceClient(cc grpc.ClientConnInterface) CollaborationRuntimeServiceClient {
 	return &collaborationRuntimeServiceClient{cc}
+}
+
+func (c *collaborationRuntimeServiceClient) GetCapabilities(ctx context.Context, in *GetCapabilitiesRequest, opts ...grpc.CallOption) (*GetCapabilitiesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCapabilitiesResponse)
+	err := c.cc.Invoke(ctx, CollaborationRuntimeService_GetCapabilities_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *collaborationRuntimeServiceClient) ExecuteConversation(ctx context.Context, in *ExecuteConversationRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CollaborationEvent], error) {
@@ -66,6 +78,7 @@ type CollaborationRuntimeService_ExecuteConversationClient = grpc.ServerStreamin
 // CollaborationRuntimeService executes one immutable, multi-turn room
 // collaboration. Go remains responsible for persistence and broadcasting.
 type CollaborationRuntimeServiceServer interface {
+	GetCapabilities(context.Context, *GetCapabilitiesRequest) (*GetCapabilitiesResponse, error)
 	ExecuteConversation(*ExecuteConversationRequest, grpc.ServerStreamingServer[CollaborationEvent]) error
 	mustEmbedUnimplementedCollaborationRuntimeServiceServer()
 }
@@ -77,6 +90,9 @@ type CollaborationRuntimeServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedCollaborationRuntimeServiceServer struct{}
 
+func (UnimplementedCollaborationRuntimeServiceServer) GetCapabilities(context.Context, *GetCapabilitiesRequest) (*GetCapabilitiesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetCapabilities not implemented")
+}
 func (UnimplementedCollaborationRuntimeServiceServer) ExecuteConversation(*ExecuteConversationRequest, grpc.ServerStreamingServer[CollaborationEvent]) error {
 	return status.Errorf(codes.Unimplemented, "method ExecuteConversation not implemented")
 }
@@ -102,6 +118,24 @@ func RegisterCollaborationRuntimeServiceServer(s grpc.ServiceRegistrar, srv Coll
 	s.RegisterService(&CollaborationRuntimeService_ServiceDesc, srv)
 }
 
+func _CollaborationRuntimeService_GetCapabilities_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCapabilitiesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CollaborationRuntimeServiceServer).GetCapabilities(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CollaborationRuntimeService_GetCapabilities_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CollaborationRuntimeServiceServer).GetCapabilities(ctx, req.(*GetCapabilitiesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _CollaborationRuntimeService_ExecuteConversation_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(ExecuteConversationRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -119,7 +153,12 @@ type CollaborationRuntimeService_ExecuteConversationServer = grpc.ServerStreamin
 var CollaborationRuntimeService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "agentroom.collaboration.v1.CollaborationRuntimeService",
 	HandlerType: (*CollaborationRuntimeServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetCapabilities",
+			Handler:    _CollaborationRuntimeService_GetCapabilities_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "ExecuteConversation",

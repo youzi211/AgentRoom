@@ -60,6 +60,19 @@ type failingMessageStore struct {
 	err error
 }
 
+type failingCollaborationScheduler struct {
+	called chan struct{}
+	err    error
+}
+
+func (s *failingCollaborationScheduler) HandleHumanMessage(context.Context, *room.Room, model.Message) error {
+	select {
+	case s.called <- struct{}{}:
+	default:
+	}
+	return s.err
+}
+
 func (s *failingMessageStore) AddMessage(context.Context, model.Message) (model.Message, error) {
 	return model.Message{}, s.err
 }
@@ -233,6 +246,115 @@ func TestMessageBroadcastDoesNotWaitWhenFocusQueueIsFull(t *testing.T) {
 		}
 	}
 	close(focusClient.release)
+}
+
+func TestCollaborationSchedulingAllowsDifferentRoomsConcurrently(t *testing.T) {
+	scheduler := &blockingCollaborationScheduler{
+		called:  make(chan struct{}, expectedAgentResponseWorkers),
+		release: make(chan struct{}),
+	}
+	defer close(scheduler.release)
+	store := &teststore.Store{}
+	roomService := service.NewRoomService(nil, nil, nil, nil, nil, store).WithCollaborationScheduler(scheduler)
+
+	for _, roomID := range []string{"room-1", "room-2"} {
+		currentRoom := room.New(roomID, "Planning", nil)
+		store.Rooms = ensureRoomMap(store.Rooms)
+		store.Rooms[roomID] = currentRoom.Info()
+		session, cleanup := openRealtimeSession(t, roomService, currentRoom)
+		t.Cleanup(cleanup)
+		postRealtimeMessage(t, roomService, session, "please review")
+		waitForRealtimeEvent(t, session, func(event realtime.Event) bool {
+			return event.Type == realtime.EventTypeMessage
+		})
+	}
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-scheduler.called:
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("expected different rooms to enter collaboration scheduling concurrently")
+		}
+	}
+}
+
+func TestMessageBroadcastDoesNotWaitWhenCollaborationQueueIsFull(t *testing.T) {
+	const responseQueueCapacity = 64
+	scheduler := &blockingCollaborationScheduler{
+		called:  make(chan struct{}, expectedAgentResponseWorkers),
+		release: make(chan struct{}),
+	}
+	defer close(scheduler.release)
+	store := &teststore.Store{}
+	roomService := service.NewRoomService(nil, nil, nil, nil, nil, store).WithCollaborationScheduler(scheduler)
+	currentRoom := room.New("room-1", "Planning", nil)
+	store.Rooms = map[string]model.RoomMeta{currentRoom.Info().ID: currentRoom.Info()}
+	session, cleanup := openRealtimeSession(t, roomService, currentRoom)
+	defer cleanup()
+
+	for i := 0; i < expectedAgentResponseWorkers; i++ {
+		content := fmt.Sprintf("worker-%d", i)
+		postRealtimeMessage(t, roomService, session, content)
+		waitForRealtimeEvent(t, session, func(event realtime.Event) bool {
+			return event.Type == realtime.EventTypeMessage && event.Message != nil && event.Message.Content == content
+		})
+	}
+	for i := 0; i < expectedAgentResponseWorkers; i++ {
+		select {
+		case <-scheduler.called:
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("expected collaboration workers to become occupied")
+		}
+	}
+	for i := 0; i < responseQueueCapacity; i++ {
+		content := fmt.Sprintf("queued-%d", i)
+		postRealtimeMessage(t, roomService, session, content)
+		waitForRealtimeEvent(t, session, func(event realtime.Event) bool {
+			return event.Type == realtime.EventTypeMessage && event.Message != nil && event.Message.Content == content
+		})
+	}
+
+	postDone := make(chan error, 1)
+	go func() {
+		postDone <- roomService.PostRealtimeMessage(context.Background(), session, "queue-full")
+	}()
+	waitForRealtimeEvent(t, session, func(event realtime.Event) bool {
+		return event.Type == realtime.EventTypeMessage && event.Message != nil && event.Message.Content == "queue-full"
+	})
+	select {
+	case err := <-postDone:
+		if err != nil {
+			t.Fatalf("post realtime message with full collaboration queue: %v", err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected full collaboration queue not to block message delivery")
+	}
+}
+
+func TestMessageBroadcastSurvivesCollaborationRuntimeFailure(t *testing.T) {
+	scheduler := &failingCollaborationScheduler{
+		called: make(chan struct{}, 1),
+		err:    errors.New("collaboration Runtime unavailable"),
+	}
+	store := &teststore.Store{}
+	roomService := service.NewRoomService(nil, nil, nil, nil, nil, store).WithCollaborationScheduler(scheduler)
+	currentRoom := room.New("room-1", "Planning", nil)
+	store.Rooms = map[string]model.RoomMeta{currentRoom.Info().ID: currentRoom.Info()}
+	session, cleanup := openRealtimeSession(t, roomService, currentRoom)
+	defer cleanup()
+
+	postRealtimeMessage(t, roomService, session, "still deliver this")
+	waitForRealtimeEvent(t, session, func(event realtime.Event) bool {
+		return event.Type == realtime.EventTypeMessage && event.Message != nil && event.Message.Content == "still deliver this"
+	})
+	select {
+	case <-scheduler.called:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected collaboration scheduling attempt")
+	}
+	if got := session.Room().Messages(); len(got) != 1 || got[0].Content != "still deliver this" {
+		t.Fatalf("expected persisted human message after Runtime failure, got %#v", got)
+	}
 }
 
 func newRealtimeSession(t *testing.T, focusClient llm.Client, backingStore *teststore.Store) (*service.RoomService, *service.RealtimeSession, func()) {

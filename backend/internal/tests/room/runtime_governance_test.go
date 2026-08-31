@@ -43,7 +43,7 @@ func TestManagerPrunesClosedRoomsFromCacheWhenAddingNewRooms(t *testing.T) {
 	fake := &teststore.Store{}
 	manager := room.NewManager(fake, resolveForTest(nil))
 
-	closedRoom, err := manager.CreateRoom(context.Background(), "Closed room", []string{}, "", model.DefaultDialoguePolicy())
+	closedRoom, err := manager.CreateRoom(context.Background(), "Closed room", []string{}, "", model.DefaultDialoguePolicy(), model.DefaultCollaborationPolicy())
 	if err != nil {
 		t.Fatalf("create closed room: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestManagerPrunesClosedRoomsFromCacheWhenAddingNewRooms(t *testing.T) {
 	})
 	fake.Rooms[closedRoom.Info().ID] = closedRoom.Info()
 
-	if _, err := manager.CreateRoom(context.Background(), "Active room", []string{}, "", model.DefaultDialoguePolicy()); err != nil {
+	if _, err := manager.CreateRoom(context.Background(), "Active room", []string{}, "", model.DefaultDialoguePolicy(), model.DefaultCollaborationPolicy()); err != nil {
 		t.Fatalf("create active room: %v", err)
 	}
 

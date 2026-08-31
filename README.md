@@ -66,7 +66,7 @@ The current repository already includes:
 - **Database**: MySQL 8
 - **Realtime transport**: WebSocket room sessions
 - **LLM integration**: database-managed OpenAI-compatible Profiles for Go and DeepAgent, with legacy environment fallback
-- **Agent execution**: long-running Python 3.12 + `uv` service, called by Go over server-streaming gRPC
+- **Agent execution**: long-running Python 3.12 + `uv` service, called by Go over server-streaming gRPC for single-Agent turns and Collaboration Runtime runs
 - **Ops**: Docker Compose for local containerized startup
 
 ## Prerequisites
@@ -182,7 +182,7 @@ Compose starts four services:
 
 - `mysql`: MySQL 8 database with a persistent Docker volume.
 - `backend`: Go control plane on port `8080`; it owns rooms, orchestration, MySQL commits, WebSocket events, Profile resolution, and cancellation.
-- `agent-runtime`: internal-only Python gRPC execution plane for ordinary LLM Agents and DeepAgent research. It has no AgentRoom database access and is not published to the host.
+- `agent-runtime`: internal-only Python gRPC execution plane for ordinary LLM Agents, DeepAgent research, and the framework-neutral Collaboration Runtime. It has no AgentRoom database access and is not published to the host.
 - `frontend`: nginx serving the built Vite app and proxying `/api` plus WebSocket traffic to the backend.
 
 The backend container receives a container-network DSN:
@@ -247,6 +247,21 @@ The backend loads `../.env` when it starts from `backend/`, then reads process e
 | `AGENT_RUNTIME_GRPC_INSECURE` | No | `false` | Explicit plaintext development mode. Production should configure CA/server identity and optional client certificates. |
 | `AGENT_RUNTIME_LLM_TIMEOUT_SECONDS` | No | `45` | Deadline for an ordinary remote LLM turn. |
 | `AGENT_RUNTIME_DEEPAGENT_TIMEOUT_SECONDS` | No | `300` | Deadline for a remote DeepAgent turn. |
+| `COLLABORATION_RUNTIME_MODE` | No | `legacy` | Explicit `legacy` or `remote` collaboration path. Compose defaults to `remote`; remote failures never re-run the same collaboration via another engine. |
+| `COLLABORATION_RUNTIME_GRPC_ADDRESS` | For `remote` | `127.0.0.1:50051` | Python Collaboration Runtime address; Compose uses `agent-runtime:50051`. |
+| `COLLABORATION_RUNTIME_GRPC_INSECURE` | No | `false` | Explicit plaintext development mode for the Collaboration Runtime client. |
+| `COLLABORATION_RUNTIME_TIMEOUT_SECONDS` | No | `300` | Deadline for one collaboration run. |
+| `COLLABORATION_RUNTIME_MAX_REQUEST_BYTES` | No | `8388608` | Maximum serialized collaboration request size. |
+| `COLLABORATION_RUNTIME_MAX_EVENT_BYTES` | No | `4194304` | Maximum serialized collaboration event size. |
+| `COLLABORATION_RUNTIME_MAX_CHECKPOINT_BYTES` | No | `1048576` | Maximum opaque checkpoint payload accepted from a collaboration engine. |
+| `COLLABORATION_MAX_CONCURRENCY` | No | `4` | Backend/Python collaboration run concurrency limit. |
+| `COLLABORATION_MAX_PENDING` | No | `64` backend / `16` Python | Bounded waiting queue for collaboration runs. |
+| `COLLABORATION_DEFAULT_ENGINE` | No | `native` | Default engine for newly created rooms when the request omits `collaborationPolicy.engine`. |
+| `COLLABORATION_DEFAULT_TRIGGER_MODE` | No | `mention_only` | Default trigger mode for newly created rooms when omitted. Use `automatic` only for allowlisted gray rooms after evaluation. |
+| `COLLABORATION_RUNTIME_ENABLED` | Python Runtime | `true` | Enables the Collaboration Runtime health/service inside the Python process. |
+| `COLLABORATION_ENGINE_ALLOWLIST` | Python Runtime | `native` | Comma-separated engine allowlist, for example `native,autogen`. |
+| `COLLABORATION_AUTOGEN_ENABLED` | Python Runtime | `false` | Explicit AutoGen Engine feature flag; AutoGen still reports not production-ready without the model gateway. |
+| `COLLABORATION_CHECKPOINT_MAX_BYTES` | Python Runtime | `1048576` | Python-side checkpoint payload limit. |
 | `DEEPAGENT_COMMAND` | Local rollback only | `uv` | Legacy per-turn DeepAgent launcher used only when transport is `local`. |
 | `DEEPAGENT_WORKDIR` | No | `../deepagent` | DeepAgent project directory. Compose uses `/app/deepagent`. |
 | `DEEPAGENT_CONFIG` | No | `deepagent.toml` | Non-secret DeepAgent settings file relative to the work directory. |
@@ -289,7 +304,7 @@ A missing, disabled, incompatible, or undecryptable explicit Profile is an error
 
 Profile API keys are encrypted in MySQL with `MODEL_CONFIG_ENCRYPTION_KEY`; API responses and the browser receive only masked key state. Go decrypts the selected Profile for one Agent turn and sends only that model connection over the protected internal gRPC call. Python keeps it in the isolated RunContext, creates a request-scoped client, clears the reference at cleanup, and never writes it to `.env`, TOML, reports, events, or logs. `TAVILY_API_KEY` remains a separately managed search credential.
 
-The dedicated `agent-runtime` image includes Python 3.12, pinned `uv`, locked dependencies, source, registry, and non-secret defaults. The backend image temporarily retains the legacy local executor during migration. A DeepAgent Profile configures its model connection in Docker, while live web research additionally requires `TAVILY_API_KEY` in the Python service environment.
+The dedicated `agent-runtime` image includes Python 3.12, pinned `uv`, locked dependencies, source, registry, and non-secret defaults. It registers both the single-Agent Runtime and the Collaboration Runtime health services. The backend image temporarily retains the legacy local executor during migration. A DeepAgent Profile configures its model connection in Docker, while live web research additionally requires `TAVILY_API_KEY` in the Python service environment.
 
 Before exposing AgentRoom outside a trusted internal network, verify these items against the running build:
 
@@ -303,6 +318,10 @@ Before exposing AgentRoom outside a trusted internal network, verify these items
 - Meeting minutes can be generated from persisted room messages, are stored as versioned records, can be edited by an admin in any room state, and exported as Markdown.
 - The admin console can list rooms, inspect full message history, archive a room, reopen a closed room, and restore an archived room back to `closed`.
 - `/api/health` reports Go process liveness; `/api/ready` separately reports database and Agent Runtime readiness.
+- `/api/admin/collaboration-runtime` reports the configured collaboration mode, supported engines, trigger modes, and remote readiness for the admin UI.
+- Gray rollout should first use `COLLABORATION_ENGINE_ALLOWLIST=native` and `COLLABORATION_DEFAULT_TRIGGER_MODE=mention_only`, then enable remote Native rooms, and only later set `COLLABORATION_ENGINE_ALLOWLIST=native,autogen` plus `COLLABORATION_AUTOGEN_ENABLED=true` for isolated AutoGen evaluation rooms.
+- Rollback is explicit: disable AutoGen, then switch rooms back to remote Native, then set `COLLABORATION_RUNTIME_MODE=legacy` if the Python Collaboration Runtime is unhealthy. Do not replay a run that already reached a terminal state or may have started model calls.
+- During migration, old `dialogue_runs` remain readable for history. New remote collaboration uses `collaboration_runs` plus per-turn `agent_runs`; stop writing new `dialogue_runs` only after the gray observation window is accepted.
 - `MODEL_CONFIG_ENCRYPTION_KEY` is present in the deployment secret store and restore procedure, and every backend replica receives the identical value.
 - The legacy `LLM_*` / `MODEL_*` fallbacks have been removed from the runtime environment after database defaults are verified, if your migration no longer needs them.
 

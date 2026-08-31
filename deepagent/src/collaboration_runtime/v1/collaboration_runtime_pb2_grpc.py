@@ -36,6 +36,11 @@ class CollaborationRuntimeServiceStub:
         Args:
             channel: A grpc.Channel.
         """
+        self.GetCapabilities = channel.unary_unary(
+                '/agentroom.collaboration.v1.CollaborationRuntimeService/GetCapabilities',
+                request_serializer=collaboration__runtime_dot_v1_dot_collaboration__runtime__pb2.GetCapabilitiesRequest.SerializeToString,
+                response_deserializer=collaboration__runtime_dot_v1_dot_collaboration__runtime__pb2.GetCapabilitiesResponse.FromString,
+                _registered_method=True)
         self.ExecuteConversation = channel.unary_stream(
                 '/agentroom.collaboration.v1.CollaborationRuntimeService/ExecuteConversation',
                 request_serializer=collaboration__runtime_dot_v1_dot_collaboration__runtime__pb2.ExecuteConversationRequest.SerializeToString,
@@ -48,6 +53,12 @@ class CollaborationRuntimeServiceServicer:
     collaboration. Go remains responsible for persistence and broadcasting.
     """
 
+    def GetCapabilities(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ExecuteConversation(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -57,6 +68,11 @@ class CollaborationRuntimeServiceServicer:
 
 def add_CollaborationRuntimeServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'GetCapabilities': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCapabilities,
+                    request_deserializer=collaboration__runtime_dot_v1_dot_collaboration__runtime__pb2.GetCapabilitiesRequest.FromString,
+                    response_serializer=collaboration__runtime_dot_v1_dot_collaboration__runtime__pb2.GetCapabilitiesResponse.SerializeToString,
+            ),
             'ExecuteConversation': grpc.unary_stream_rpc_method_handler(
                     servicer.ExecuteConversation,
                     request_deserializer=collaboration__runtime_dot_v1_dot_collaboration__runtime__pb2.ExecuteConversationRequest.FromString,
@@ -74,6 +90,33 @@ class CollaborationRuntimeService:
     """CollaborationRuntimeService executes one immutable, multi-turn room
     collaboration. Go remains responsible for persistence and broadcasting.
     """
+
+    @staticmethod
+    def GetCapabilities(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/agentroom.collaboration.v1.CollaborationRuntimeService/GetCapabilities',
+            collaboration__runtime_dot_v1_dot_collaboration__runtime__pb2.GetCapabilitiesRequest.SerializeToString,
+            collaboration__runtime_dot_v1_dot_collaboration__runtime__pb2.GetCapabilitiesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def ExecuteConversation(request,

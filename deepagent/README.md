@@ -99,6 +99,13 @@ local `.env`). Keep it out of reports, events, and source control.
 
 ## Run the gRPC service
 
+The same Python process hosts two logical gRPC services:
+
+- `agentroom.runtime.v1.AgentRuntimeService` for single-Agent LLM and DeepAgent turns;
+- `agentroom.collaboration.v1.CollaborationRuntimeService` for Native/AutoGen collaboration engines.
+
+Collaboration controls are environment-driven: `COLLABORATION_RUNTIME_ENABLED`, `COLLABORATION_ENGINE_ALLOWLIST`, `COLLABORATION_AUTOGEN_ENABLED`, `COLLABORATION_MAX_CONCURRENCY`, `COLLABORATION_MAX_PENDING`, `COLLABORATION_CHECKPOINT_MAX_BYTES`, `COLLABORATION_DEFAULT_ENGINE`, and `COLLABORATION_DEFAULT_TRIGGER_MODE`. Keep the default `native + mention_only` until gray evaluation is complete. AutoGen should be enabled only with an allowlisted deployment and a framework-neutral model gateway.
+
 Local plaintext must be explicit:
 
 ```powershell

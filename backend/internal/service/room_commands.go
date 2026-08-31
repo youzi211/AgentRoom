@@ -12,8 +12,8 @@ import (
 	"agentroom/backend/internal/store"
 )
 
-func (s *RoomService) CreateRoom(ctx context.Context, name string, agentIDs []string, passcode string, dialoguePolicy model.DialoguePolicy) (*room.Room, error) {
-	return s.manager.CreateRoom(ctx, name, agentIDs, HashRoomPasscode(passcode), dialoguePolicy)
+func (s *RoomService) CreateRoom(ctx context.Context, name string, agentIDs []string, passcode string, dialoguePolicy model.DialoguePolicy, collaborationPolicy model.CollaborationPolicy) (*room.Room, error) {
+	return s.manager.CreateRoom(ctx, name, agentIDs, HashRoomPasscode(passcode), dialoguePolicy, collaborationPolicy)
 }
 
 func (s *RoomService) ArchiveRoom(ctx context.Context, roomID string) error {
@@ -178,7 +178,7 @@ func (s *RoomService) HandleHumanMessage(ctx context.Context, currentRoom *room.
 }
 
 func (s *RoomService) TriggerAgentResponses(ctx context.Context, currentRoom *room.Room, message model.Message) {
-	if s == nil || s.runner == nil || currentRoom == nil {
+	if s == nil || (s.runner == nil && s.collaboration == nil) || currentRoom == nil {
 		return
 	}
 	if ctx == nil {
@@ -189,6 +189,8 @@ func (s *RoomService) TriggerAgentResponses(ctx context.Context, currentRoom *ro
 	case s.responseJobs <- agentResponseJob{ctx: ctx, room: currentRoom, message: message}:
 	case <-ctx.Done():
 		s.logger.Warn("skip queued agent response", "room_id", currentRoom.Info().ID, "message_id", message.ID, "error", ctx.Err())
+	default:
+		s.logger.Warn("skip agent response because queue is full", "room_id", currentRoom.Info().ID, "message_id", message.ID)
 	}
 }
 
@@ -231,6 +233,12 @@ func (s *RoomService) ensureResponseWorkers() {
 
 func (s *RoomService) runAgentResponseWorker() {
 	for job := range s.responseJobs {
+		if s.collaboration != nil {
+			if err := s.collaboration.HandleHumanMessage(job.ctx, job.room, job.message); err != nil {
+				s.logger.Warn("run remote collaboration", "room_id", job.room.Info().ID, "message_id", job.message.ID, "error", err)
+			}
+			continue
+		}
 		s.runner.HandleHumanMessage(job.ctx, job.room, job.message)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
+	"agentroom/backend/internal/collaboration"
 	"agentroom/backend/internal/logging"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/room"
@@ -15,20 +16,23 @@ import (
 )
 
 type Server struct {
-	roomQueries    RoomQueryService
-	roomCommands   RoomCommandService
-	roomAccess     RoomAccessService
-	modelProfiles  ModelProfileService
-	agentRuntime   AgentRuntimeReadiness
-	logger         *slog.Logger
-	config         Config
-	allowedOrigins map[string]struct{}
-	upgrader       websocket.Upgrader
+	roomQueries          RoomQueryService
+	roomCommands         RoomCommandService
+	roomAccess           RoomAccessService
+	modelProfiles        ModelProfileService
+	agentRuntime         AgentRuntimeReadiness
+	collaborationRuntime collaboration.CapabilityProvider
+	logger               *slog.Logger
+	config               Config
+	allowedOrigins       map[string]struct{}
+	upgrader             websocket.Upgrader
 }
 
 type Config struct {
-	AdminAPIKey    string
-	AllowedOrigins []string
+	AdminAPIKey                string
+	AllowedOrigins             []string
+	CollaborationRuntimeMode   string
+	DefaultCollaborationPolicy model.CollaborationPolicy
 }
 
 type RoomQueryService interface {
@@ -51,7 +55,7 @@ type RoomCommandService interface {
 	CreateAgent(ctx context.Context, name, role, description, systemPrompt string, enabled bool, runtime string) (model.Agent, error)
 	DeleteAgent(ctx context.Context, agentID string) error
 	UploadAgentKnowledge(ctx context.Context, agentID string, fileName string, content []byte) (model.KnowledgeDocument, error)
-	CreateRoom(ctx context.Context, name string, agentIDs []string, passcode string, dialoguePolicy model.DialoguePolicy) (*room.Room, error)
+	CreateRoom(ctx context.Context, name string, agentIDs []string, passcode string, dialoguePolicy model.DialoguePolicy, collaborationPolicy model.CollaborationPolicy) (*room.Room, error)
 	GenerateMinutes(ctx context.Context, currentRoom *room.Room) (string, model.MeetingMinutes, error)
 	ReopenRoom(ctx context.Context, roomID string) error
 	ArchiveRoom(ctx context.Context, roomID string) error
@@ -84,11 +88,12 @@ type AgentRuntimeReadiness interface {
 }
 
 type Dependencies struct {
-	Queries       RoomQueryService
-	Commands      RoomCommandService
-	Access        RoomAccessService
-	ModelProfiles ModelProfileService
-	AgentRuntime  AgentRuntimeReadiness
+	Queries              RoomQueryService
+	Commands             RoomCommandService
+	Access               RoomAccessService
+	ModelProfiles        ModelProfileService
+	AgentRuntime         AgentRuntimeReadiness
+	CollaborationRuntime collaboration.CapabilityProvider
 }
 
 func NewServer(deps Dependencies) *Server {
@@ -97,14 +102,15 @@ func NewServer(deps Dependencies) *Server {
 
 func NewServerWithConfig(deps Dependencies, config Config) *Server {
 	server := &Server{
-		roomQueries:    deps.Queries,
-		roomCommands:   deps.Commands,
-		roomAccess:     deps.Access,
-		modelProfiles:  deps.ModelProfiles,
-		agentRuntime:   deps.AgentRuntime,
-		logger:         logging.Component("api"),
-		config:         config,
-		allowedOrigins: originSet(config.AllowedOrigins),
+		roomQueries:          deps.Queries,
+		roomCommands:         deps.Commands,
+		roomAccess:           deps.Access,
+		modelProfiles:        deps.ModelProfiles,
+		agentRuntime:         deps.AgentRuntime,
+		collaborationRuntime: deps.CollaborationRuntime,
+		logger:               logging.Component("api"),
+		config:               config,
+		allowedOrigins:       originSet(config.AllowedOrigins),
 	}
 	server.upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -138,6 +144,7 @@ func (s *Server) registerAPIRoutes(routes gin.IRoutes) {
 	routes.GET("/health", s.handleHealth)
 	routes.GET("/ready", s.handleReady)
 	routes.GET("/admin/verify", s.requireAdmin, s.handleAdminVerify)
+	routes.GET("/admin/collaboration-runtime", s.requireAdmin, s.handleCollaborationRuntimeCapabilities)
 	routes.GET("/rooms", s.requireAdmin, s.handleListRooms)
 	routes.GET("/recent-rooms", s.handleListRecentRooms)
 	routes.GET("/entry-summary", s.handleEntrySummary)

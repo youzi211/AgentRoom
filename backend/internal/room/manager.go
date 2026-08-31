@@ -38,13 +38,16 @@ func NewManager(s managerStore, resolveAgents func(agentIDs []string) []model.Ag
 // CreateRoom creates a new room, persists it to the store, and caches it in memory.
 // If agentIDs is nil, all enabled agents are included (backward compatible).
 // If agentIDs is an empty but non-nil slice, the room starts without agents.
-func (m *Manager) CreateRoom(ctx context.Context, name string, agentIDs []string, passcodeHash string, dialoguePolicy model.DialoguePolicy) (*Room, error) {
+func (m *Manager) CreateRoom(ctx context.Context, name string, agentIDs []string, passcodeHash string, dialoguePolicy model.DialoguePolicy, collaborationPolicy model.CollaborationPolicy) (*Room, error) {
 	roomID := model.NewID("room")
 	trimmed := strings.TrimSpace(name)
 	roomName := normalizeRoomName(trimmed, roomID)
 	createdAt := time.Now().UTC()
 	policy := dialoguePolicy.WithDefaults()
-	collaborationPolicy := dialoguePolicy.ToCollaborationPolicy()
+	collaborationPolicy = collaborationPolicy.WithDefaults()
+	if err := collaborationPolicy.Validate(); err != nil {
+		return nil, fmt.Errorf("validate collaboration policy: %w", err)
+	}
 
 	agents := m.resolveAgents(agentIDs)
 

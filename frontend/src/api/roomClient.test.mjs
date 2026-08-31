@@ -9,6 +9,7 @@ import {
   deleteModelProfile,
   disableModelProfile,
   getAgentRoleSets,
+  getCollaborationRuntimeCapabilities,
   exportRoomMinutesMarkdown,
   getAgentTemplates,
   getMessages,
@@ -25,18 +26,29 @@ import {
 } from './roomClient.js'
 
 test('room client helpers build expected payloads and headers', async () => {
-  assert.deepEqual(buildCreateRoomPayload('Planning', ['pm'], 'secret', 'mention_fanout'), {
+  assert.deepEqual(buildCreateRoomPayload('Planning', ['pm'], 'secret', {
+    engine: 'native',
+    triggerMode: 'mention_only',
+  }), {
     name: 'Planning',
     agentIds: ['pm'],
     passcode: 'secret',
+    collaborationPolicy: {
+      engine: 'native',
+      triggerMode: 'mention_only',
+    },
   })
 
-  assert.deepEqual(buildCreateRoomPayload('Planning', ['pm', 'qa'], '', 'guided_dialogue'), {
+  assert.deepEqual(buildCreateRoomPayload('Planning', ['pm', 'qa'], '', {
+    engine: 'autogen',
+    triggerMode: 'automatic',
+  }), {
     name: 'Planning',
     agentIds: ['pm', 'qa'],
     passcode: '',
-    dialoguePolicy: {
-      mode: 'guided_dialogue',
+    collaborationPolicy: {
+      engine: 'autogen',
+      triggerMode: 'automatic',
     },
   })
 
@@ -155,8 +167,58 @@ test('room client helpers build expected payloads and headers', async () => {
         { id: 'product_review', name: '产品评审', description: 'Review product scope.', templateIDs: ['product_manager'] },
       ],
     })
+
+    globalThis.fetch = async (url, options = {}) => {
+      captured = { url, options }
+      return new Response(JSON.stringify({
+        mode: 'remote',
+        ready: true,
+        supportedProtocolVersions: ['v1'],
+        engines: [{ engine: 'native', version: '1.0', enabled: true, ready: true }],
+        supportedTriggerModes: ['mention_only', 'automatic'],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+
+    const capabilities = await getCollaborationRuntimeCapabilities()
+
+    assert.equal(captured.url, '/api/admin/collaboration-runtime')
+    assert.equal(captured.options.headers['X-Admin-Key'], 'secret-admin')
+    assert.equal(capabilities.mode, 'remote')
   } finally {
     clearStoredAdminKey()
+    globalThis.fetch = originalFetch
+    globalThis.window = originalWindow
+  }
+})
+
+test('collaboration runtime capabilities preserve the admin permission boundary', async () => {
+  const originalWindow = globalThis.window
+  const originalFetch = globalThis.fetch
+  let captured = null
+
+  globalThis.window = {
+    localStorage: {
+      getItem() { return null },
+      setItem() {},
+      removeItem() {},
+    },
+  }
+  globalThis.fetch = async (url, options = {}) => {
+    captured = { url: String(url), options }
+    return new Response(JSON.stringify({ error: '需要管理员权限。' }), {
+      status: 401,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+
+  try {
+    await assert.rejects(getCollaborationRuntimeCapabilities(), /需要管理员权限/)
+    assert.equal(captured.url, '/api/admin/collaboration-runtime')
+    assert.equal(captured.options.headers['X-Admin-Key'], undefined)
+  } finally {
     globalThis.fetch = originalFetch
     globalThis.window = originalWindow
   }

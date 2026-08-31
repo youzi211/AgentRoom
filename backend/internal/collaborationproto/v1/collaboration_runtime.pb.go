@@ -343,6 +343,178 @@ func (CollaborationErrorCode) EnumDescriptor() ([]byte, []int) {
 	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{4}
 }
 
+type GetCapabilitiesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCapabilitiesRequest) Reset() {
+	*x = GetCapabilitiesRequest{}
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCapabilitiesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCapabilitiesRequest) ProtoMessage() {}
+
+func (x *GetCapabilitiesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCapabilitiesRequest.ProtoReflect.Descriptor instead.
+func (*GetCapabilitiesRequest) Descriptor() ([]byte, []int) {
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{0}
+}
+
+type CollaborationEngineCapability struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Engine        string                 `protobuf:"bytes,1,opt,name=engine,proto3" json:"engine,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Enabled       bool                   `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Ready         bool                   `protobuf:"varint,4,opt,name=ready,proto3" json:"ready,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CollaborationEngineCapability) Reset() {
+	*x = CollaborationEngineCapability{}
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CollaborationEngineCapability) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CollaborationEngineCapability) ProtoMessage() {}
+
+func (x *CollaborationEngineCapability) ProtoReflect() protoreflect.Message {
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CollaborationEngineCapability.ProtoReflect.Descriptor instead.
+func (*CollaborationEngineCapability) Descriptor() ([]byte, []int) {
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *CollaborationEngineCapability) GetEngine() string {
+	if x != nil {
+		return x.Engine
+	}
+	return ""
+}
+
+func (x *CollaborationEngineCapability) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *CollaborationEngineCapability) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *CollaborationEngineCapability) GetReady() bool {
+	if x != nil {
+		return x.Ready
+	}
+	return false
+}
+
+type GetCapabilitiesResponse struct {
+	state                     protoimpl.MessageState           `protogen:"open.v1"`
+	Ready                     bool                             `protobuf:"varint,1,opt,name=ready,proto3" json:"ready,omitempty"`
+	SupportedProtocolVersions []string                         `protobuf:"bytes,2,rep,name=supported_protocol_versions,json=supportedProtocolVersions,proto3" json:"supported_protocol_versions,omitempty"`
+	Engines                   []*CollaborationEngineCapability `protobuf:"bytes,3,rep,name=engines,proto3" json:"engines,omitempty"`
+	SupportedTriggerModes     []string                         `protobuf:"bytes,4,rep,name=supported_trigger_modes,json=supportedTriggerModes,proto3" json:"supported_trigger_modes,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
+}
+
+func (x *GetCapabilitiesResponse) Reset() {
+	*x = GetCapabilitiesResponse{}
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCapabilitiesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCapabilitiesResponse) ProtoMessage() {}
+
+func (x *GetCapabilitiesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCapabilitiesResponse.ProtoReflect.Descriptor instead.
+func (*GetCapabilitiesResponse) Descriptor() ([]byte, []int) {
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GetCapabilitiesResponse) GetReady() bool {
+	if x != nil {
+		return x.Ready
+	}
+	return false
+}
+
+func (x *GetCapabilitiesResponse) GetSupportedProtocolVersions() []string {
+	if x != nil {
+		return x.SupportedProtocolVersions
+	}
+	return nil
+}
+
+func (x *GetCapabilitiesResponse) GetEngines() []*CollaborationEngineCapability {
+	if x != nil {
+		return x.Engines
+	}
+	return nil
+}
+
+func (x *GetCapabilitiesResponse) GetSupportedTriggerModes() []string {
+	if x != nil {
+		return x.SupportedTriggerModes
+	}
+	return nil
+}
+
 type RoomSnapshot struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -354,7 +526,7 @@ type RoomSnapshot struct {
 
 func (x *RoomSnapshot) Reset() {
 	*x = RoomSnapshot{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[0]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -366,7 +538,7 @@ func (x *RoomSnapshot) String() string {
 func (*RoomSnapshot) ProtoMessage() {}
 
 func (x *RoomSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[0]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -379,7 +551,7 @@ func (x *RoomSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoomSnapshot.ProtoReflect.Descriptor instead.
 func (*RoomSnapshot) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{0}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RoomSnapshot) GetId() string {
@@ -420,7 +592,7 @@ type AgentSnapshot struct {
 
 func (x *AgentSnapshot) Reset() {
 	*x = AgentSnapshot{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[1]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -432,7 +604,7 @@ func (x *AgentSnapshot) String() string {
 func (*AgentSnapshot) ProtoMessage() {}
 
 func (x *AgentSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[1]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -445,7 +617,7 @@ func (x *AgentSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentSnapshot.ProtoReflect.Descriptor instead.
 func (*AgentSnapshot) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{1}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *AgentSnapshot) GetId() string {
@@ -528,7 +700,7 @@ type MessageSnapshot struct {
 
 func (x *MessageSnapshot) Reset() {
 	*x = MessageSnapshot{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[2]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -540,7 +712,7 @@ func (x *MessageSnapshot) String() string {
 func (*MessageSnapshot) ProtoMessage() {}
 
 func (x *MessageSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[2]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -553,7 +725,7 @@ func (x *MessageSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageSnapshot.ProtoReflect.Descriptor instead.
 func (*MessageSnapshot) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{2}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *MessageSnapshot) GetId() string {
@@ -634,7 +806,7 @@ type KnowledgeChunk struct {
 
 func (x *KnowledgeChunk) Reset() {
 	*x = KnowledgeChunk{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[3]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -646,7 +818,7 @@ func (x *KnowledgeChunk) String() string {
 func (*KnowledgeChunk) ProtoMessage() {}
 
 func (x *KnowledgeChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[3]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -659,7 +831,7 @@ func (x *KnowledgeChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KnowledgeChunk.ProtoReflect.Descriptor instead.
 func (*KnowledgeChunk) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{3}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *KnowledgeChunk) GetId() string {
@@ -727,7 +899,7 @@ type ModelReference struct {
 
 func (x *ModelReference) Reset() {
 	*x = ModelReference{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[4]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -739,7 +911,7 @@ func (x *ModelReference) String() string {
 func (*ModelReference) ProtoMessage() {}
 
 func (x *ModelReference) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[4]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -752,7 +924,7 @@ func (x *ModelReference) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelReference.ProtoReflect.Descriptor instead.
 func (*ModelReference) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{4}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ModelReference) GetId() string {
@@ -815,7 +987,7 @@ type CollaborationPolicySnapshot struct {
 
 func (x *CollaborationPolicySnapshot) Reset() {
 	*x = CollaborationPolicySnapshot{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[5]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -827,7 +999,7 @@ func (x *CollaborationPolicySnapshot) String() string {
 func (*CollaborationPolicySnapshot) ProtoMessage() {}
 
 func (x *CollaborationPolicySnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[5]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -840,7 +1012,7 @@ func (x *CollaborationPolicySnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CollaborationPolicySnapshot.ProtoReflect.Descriptor instead.
 func (*CollaborationPolicySnapshot) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{5}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CollaborationPolicySnapshot) GetVersion() string {
@@ -928,7 +1100,7 @@ type ExecutionLimits struct {
 
 func (x *ExecutionLimits) Reset() {
 	*x = ExecutionLimits{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[6]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -940,7 +1112,7 @@ func (x *ExecutionLimits) String() string {
 func (*ExecutionLimits) ProtoMessage() {}
 
 func (x *ExecutionLimits) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[6]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -953,7 +1125,7 @@ func (x *ExecutionLimits) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionLimits.ProtoReflect.Descriptor instead.
 func (*ExecutionLimits) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{6}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ExecutionLimits) GetTimeout() *durationpb.Duration {
@@ -1021,7 +1193,7 @@ type OpaqueCheckpoint struct {
 
 func (x *OpaqueCheckpoint) Reset() {
 	*x = OpaqueCheckpoint{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[7]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1033,7 +1205,7 @@ func (x *OpaqueCheckpoint) String() string {
 func (*OpaqueCheckpoint) ProtoMessage() {}
 
 func (x *OpaqueCheckpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[7]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1046,7 +1218,7 @@ func (x *OpaqueCheckpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpaqueCheckpoint.ProtoReflect.Descriptor instead.
 func (*OpaqueCheckpoint) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{7}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *OpaqueCheckpoint) GetEngine() CollaborationEngine {
@@ -1108,7 +1280,7 @@ type ConversationSnapshot struct {
 
 func (x *ConversationSnapshot) Reset() {
 	*x = ConversationSnapshot{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[8]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1120,7 +1292,7 @@ func (x *ConversationSnapshot) String() string {
 func (*ConversationSnapshot) ProtoMessage() {}
 
 func (x *ConversationSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[8]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1133,7 +1305,7 @@ func (x *ConversationSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationSnapshot.ProtoReflect.Descriptor instead.
 func (*ConversationSnapshot) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{8}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ConversationSnapshot) GetRoom() *RoomSnapshot {
@@ -1213,7 +1385,7 @@ type ExecuteConversationRequest struct {
 
 func (x *ExecuteConversationRequest) Reset() {
 	*x = ExecuteConversationRequest{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[9]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1225,7 +1397,7 @@ func (x *ExecuteConversationRequest) String() string {
 func (*ExecuteConversationRequest) ProtoMessage() {}
 
 func (x *ExecuteConversationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[9]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1238,7 +1410,7 @@ func (x *ExecuteConversationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteConversationRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteConversationRequest) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{9}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ExecuteConversationRequest) GetProtocolVersion() string {
@@ -1294,7 +1466,7 @@ type Usage struct {
 
 func (x *Usage) Reset() {
 	*x = Usage{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[10]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1306,7 +1478,7 @@ func (x *Usage) String() string {
 func (*Usage) ProtoMessage() {}
 
 func (x *Usage) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[10]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1319,7 +1491,7 @@ func (x *Usage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Usage.ProtoReflect.Descriptor instead.
 func (*Usage) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{10}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Usage) GetInputTokens() uint64 {
@@ -1355,7 +1527,7 @@ type ModelAudit struct {
 
 func (x *ModelAudit) Reset() {
 	*x = ModelAudit{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[11]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1367,7 +1539,7 @@ func (x *ModelAudit) String() string {
 func (*ModelAudit) ProtoMessage() {}
 
 func (x *ModelAudit) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[11]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1380,7 +1552,7 @@ func (x *ModelAudit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelAudit.ProtoReflect.Descriptor instead.
 func (*ModelAudit) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{11}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ModelAudit) GetModelReferenceId() string {
@@ -1422,7 +1594,7 @@ type KnowledgeSource struct {
 
 func (x *KnowledgeSource) Reset() {
 	*x = KnowledgeSource{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[12]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1434,7 +1606,7 @@ func (x *KnowledgeSource) String() string {
 func (*KnowledgeSource) ProtoMessage() {}
 
 func (x *KnowledgeSource) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[12]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1447,7 +1619,7 @@ func (x *KnowledgeSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KnowledgeSource.ProtoReflect.Descriptor instead.
 func (*KnowledgeSource) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{12}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *KnowledgeSource) GetDocumentId() string {
@@ -1486,7 +1658,7 @@ type Artifact struct {
 
 func (x *Artifact) Reset() {
 	*x = Artifact{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[13]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1498,7 +1670,7 @@ func (x *Artifact) String() string {
 func (*Artifact) ProtoMessage() {}
 
 func (x *Artifact) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[13]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1511,7 +1683,7 @@ func (x *Artifact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Artifact.ProtoReflect.Descriptor instead.
 func (*Artifact) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{13}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Artifact) GetId() string {
@@ -1574,7 +1746,7 @@ type CollaborationFailure struct {
 
 func (x *CollaborationFailure) Reset() {
 	*x = CollaborationFailure{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[14]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1586,7 +1758,7 @@ func (x *CollaborationFailure) String() string {
 func (*CollaborationFailure) ProtoMessage() {}
 
 func (x *CollaborationFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[14]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1599,7 +1771,7 @@ func (x *CollaborationFailure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CollaborationFailure.ProtoReflect.Descriptor instead.
 func (*CollaborationFailure) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{14}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CollaborationFailure) GetCode() CollaborationErrorCode {
@@ -1631,7 +1803,7 @@ type AcceptedEvent struct {
 
 func (x *AcceptedEvent) Reset() {
 	*x = AcceptedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[15]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1643,7 +1815,7 @@ func (x *AcceptedEvent) String() string {
 func (*AcceptedEvent) ProtoMessage() {}
 
 func (x *AcceptedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[15]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1656,7 +1828,7 @@ func (x *AcceptedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptedEvent.ProtoReflect.Descriptor instead.
 func (*AcceptedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{15}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{18}
 }
 
 type CollaborationStartedEvent struct {
@@ -1667,7 +1839,7 @@ type CollaborationStartedEvent struct {
 
 func (x *CollaborationStartedEvent) Reset() {
 	*x = CollaborationStartedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[16]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1679,7 +1851,7 @@ func (x *CollaborationStartedEvent) String() string {
 func (*CollaborationStartedEvent) ProtoMessage() {}
 
 func (x *CollaborationStartedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[16]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1692,7 +1864,7 @@ func (x *CollaborationStartedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CollaborationStartedEvent.ProtoReflect.Descriptor instead.
 func (*CollaborationStartedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{16}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{19}
 }
 
 type SpeakerSelectedEvent struct {
@@ -1704,7 +1876,7 @@ type SpeakerSelectedEvent struct {
 
 func (x *SpeakerSelectedEvent) Reset() {
 	*x = SpeakerSelectedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[17]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1716,7 +1888,7 @@ func (x *SpeakerSelectedEvent) String() string {
 func (*SpeakerSelectedEvent) ProtoMessage() {}
 
 func (x *SpeakerSelectedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[17]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1729,7 +1901,7 @@ func (x *SpeakerSelectedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpeakerSelectedEvent.ProtoReflect.Descriptor instead.
 func (*SpeakerSelectedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{17}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SpeakerSelectedEvent) GetReasonCategory() string {
@@ -1747,7 +1919,7 @@ type AgentTurnStartedEvent struct {
 
 func (x *AgentTurnStartedEvent) Reset() {
 	*x = AgentTurnStartedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[18]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1759,7 +1931,7 @@ func (x *AgentTurnStartedEvent) String() string {
 func (*AgentTurnStartedEvent) ProtoMessage() {}
 
 func (x *AgentTurnStartedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[18]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1772,7 +1944,7 @@ func (x *AgentTurnStartedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentTurnStartedEvent.ProtoReflect.Descriptor instead.
 func (*AgentTurnStartedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{18}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{21}
 }
 
 type ModelStartedEvent struct {
@@ -1784,7 +1956,7 @@ type ModelStartedEvent struct {
 
 func (x *ModelStartedEvent) Reset() {
 	*x = ModelStartedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[19]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1796,7 +1968,7 @@ func (x *ModelStartedEvent) String() string {
 func (*ModelStartedEvent) ProtoMessage() {}
 
 func (x *ModelStartedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[19]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1809,7 +1981,7 @@ func (x *ModelStartedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelStartedEvent.ProtoReflect.Descriptor instead.
 func (*ModelStartedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{19}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ModelStartedEvent) GetModelReferenceId() string {
@@ -1829,7 +2001,7 @@ type ModelCompletedEvent struct {
 
 func (x *ModelCompletedEvent) Reset() {
 	*x = ModelCompletedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[20]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1841,7 +2013,7 @@ func (x *ModelCompletedEvent) String() string {
 func (*ModelCompletedEvent) ProtoMessage() {}
 
 func (x *ModelCompletedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[20]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1854,7 +2026,7 @@ func (x *ModelCompletedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelCompletedEvent.ProtoReflect.Descriptor instead.
 func (*ModelCompletedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{20}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ModelCompletedEvent) GetModelReferenceId() string {
@@ -1882,7 +2054,7 @@ type ToolStartedEvent struct {
 
 func (x *ToolStartedEvent) Reset() {
 	*x = ToolStartedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[21]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1894,7 +2066,7 @@ func (x *ToolStartedEvent) String() string {
 func (*ToolStartedEvent) ProtoMessage() {}
 
 func (x *ToolStartedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[21]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1907,7 +2079,7 @@ func (x *ToolStartedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolStartedEvent.ProtoReflect.Descriptor instead.
 func (*ToolStartedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{21}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ToolStartedEvent) GetToolCallId() string {
@@ -1942,7 +2114,7 @@ type ToolCompletedEvent struct {
 
 func (x *ToolCompletedEvent) Reset() {
 	*x = ToolCompletedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[22]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1954,7 +2126,7 @@ func (x *ToolCompletedEvent) String() string {
 func (*ToolCompletedEvent) ProtoMessage() {}
 
 func (x *ToolCompletedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[22]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1967,7 +2139,7 @@ func (x *ToolCompletedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolCompletedEvent.ProtoReflect.Descriptor instead.
 func (*ToolCompletedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{22}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ToolCompletedEvent) GetToolCallId() string {
@@ -2002,7 +2174,7 @@ type ToolFailedEvent struct {
 
 func (x *ToolFailedEvent) Reset() {
 	*x = ToolFailedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[23]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2014,7 +2186,7 @@ func (x *ToolFailedEvent) String() string {
 func (*ToolFailedEvent) ProtoMessage() {}
 
 func (x *ToolFailedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[23]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2027,7 +2199,7 @@ func (x *ToolFailedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolFailedEvent.ProtoReflect.Descriptor instead.
 func (*ToolFailedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{23}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ToolFailedEvent) GetToolCallId() string {
@@ -2060,7 +2232,7 @@ type OutputDeltaEvent struct {
 
 func (x *OutputDeltaEvent) Reset() {
 	*x = OutputDeltaEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[24]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2072,7 +2244,7 @@ func (x *OutputDeltaEvent) String() string {
 func (*OutputDeltaEvent) ProtoMessage() {}
 
 func (x *OutputDeltaEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[24]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2085,7 +2257,7 @@ func (x *OutputDeltaEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OutputDeltaEvent.ProtoReflect.Descriptor instead.
 func (*OutputDeltaEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{24}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *OutputDeltaEvent) GetText() string {
@@ -2104,7 +2276,7 @@ type ArtifactReadyEvent struct {
 
 func (x *ArtifactReadyEvent) Reset() {
 	*x = ArtifactReadyEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[25]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2116,7 +2288,7 @@ func (x *ArtifactReadyEvent) String() string {
 func (*ArtifactReadyEvent) ProtoMessage() {}
 
 func (x *ArtifactReadyEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[25]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2129,7 +2301,7 @@ func (x *ArtifactReadyEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArtifactReadyEvent.ProtoReflect.Descriptor instead.
 func (*ArtifactReadyEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{25}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ArtifactReadyEvent) GetArtifact() *Artifact {
@@ -2149,7 +2321,7 @@ type HandoffRequestedEvent struct {
 
 func (x *HandoffRequestedEvent) Reset() {
 	*x = HandoffRequestedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[26]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2161,7 +2333,7 @@ func (x *HandoffRequestedEvent) String() string {
 func (*HandoffRequestedEvent) ProtoMessage() {}
 
 func (x *HandoffRequestedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[26]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2174,7 +2346,7 @@ func (x *HandoffRequestedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandoffRequestedEvent.ProtoReflect.Descriptor instead.
 func (*HandoffRequestedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{26}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *HandoffRequestedEvent) GetTargetAgentId() string {
@@ -2204,7 +2376,7 @@ type AgentMessageCompletedEvent struct {
 
 func (x *AgentMessageCompletedEvent) Reset() {
 	*x = AgentMessageCompletedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[27]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2216,7 +2388,7 @@ func (x *AgentMessageCompletedEvent) String() string {
 func (*AgentMessageCompletedEvent) ProtoMessage() {}
 
 func (x *AgentMessageCompletedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[27]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2229,7 +2401,7 @@ func (x *AgentMessageCompletedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentMessageCompletedEvent.ProtoReflect.Descriptor instead.
 func (*AgentMessageCompletedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{27}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *AgentMessageCompletedEvent) GetContent() string {
@@ -2276,7 +2448,7 @@ type CheckpointEvent struct {
 
 func (x *CheckpointEvent) Reset() {
 	*x = CheckpointEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[28]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2288,7 +2460,7 @@ func (x *CheckpointEvent) String() string {
 func (*CheckpointEvent) ProtoMessage() {}
 
 func (x *CheckpointEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[28]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2301,7 +2473,7 @@ func (x *CheckpointEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckpointEvent.ProtoReflect.Descriptor instead.
 func (*CheckpointEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{28}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *CheckpointEvent) GetCheckpoint() *OpaqueCheckpoint {
@@ -2321,7 +2493,7 @@ type CompletedEvent struct {
 
 func (x *CompletedEvent) Reset() {
 	*x = CompletedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[29]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2333,7 +2505,7 @@ func (x *CompletedEvent) String() string {
 func (*CompletedEvent) ProtoMessage() {}
 
 func (x *CompletedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[29]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2346,7 +2518,7 @@ func (x *CompletedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompletedEvent.ProtoReflect.Descriptor instead.
 func (*CompletedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{29}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *CompletedEvent) GetTurnCount() uint32 {
@@ -2373,7 +2545,7 @@ type StoppedEvent struct {
 
 func (x *StoppedEvent) Reset() {
 	*x = StoppedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[30]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2385,7 +2557,7 @@ func (x *StoppedEvent) String() string {
 func (*StoppedEvent) ProtoMessage() {}
 
 func (x *StoppedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[30]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2398,7 +2570,7 @@ func (x *StoppedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoppedEvent.ProtoReflect.Descriptor instead.
 func (*StoppedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{30}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *StoppedEvent) GetTurnCount() uint32 {
@@ -2425,7 +2597,7 @@ type CancelledEvent struct {
 
 func (x *CancelledEvent) Reset() {
 	*x = CancelledEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[31]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2437,7 +2609,7 @@ func (x *CancelledEvent) String() string {
 func (*CancelledEvent) ProtoMessage() {}
 
 func (x *CancelledEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[31]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2450,7 +2622,7 @@ func (x *CancelledEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelledEvent.ProtoReflect.Descriptor instead.
 func (*CancelledEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{31}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *CancelledEvent) GetTurnCount() uint32 {
@@ -2478,7 +2650,7 @@ type FailedEvent struct {
 
 func (x *FailedEvent) Reset() {
 	*x = FailedEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[32]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2490,7 +2662,7 @@ func (x *FailedEvent) String() string {
 func (*FailedEvent) ProtoMessage() {}
 
 func (x *FailedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[32]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2503,7 +2675,7 @@ func (x *FailedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FailedEvent.ProtoReflect.Descriptor instead.
 func (*FailedEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{32}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *FailedEvent) GetTurnCount() uint32 {
@@ -2564,7 +2736,7 @@ type CollaborationEvent struct {
 
 func (x *CollaborationEvent) Reset() {
 	*x = CollaborationEvent{}
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[33]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2576,7 +2748,7 @@ func (x *CollaborationEvent) String() string {
 func (*CollaborationEvent) ProtoMessage() {}
 
 func (x *CollaborationEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[33]
+	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2589,7 +2761,7 @@ func (x *CollaborationEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CollaborationEvent.ProtoReflect.Descriptor instead.
 func (*CollaborationEvent) Descriptor() ([]byte, []int) {
-	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{33}
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *CollaborationEvent) GetProtocolVersion() string {
@@ -2919,7 +3091,18 @@ var File_collaboration_runtime_v1_collaboration_runtime_proto protoreflect.FileD
 
 const file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc = "" +
 	"\n" +
-	"4collaboration_runtime/v1/collaboration_runtime.proto\x12\x1aagentroom.collaboration.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"J\n" +
+	"4collaboration_runtime/v1/collaboration_runtime.proto\x12\x1aagentroom.collaboration.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x18\n" +
+	"\x16GetCapabilitiesRequest\"\x81\x01\n" +
+	"\x1dCollaborationEngineCapability\x12\x16\n" +
+	"\x06engine\x18\x01 \x01(\tR\x06engine\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x18\n" +
+	"\aenabled\x18\x03 \x01(\bR\aenabled\x12\x14\n" +
+	"\x05ready\x18\x04 \x01(\bR\x05ready\"\xfc\x01\n" +
+	"\x17GetCapabilitiesResponse\x12\x14\n" +
+	"\x05ready\x18\x01 \x01(\bR\x05ready\x12>\n" +
+	"\x1bsupported_protocol_versions\x18\x02 \x03(\tR\x19supportedProtocolVersions\x12S\n" +
+	"\aengines\x18\x03 \x03(\v29.agentroom.collaboration.v1.CollaborationEngineCapabilityR\aengines\x126\n" +
+	"\x17supported_trigger_modes\x18\x04 \x03(\tR\x15supportedTriggerModes\"J\n" +
 	"\fRoomSnapshot\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -3183,8 +3366,9 @@ const file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc = "" +
 	"'COLLABORATION_ERROR_CODE_PROTOCOL_ERROR\x10\x0e\x12&\n" +
 	"\"COLLABORATION_ERROR_CODE_CANCELLED\x10\x0f\x12.\n" +
 	"*COLLABORATION_ERROR_CODE_DEADLINE_EXCEEDED\x10\x10\x12%\n" +
-	"!COLLABORATION_ERROR_CODE_INTERNAL\x10\x112\x9e\x01\n" +
-	"\x1bCollaborationRuntimeService\x12\x7f\n" +
+	"!COLLABORATION_ERROR_CODE_INTERNAL\x10\x112\x9a\x02\n" +
+	"\x1bCollaborationRuntimeService\x12z\n" +
+	"\x0fGetCapabilities\x122.agentroom.collaboration.v1.GetCapabilitiesRequest\x1a3.agentroom.collaboration.v1.GetCapabilitiesResponse\x12\x7f\n" +
 	"\x13ExecuteConversation\x126.agentroom.collaboration.v1.ExecuteConversationRequest\x1a..agentroom.collaboration.v1.CollaborationEvent0\x01BIZGagentroom/backend/internal/collaborationproto/v1;collaborationruntimev1b\x06proto3"
 
 var (
@@ -3200,109 +3384,115 @@ func file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP() []b
 }
 
 var file_collaboration_runtime_v1_collaboration_runtime_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_collaboration_runtime_v1_collaboration_runtime_proto_goTypes = []any{
-	(CollaborationEngine)(0),            // 0: agentroom.collaboration.v1.CollaborationEngine
-	(TriggerMode)(0),                    // 1: agentroom.collaboration.v1.TriggerMode
-	(SenderType)(0),                     // 2: agentroom.collaboration.v1.SenderType
-	(CollaborationStopReason)(0),        // 3: agentroom.collaboration.v1.CollaborationStopReason
-	(CollaborationErrorCode)(0),         // 4: agentroom.collaboration.v1.CollaborationErrorCode
-	(*RoomSnapshot)(nil),                // 5: agentroom.collaboration.v1.RoomSnapshot
-	(*AgentSnapshot)(nil),               // 6: agentroom.collaboration.v1.AgentSnapshot
-	(*MessageSnapshot)(nil),             // 7: agentroom.collaboration.v1.MessageSnapshot
-	(*KnowledgeChunk)(nil),              // 8: agentroom.collaboration.v1.KnowledgeChunk
-	(*ModelReference)(nil),              // 9: agentroom.collaboration.v1.ModelReference
-	(*CollaborationPolicySnapshot)(nil), // 10: agentroom.collaboration.v1.CollaborationPolicySnapshot
-	(*ExecutionLimits)(nil),             // 11: agentroom.collaboration.v1.ExecutionLimits
-	(*OpaqueCheckpoint)(nil),            // 12: agentroom.collaboration.v1.OpaqueCheckpoint
-	(*ConversationSnapshot)(nil),        // 13: agentroom.collaboration.v1.ConversationSnapshot
-	(*ExecuteConversationRequest)(nil),  // 14: agentroom.collaboration.v1.ExecuteConversationRequest
-	(*Usage)(nil),                       // 15: agentroom.collaboration.v1.Usage
-	(*ModelAudit)(nil),                  // 16: agentroom.collaboration.v1.ModelAudit
-	(*KnowledgeSource)(nil),             // 17: agentroom.collaboration.v1.KnowledgeSource
-	(*Artifact)(nil),                    // 18: agentroom.collaboration.v1.Artifact
-	(*CollaborationFailure)(nil),        // 19: agentroom.collaboration.v1.CollaborationFailure
-	(*AcceptedEvent)(nil),               // 20: agentroom.collaboration.v1.AcceptedEvent
-	(*CollaborationStartedEvent)(nil),   // 21: agentroom.collaboration.v1.CollaborationStartedEvent
-	(*SpeakerSelectedEvent)(nil),        // 22: agentroom.collaboration.v1.SpeakerSelectedEvent
-	(*AgentTurnStartedEvent)(nil),       // 23: agentroom.collaboration.v1.AgentTurnStartedEvent
-	(*ModelStartedEvent)(nil),           // 24: agentroom.collaboration.v1.ModelStartedEvent
-	(*ModelCompletedEvent)(nil),         // 25: agentroom.collaboration.v1.ModelCompletedEvent
-	(*ToolStartedEvent)(nil),            // 26: agentroom.collaboration.v1.ToolStartedEvent
-	(*ToolCompletedEvent)(nil),          // 27: agentroom.collaboration.v1.ToolCompletedEvent
-	(*ToolFailedEvent)(nil),             // 28: agentroom.collaboration.v1.ToolFailedEvent
-	(*OutputDeltaEvent)(nil),            // 29: agentroom.collaboration.v1.OutputDeltaEvent
-	(*ArtifactReadyEvent)(nil),          // 30: agentroom.collaboration.v1.ArtifactReadyEvent
-	(*HandoffRequestedEvent)(nil),       // 31: agentroom.collaboration.v1.HandoffRequestedEvent
-	(*AgentMessageCompletedEvent)(nil),  // 32: agentroom.collaboration.v1.AgentMessageCompletedEvent
-	(*CheckpointEvent)(nil),             // 33: agentroom.collaboration.v1.CheckpointEvent
-	(*CompletedEvent)(nil),              // 34: agentroom.collaboration.v1.CompletedEvent
-	(*StoppedEvent)(nil),                // 35: agentroom.collaboration.v1.StoppedEvent
-	(*CancelledEvent)(nil),              // 36: agentroom.collaboration.v1.CancelledEvent
-	(*FailedEvent)(nil),                 // 37: agentroom.collaboration.v1.FailedEvent
-	(*CollaborationEvent)(nil),          // 38: agentroom.collaboration.v1.CollaborationEvent
-	(*timestamppb.Timestamp)(nil),       // 39: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),         // 40: google.protobuf.Duration
+	(CollaborationEngine)(0),              // 0: agentroom.collaboration.v1.CollaborationEngine
+	(TriggerMode)(0),                      // 1: agentroom.collaboration.v1.TriggerMode
+	(SenderType)(0),                       // 2: agentroom.collaboration.v1.SenderType
+	(CollaborationStopReason)(0),          // 3: agentroom.collaboration.v1.CollaborationStopReason
+	(CollaborationErrorCode)(0),           // 4: agentroom.collaboration.v1.CollaborationErrorCode
+	(*GetCapabilitiesRequest)(nil),        // 5: agentroom.collaboration.v1.GetCapabilitiesRequest
+	(*CollaborationEngineCapability)(nil), // 6: agentroom.collaboration.v1.CollaborationEngineCapability
+	(*GetCapabilitiesResponse)(nil),       // 7: agentroom.collaboration.v1.GetCapabilitiesResponse
+	(*RoomSnapshot)(nil),                  // 8: agentroom.collaboration.v1.RoomSnapshot
+	(*AgentSnapshot)(nil),                 // 9: agentroom.collaboration.v1.AgentSnapshot
+	(*MessageSnapshot)(nil),               // 10: agentroom.collaboration.v1.MessageSnapshot
+	(*KnowledgeChunk)(nil),                // 11: agentroom.collaboration.v1.KnowledgeChunk
+	(*ModelReference)(nil),                // 12: agentroom.collaboration.v1.ModelReference
+	(*CollaborationPolicySnapshot)(nil),   // 13: agentroom.collaboration.v1.CollaborationPolicySnapshot
+	(*ExecutionLimits)(nil),               // 14: agentroom.collaboration.v1.ExecutionLimits
+	(*OpaqueCheckpoint)(nil),              // 15: agentroom.collaboration.v1.OpaqueCheckpoint
+	(*ConversationSnapshot)(nil),          // 16: agentroom.collaboration.v1.ConversationSnapshot
+	(*ExecuteConversationRequest)(nil),    // 17: agentroom.collaboration.v1.ExecuteConversationRequest
+	(*Usage)(nil),                         // 18: agentroom.collaboration.v1.Usage
+	(*ModelAudit)(nil),                    // 19: agentroom.collaboration.v1.ModelAudit
+	(*KnowledgeSource)(nil),               // 20: agentroom.collaboration.v1.KnowledgeSource
+	(*Artifact)(nil),                      // 21: agentroom.collaboration.v1.Artifact
+	(*CollaborationFailure)(nil),          // 22: agentroom.collaboration.v1.CollaborationFailure
+	(*AcceptedEvent)(nil),                 // 23: agentroom.collaboration.v1.AcceptedEvent
+	(*CollaborationStartedEvent)(nil),     // 24: agentroom.collaboration.v1.CollaborationStartedEvent
+	(*SpeakerSelectedEvent)(nil),          // 25: agentroom.collaboration.v1.SpeakerSelectedEvent
+	(*AgentTurnStartedEvent)(nil),         // 26: agentroom.collaboration.v1.AgentTurnStartedEvent
+	(*ModelStartedEvent)(nil),             // 27: agentroom.collaboration.v1.ModelStartedEvent
+	(*ModelCompletedEvent)(nil),           // 28: agentroom.collaboration.v1.ModelCompletedEvent
+	(*ToolStartedEvent)(nil),              // 29: agentroom.collaboration.v1.ToolStartedEvent
+	(*ToolCompletedEvent)(nil),            // 30: agentroom.collaboration.v1.ToolCompletedEvent
+	(*ToolFailedEvent)(nil),               // 31: agentroom.collaboration.v1.ToolFailedEvent
+	(*OutputDeltaEvent)(nil),              // 32: agentroom.collaboration.v1.OutputDeltaEvent
+	(*ArtifactReadyEvent)(nil),            // 33: agentroom.collaboration.v1.ArtifactReadyEvent
+	(*HandoffRequestedEvent)(nil),         // 34: agentroom.collaboration.v1.HandoffRequestedEvent
+	(*AgentMessageCompletedEvent)(nil),    // 35: agentroom.collaboration.v1.AgentMessageCompletedEvent
+	(*CheckpointEvent)(nil),               // 36: agentroom.collaboration.v1.CheckpointEvent
+	(*CompletedEvent)(nil),                // 37: agentroom.collaboration.v1.CompletedEvent
+	(*StoppedEvent)(nil),                  // 38: agentroom.collaboration.v1.StoppedEvent
+	(*CancelledEvent)(nil),                // 39: agentroom.collaboration.v1.CancelledEvent
+	(*FailedEvent)(nil),                   // 40: agentroom.collaboration.v1.FailedEvent
+	(*CollaborationEvent)(nil),            // 41: agentroom.collaboration.v1.CollaborationEvent
+	(*timestamppb.Timestamp)(nil),         // 42: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),           // 43: google.protobuf.Duration
 }
 var file_collaboration_runtime_v1_collaboration_runtime_proto_depIdxs = []int32{
-	2,  // 0: agentroom.collaboration.v1.MessageSnapshot.sender_type:type_name -> agentroom.collaboration.v1.SenderType
-	39, // 1: agentroom.collaboration.v1.MessageSnapshot.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 2: agentroom.collaboration.v1.CollaborationPolicySnapshot.engine:type_name -> agentroom.collaboration.v1.CollaborationEngine
-	1,  // 3: agentroom.collaboration.v1.CollaborationPolicySnapshot.trigger_mode:type_name -> agentroom.collaboration.v1.TriggerMode
-	40, // 4: agentroom.collaboration.v1.CollaborationPolicySnapshot.cooldown:type_name -> google.protobuf.Duration
-	40, // 5: agentroom.collaboration.v1.ExecutionLimits.timeout:type_name -> google.protobuf.Duration
-	0,  // 6: agentroom.collaboration.v1.OpaqueCheckpoint.engine:type_name -> agentroom.collaboration.v1.CollaborationEngine
-	5,  // 7: agentroom.collaboration.v1.ConversationSnapshot.room:type_name -> agentroom.collaboration.v1.RoomSnapshot
-	6,  // 8: agentroom.collaboration.v1.ConversationSnapshot.agents:type_name -> agentroom.collaboration.v1.AgentSnapshot
-	7,  // 9: agentroom.collaboration.v1.ConversationSnapshot.trigger:type_name -> agentroom.collaboration.v1.MessageSnapshot
-	7,  // 10: agentroom.collaboration.v1.ConversationSnapshot.transcript:type_name -> agentroom.collaboration.v1.MessageSnapshot
-	8,  // 11: agentroom.collaboration.v1.ConversationSnapshot.knowledge_chunks:type_name -> agentroom.collaboration.v1.KnowledgeChunk
-	9,  // 12: agentroom.collaboration.v1.ConversationSnapshot.model_references:type_name -> agentroom.collaboration.v1.ModelReference
-	10, // 13: agentroom.collaboration.v1.ConversationSnapshot.policy:type_name -> agentroom.collaboration.v1.CollaborationPolicySnapshot
-	11, // 14: agentroom.collaboration.v1.ConversationSnapshot.limits:type_name -> agentroom.collaboration.v1.ExecutionLimits
-	0,  // 15: agentroom.collaboration.v1.ExecuteConversationRequest.engine:type_name -> agentroom.collaboration.v1.CollaborationEngine
-	13, // 16: agentroom.collaboration.v1.ExecuteConversationRequest.snapshot:type_name -> agentroom.collaboration.v1.ConversationSnapshot
-	12, // 17: agentroom.collaboration.v1.ExecuteConversationRequest.checkpoint:type_name -> agentroom.collaboration.v1.OpaqueCheckpoint
-	4,  // 18: agentroom.collaboration.v1.CollaborationFailure.code:type_name -> agentroom.collaboration.v1.CollaborationErrorCode
-	15, // 19: agentroom.collaboration.v1.ModelCompletedEvent.usage:type_name -> agentroom.collaboration.v1.Usage
-	19, // 20: agentroom.collaboration.v1.ToolFailedEvent.failure:type_name -> agentroom.collaboration.v1.CollaborationFailure
-	18, // 21: agentroom.collaboration.v1.ArtifactReadyEvent.artifact:type_name -> agentroom.collaboration.v1.Artifact
-	18, // 22: agentroom.collaboration.v1.AgentMessageCompletedEvent.artifacts:type_name -> agentroom.collaboration.v1.Artifact
-	17, // 23: agentroom.collaboration.v1.AgentMessageCompletedEvent.knowledge_sources:type_name -> agentroom.collaboration.v1.KnowledgeSource
-	16, // 24: agentroom.collaboration.v1.AgentMessageCompletedEvent.model:type_name -> agentroom.collaboration.v1.ModelAudit
-	15, // 25: agentroom.collaboration.v1.AgentMessageCompletedEvent.usage:type_name -> agentroom.collaboration.v1.Usage
-	12, // 26: agentroom.collaboration.v1.CheckpointEvent.checkpoint:type_name -> agentroom.collaboration.v1.OpaqueCheckpoint
-	3,  // 27: agentroom.collaboration.v1.CompletedEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
-	3,  // 28: agentroom.collaboration.v1.StoppedEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
-	3,  // 29: agentroom.collaboration.v1.CancelledEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
-	3,  // 30: agentroom.collaboration.v1.FailedEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
-	19, // 31: agentroom.collaboration.v1.FailedEvent.failure:type_name -> agentroom.collaboration.v1.CollaborationFailure
-	39, // 32: agentroom.collaboration.v1.CollaborationEvent.occurred_at:type_name -> google.protobuf.Timestamp
-	20, // 33: agentroom.collaboration.v1.CollaborationEvent.accepted:type_name -> agentroom.collaboration.v1.AcceptedEvent
-	21, // 34: agentroom.collaboration.v1.CollaborationEvent.collaboration_started:type_name -> agentroom.collaboration.v1.CollaborationStartedEvent
-	22, // 35: agentroom.collaboration.v1.CollaborationEvent.speaker_selected:type_name -> agentroom.collaboration.v1.SpeakerSelectedEvent
-	23, // 36: agentroom.collaboration.v1.CollaborationEvent.agent_turn_started:type_name -> agentroom.collaboration.v1.AgentTurnStartedEvent
-	24, // 37: agentroom.collaboration.v1.CollaborationEvent.model_started:type_name -> agentroom.collaboration.v1.ModelStartedEvent
-	25, // 38: agentroom.collaboration.v1.CollaborationEvent.model_completed:type_name -> agentroom.collaboration.v1.ModelCompletedEvent
-	26, // 39: agentroom.collaboration.v1.CollaborationEvent.tool_started:type_name -> agentroom.collaboration.v1.ToolStartedEvent
-	27, // 40: agentroom.collaboration.v1.CollaborationEvent.tool_completed:type_name -> agentroom.collaboration.v1.ToolCompletedEvent
-	28, // 41: agentroom.collaboration.v1.CollaborationEvent.tool_failed:type_name -> agentroom.collaboration.v1.ToolFailedEvent
-	29, // 42: agentroom.collaboration.v1.CollaborationEvent.output_delta:type_name -> agentroom.collaboration.v1.OutputDeltaEvent
-	30, // 43: agentroom.collaboration.v1.CollaborationEvent.artifact_ready:type_name -> agentroom.collaboration.v1.ArtifactReadyEvent
-	31, // 44: agentroom.collaboration.v1.CollaborationEvent.handoff_requested:type_name -> agentroom.collaboration.v1.HandoffRequestedEvent
-	32, // 45: agentroom.collaboration.v1.CollaborationEvent.agent_message_completed:type_name -> agentroom.collaboration.v1.AgentMessageCompletedEvent
-	33, // 46: agentroom.collaboration.v1.CollaborationEvent.checkpoint:type_name -> agentroom.collaboration.v1.CheckpointEvent
-	34, // 47: agentroom.collaboration.v1.CollaborationEvent.completed:type_name -> agentroom.collaboration.v1.CompletedEvent
-	35, // 48: agentroom.collaboration.v1.CollaborationEvent.stopped:type_name -> agentroom.collaboration.v1.StoppedEvent
-	36, // 49: agentroom.collaboration.v1.CollaborationEvent.cancelled:type_name -> agentroom.collaboration.v1.CancelledEvent
-	37, // 50: agentroom.collaboration.v1.CollaborationEvent.failed:type_name -> agentroom.collaboration.v1.FailedEvent
-	14, // 51: agentroom.collaboration.v1.CollaborationRuntimeService.ExecuteConversation:input_type -> agentroom.collaboration.v1.ExecuteConversationRequest
-	38, // 52: agentroom.collaboration.v1.CollaborationRuntimeService.ExecuteConversation:output_type -> agentroom.collaboration.v1.CollaborationEvent
-	52, // [52:53] is the sub-list for method output_type
-	51, // [51:52] is the sub-list for method input_type
-	51, // [51:51] is the sub-list for extension type_name
-	51, // [51:51] is the sub-list for extension extendee
-	0,  // [0:51] is the sub-list for field type_name
+	6,  // 0: agentroom.collaboration.v1.GetCapabilitiesResponse.engines:type_name -> agentroom.collaboration.v1.CollaborationEngineCapability
+	2,  // 1: agentroom.collaboration.v1.MessageSnapshot.sender_type:type_name -> agentroom.collaboration.v1.SenderType
+	42, // 2: agentroom.collaboration.v1.MessageSnapshot.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 3: agentroom.collaboration.v1.CollaborationPolicySnapshot.engine:type_name -> agentroom.collaboration.v1.CollaborationEngine
+	1,  // 4: agentroom.collaboration.v1.CollaborationPolicySnapshot.trigger_mode:type_name -> agentroom.collaboration.v1.TriggerMode
+	43, // 5: agentroom.collaboration.v1.CollaborationPolicySnapshot.cooldown:type_name -> google.protobuf.Duration
+	43, // 6: agentroom.collaboration.v1.ExecutionLimits.timeout:type_name -> google.protobuf.Duration
+	0,  // 7: agentroom.collaboration.v1.OpaqueCheckpoint.engine:type_name -> agentroom.collaboration.v1.CollaborationEngine
+	8,  // 8: agentroom.collaboration.v1.ConversationSnapshot.room:type_name -> agentroom.collaboration.v1.RoomSnapshot
+	9,  // 9: agentroom.collaboration.v1.ConversationSnapshot.agents:type_name -> agentroom.collaboration.v1.AgentSnapshot
+	10, // 10: agentroom.collaboration.v1.ConversationSnapshot.trigger:type_name -> agentroom.collaboration.v1.MessageSnapshot
+	10, // 11: agentroom.collaboration.v1.ConversationSnapshot.transcript:type_name -> agentroom.collaboration.v1.MessageSnapshot
+	11, // 12: agentroom.collaboration.v1.ConversationSnapshot.knowledge_chunks:type_name -> agentroom.collaboration.v1.KnowledgeChunk
+	12, // 13: agentroom.collaboration.v1.ConversationSnapshot.model_references:type_name -> agentroom.collaboration.v1.ModelReference
+	13, // 14: agentroom.collaboration.v1.ConversationSnapshot.policy:type_name -> agentroom.collaboration.v1.CollaborationPolicySnapshot
+	14, // 15: agentroom.collaboration.v1.ConversationSnapshot.limits:type_name -> agentroom.collaboration.v1.ExecutionLimits
+	0,  // 16: agentroom.collaboration.v1.ExecuteConversationRequest.engine:type_name -> agentroom.collaboration.v1.CollaborationEngine
+	16, // 17: agentroom.collaboration.v1.ExecuteConversationRequest.snapshot:type_name -> agentroom.collaboration.v1.ConversationSnapshot
+	15, // 18: agentroom.collaboration.v1.ExecuteConversationRequest.checkpoint:type_name -> agentroom.collaboration.v1.OpaqueCheckpoint
+	4,  // 19: agentroom.collaboration.v1.CollaborationFailure.code:type_name -> agentroom.collaboration.v1.CollaborationErrorCode
+	18, // 20: agentroom.collaboration.v1.ModelCompletedEvent.usage:type_name -> agentroom.collaboration.v1.Usage
+	22, // 21: agentroom.collaboration.v1.ToolFailedEvent.failure:type_name -> agentroom.collaboration.v1.CollaborationFailure
+	21, // 22: agentroom.collaboration.v1.ArtifactReadyEvent.artifact:type_name -> agentroom.collaboration.v1.Artifact
+	21, // 23: agentroom.collaboration.v1.AgentMessageCompletedEvent.artifacts:type_name -> agentroom.collaboration.v1.Artifact
+	20, // 24: agentroom.collaboration.v1.AgentMessageCompletedEvent.knowledge_sources:type_name -> agentroom.collaboration.v1.KnowledgeSource
+	19, // 25: agentroom.collaboration.v1.AgentMessageCompletedEvent.model:type_name -> agentroom.collaboration.v1.ModelAudit
+	18, // 26: agentroom.collaboration.v1.AgentMessageCompletedEvent.usage:type_name -> agentroom.collaboration.v1.Usage
+	15, // 27: agentroom.collaboration.v1.CheckpointEvent.checkpoint:type_name -> agentroom.collaboration.v1.OpaqueCheckpoint
+	3,  // 28: agentroom.collaboration.v1.CompletedEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
+	3,  // 29: agentroom.collaboration.v1.StoppedEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
+	3,  // 30: agentroom.collaboration.v1.CancelledEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
+	3,  // 31: agentroom.collaboration.v1.FailedEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
+	22, // 32: agentroom.collaboration.v1.FailedEvent.failure:type_name -> agentroom.collaboration.v1.CollaborationFailure
+	42, // 33: agentroom.collaboration.v1.CollaborationEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	23, // 34: agentroom.collaboration.v1.CollaborationEvent.accepted:type_name -> agentroom.collaboration.v1.AcceptedEvent
+	24, // 35: agentroom.collaboration.v1.CollaborationEvent.collaboration_started:type_name -> agentroom.collaboration.v1.CollaborationStartedEvent
+	25, // 36: agentroom.collaboration.v1.CollaborationEvent.speaker_selected:type_name -> agentroom.collaboration.v1.SpeakerSelectedEvent
+	26, // 37: agentroom.collaboration.v1.CollaborationEvent.agent_turn_started:type_name -> agentroom.collaboration.v1.AgentTurnStartedEvent
+	27, // 38: agentroom.collaboration.v1.CollaborationEvent.model_started:type_name -> agentroom.collaboration.v1.ModelStartedEvent
+	28, // 39: agentroom.collaboration.v1.CollaborationEvent.model_completed:type_name -> agentroom.collaboration.v1.ModelCompletedEvent
+	29, // 40: agentroom.collaboration.v1.CollaborationEvent.tool_started:type_name -> agentroom.collaboration.v1.ToolStartedEvent
+	30, // 41: agentroom.collaboration.v1.CollaborationEvent.tool_completed:type_name -> agentroom.collaboration.v1.ToolCompletedEvent
+	31, // 42: agentroom.collaboration.v1.CollaborationEvent.tool_failed:type_name -> agentroom.collaboration.v1.ToolFailedEvent
+	32, // 43: agentroom.collaboration.v1.CollaborationEvent.output_delta:type_name -> agentroom.collaboration.v1.OutputDeltaEvent
+	33, // 44: agentroom.collaboration.v1.CollaborationEvent.artifact_ready:type_name -> agentroom.collaboration.v1.ArtifactReadyEvent
+	34, // 45: agentroom.collaboration.v1.CollaborationEvent.handoff_requested:type_name -> agentroom.collaboration.v1.HandoffRequestedEvent
+	35, // 46: agentroom.collaboration.v1.CollaborationEvent.agent_message_completed:type_name -> agentroom.collaboration.v1.AgentMessageCompletedEvent
+	36, // 47: agentroom.collaboration.v1.CollaborationEvent.checkpoint:type_name -> agentroom.collaboration.v1.CheckpointEvent
+	37, // 48: agentroom.collaboration.v1.CollaborationEvent.completed:type_name -> agentroom.collaboration.v1.CompletedEvent
+	38, // 49: agentroom.collaboration.v1.CollaborationEvent.stopped:type_name -> agentroom.collaboration.v1.StoppedEvent
+	39, // 50: agentroom.collaboration.v1.CollaborationEvent.cancelled:type_name -> agentroom.collaboration.v1.CancelledEvent
+	40, // 51: agentroom.collaboration.v1.CollaborationEvent.failed:type_name -> agentroom.collaboration.v1.FailedEvent
+	5,  // 52: agentroom.collaboration.v1.CollaborationRuntimeService.GetCapabilities:input_type -> agentroom.collaboration.v1.GetCapabilitiesRequest
+	17, // 53: agentroom.collaboration.v1.CollaborationRuntimeService.ExecuteConversation:input_type -> agentroom.collaboration.v1.ExecuteConversationRequest
+	7,  // 54: agentroom.collaboration.v1.CollaborationRuntimeService.GetCapabilities:output_type -> agentroom.collaboration.v1.GetCapabilitiesResponse
+	41, // 55: agentroom.collaboration.v1.CollaborationRuntimeService.ExecuteConversation:output_type -> agentroom.collaboration.v1.CollaborationEvent
+	54, // [54:56] is the sub-list for method output_type
+	52, // [52:54] is the sub-list for method input_type
+	52, // [52:52] is the sub-list for extension type_name
+	52, // [52:52] is the sub-list for extension extendee
+	0,  // [0:52] is the sub-list for field type_name
 }
 
 func init() { file_collaboration_runtime_v1_collaboration_runtime_proto_init() }
@@ -3310,7 +3500,7 @@ func file_collaboration_runtime_v1_collaboration_runtime_proto_init() {
 	if File_collaboration_runtime_v1_collaboration_runtime_proto != nil {
 		return
 	}
-	file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[33].OneofWrappers = []any{
+	file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[36].OneofWrappers = []any{
 		(*CollaborationEvent_Accepted)(nil),
 		(*CollaborationEvent_CollaborationStarted)(nil),
 		(*CollaborationEvent_SpeakerSelected)(nil),
@@ -3336,7 +3526,7 @@ func file_collaboration_runtime_v1_collaboration_runtime_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc), len(file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   34,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

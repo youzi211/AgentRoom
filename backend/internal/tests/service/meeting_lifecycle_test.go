@@ -14,6 +14,13 @@ import (
 
 type roomCancelRuntime struct{ rooms []string }
 
+type collaborationCanceler struct{ rooms []string }
+
+func (c *collaborationCanceler) CancelRoom(_ context.Context, roomID string) error {
+	c.rooms = append(c.rooms, roomID)
+	return nil
+}
+
 func (r *roomCancelRuntime) Name() string { return model.AgentRuntimeLLM }
 func (r *roomCancelRuntime) Respond(context.Context, agent.AgentRuntimeRequest, ...agent.AgentEventObserver) (agent.AgentRuntimeResponse, error) {
 	return agent.AgentRuntimeResponse{}, nil
@@ -144,7 +151,7 @@ func TestMeetingLifecycleCancelsAgentRunsWhenRoomStops(t *testing.T) {
 	canceler := &roomCancelRuntime{}
 	runner := agent.NewRunner(nil, store).WithRuntimeRegistry(agent.NewRuntimeRegistry(canceler))
 	roomService := service.NewRoomService(manager, nil, nil, runner, nil, store)
-	currentRoom, err := manager.CreateRoom(context.Background(), "Planning", nil, "", model.DefaultDialoguePolicy())
+	currentRoom, err := manager.CreateRoom(context.Background(), "Planning", nil, "", model.DefaultDialoguePolicy(), model.DefaultCollaborationPolicy())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,6 +164,43 @@ func TestMeetingLifecycleCancelsAgentRunsWhenRoomStops(t *testing.T) {
 	}
 	if len(canceler.rooms) != 1 || canceler.rooms[0] != currentRoom.Info().ID {
 		t.Fatalf("expected room run cancellation, got %#v", canceler.rooms)
+	}
+}
+
+func TestMeetingLifecycleCancelsCollaborationWhenRoomClosesOrArchives(t *testing.T) {
+	tests := []struct {
+		name string
+		stop func(context.Context, *service.RoomService, *room.Room, string) error
+	}{
+		{
+			name: "close",
+			stop: func(ctx context.Context, roomService *service.RoomService, currentRoom *room.Room, ownerID string) error {
+				return roomService.CloseRoomByOwner(ctx, currentRoom, ownerID)
+			},
+		},
+		{
+			name: "archive",
+			stop: func(ctx context.Context, roomService *service.RoomService, currentRoom *room.Room, _ string) error {
+				return roomService.ArchiveRoom(ctx, currentRoom.Info().ID)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			roomService, currentRoom, _ := newLifecycleRoomService(t)
+			canceler := &collaborationCanceler{}
+			roomService.WithCollaborationCanceler(canceler)
+			owner, err := roomService.JoinParticipant(context.Background(), currentRoom, "Alice")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := test.stop(context.Background(), roomService, currentRoom, owner.ID); err != nil {
+				t.Fatal(err)
+			}
+			if len(canceler.rooms) != 1 || canceler.rooms[0] != currentRoom.Info().ID {
+				t.Fatalf("expected collaboration cancellation, got %#v", canceler.rooms)
+			}
+		})
 	}
 }
 
@@ -196,7 +240,7 @@ func newLifecycleRoomService(t *testing.T) (*service.RoomService, *room.Room, *t
 	}
 	manager := room.NewManager(store, func([]string) []model.Agent { return nil })
 	roomService := service.NewRoomService(manager, nil, nil, nil, nil, store)
-	currentRoom, err := manager.CreateRoom(context.Background(), "Planning", []string{}, "", model.DefaultDialoguePolicy())
+	currentRoom, err := manager.CreateRoom(context.Background(), "Planning", []string{}, "", model.DefaultDialoguePolicy(), model.DefaultCollaborationPolicy())
 	if err != nil {
 		t.Fatalf("create room: %v", err)
 	}

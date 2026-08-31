@@ -51,3 +51,50 @@ func TestDialoguePolicyInputResolveNilUsesDefaults(t *testing.T) {
 		t.Fatal("expected nil input to resolve to default dialogue policy")
 	}
 }
+
+func TestCollaborationPolicyInputResolveOverlaysCompatibilityPolicy(t *testing.T) {
+	base := model.DialoguePolicy{
+		Mode:                      model.DialogueModeGuided,
+		MaxAutonomousTurns:        5,
+		MaxTurnsPerAgent:          2,
+		AllowAgentToAgentMentions: true,
+		CooldownMS:                25,
+	}.ToCollaborationPolicy()
+	var input contracts.CollaborationPolicyInput
+	if err := json.Unmarshal([]byte(`{"engine":"AUTOGEN","triggerMode":"AUTOMATIC","allowAgentHandoff":false}`), &input); err != nil {
+		t.Fatalf("unmarshal collaboration policy: %v", err)
+	}
+
+	policy, err := input.Resolve(base)
+	if err != nil {
+		t.Fatalf("resolve collaboration policy: %v", err)
+	}
+	if policy.Engine != model.CollaborationEngineAutoGen || policy.TriggerMode != model.CollaborationTriggerAutomatic {
+		t.Fatalf("expected normalized engine and trigger mode, got %#v", policy)
+	}
+	if policy.MaxTurns != 5 || policy.MaxTurnsPerAgent != 2 || policy.CooldownMS != 25 {
+		t.Fatalf("expected omitted fields from compatibility policy, got %#v", policy)
+	}
+	if policy.AllowAgentHandoff {
+		t.Fatal("expected explicit false to disable Agent handoff")
+	}
+}
+
+func TestCollaborationPolicyInputResolveRejectsExplicitInvalidValues(t *testing.T) {
+	tests := []string{
+		`{"engine":"unknown"}`,
+		`{"triggerMode":"fanout"}`,
+		`{"maxTurns":0}`,
+		`{"maxTurnsPerAgent":0}`,
+		`{"cooldownMs":-1}`,
+	}
+	for _, body := range tests {
+		var input contracts.CollaborationPolicyInput
+		if err := json.Unmarshal([]byte(body), &input); err != nil {
+			t.Fatalf("unmarshal %s: %v", body, err)
+		}
+		if _, err := input.Resolve(model.DefaultCollaborationPolicy()); err == nil {
+			t.Fatalf("expected invalid collaboration policy %s to fail", body)
+		}
+	}
+}

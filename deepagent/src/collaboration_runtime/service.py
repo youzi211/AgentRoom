@@ -21,6 +21,7 @@ from .protocol import (
     DEFAULT_MAX_EVENT_BYTES,
     DEFAULT_MAX_OUTPUT_BYTES,
     ProtocolVersionError,
+    PROTOCOL_VERSION,
     validate_protocol_version,
     validate_request_size,
 )
@@ -69,6 +70,23 @@ class CollaborationRuntimeServicer(
         self.max_output_bytes = max_output_bytes
         self.max_checkpoint_bytes = max_checkpoint_bytes
         self.telemetry = CollaborationRuntimeTelemetry(LOGGER)
+
+    async def GetCapabilities(self, request, context):  # noqa: N802
+        capabilities = self.registry.capabilities()
+        return collaboration_runtime_pb2.GetCapabilitiesResponse(
+            ready=any(capability.ready for capability in capabilities),
+            supported_protocol_versions=[PROTOCOL_VERSION],
+            engines=[
+                collaboration_runtime_pb2.CollaborationEngineCapability(
+                    engine=capability.name,
+                    version=capability.version,
+                    enabled=capability.enabled,
+                    ready=capability.ready,
+                )
+                for capability in capabilities
+            ],
+            supported_trigger_modes=["mention_only", "automatic"],
+        )
 
     async def ExecuteConversation(self, request, context):  # noqa: N802
         try:

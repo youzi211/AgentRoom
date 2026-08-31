@@ -256,6 +256,44 @@ def test_service_does_not_expose_engine_exception_text(caplog):
     assert run(runtime.active.count()) == 0
 
 
+def test_service_does_not_retry_started_engine_after_execution_failure():
+    async def scenario():
+        creations = 0
+        executions = 0
+
+        class StartedThenFailsEngine:
+            name = "native"
+            version = "fake-v1"
+
+            async def execute(self, _request, _cancel_event):
+                nonlocal executions
+                executions += 1
+                yield EngineEvent(EventKind.COLLABORATION_STARTED)
+                raise RuntimeError("provider failed after model start")
+
+        def factory():
+            nonlocal creations
+            creations += 1
+            return StartedThenFailsEngine()
+
+        registry = CollaborationEngineRegistry()
+        registry.register("native", factory)
+        runtime = CollaborationRuntimeServicer(registry)
+
+        streamed = await consume(runtime, request("collaboration_started_failure"))
+
+        assert [event.WhichOneof("payload") for event in streamed] == [
+            "accepted",
+            "collaboration_started",
+            "failed",
+        ]
+        assert creations == 1
+        assert executions == 1
+        assert await runtime.active.count() == 0
+
+    run(scenario())
+
+
 def test_writer_requires_exactly_one_service_owned_accepted_event():
     writer = CollaborationEventWriter(
         "collaboration_writer",

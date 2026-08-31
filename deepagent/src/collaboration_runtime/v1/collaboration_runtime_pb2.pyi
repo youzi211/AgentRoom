@@ -106,6 +106,34 @@ COLLABORATION_ERROR_CODE_CANCELLED: CollaborationErrorCode
 COLLABORATION_ERROR_CODE_DEADLINE_EXCEEDED: CollaborationErrorCode
 COLLABORATION_ERROR_CODE_INTERNAL: CollaborationErrorCode
 
+class GetCapabilitiesRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class CollaborationEngineCapability(_message.Message):
+    __slots__ = ("engine", "version", "enabled", "ready")
+    ENGINE_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    ENABLED_FIELD_NUMBER: _ClassVar[int]
+    READY_FIELD_NUMBER: _ClassVar[int]
+    engine: str
+    version: str
+    enabled: bool
+    ready: bool
+    def __init__(self, engine: _Optional[str] = ..., version: _Optional[str] = ..., enabled: _Optional[bool] = ..., ready: _Optional[bool] = ...) -> None: ...
+
+class GetCapabilitiesResponse(_message.Message):
+    __slots__ = ("ready", "supported_protocol_versions", "engines", "supported_trigger_modes")
+    READY_FIELD_NUMBER: _ClassVar[int]
+    SUPPORTED_PROTOCOL_VERSIONS_FIELD_NUMBER: _ClassVar[int]
+    ENGINES_FIELD_NUMBER: _ClassVar[int]
+    SUPPORTED_TRIGGER_MODES_FIELD_NUMBER: _ClassVar[int]
+    ready: bool
+    supported_protocol_versions: _containers.RepeatedScalarFieldContainer[str]
+    engines: _containers.RepeatedCompositeFieldContainer[CollaborationEngineCapability]
+    supported_trigger_modes: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, ready: _Optional[bool] = ..., supported_protocol_versions: _Optional[_Iterable[str]] = ..., engines: _Optional[_Iterable[_Union[CollaborationEngineCapability, _Mapping]]] = ..., supported_trigger_modes: _Optional[_Iterable[str]] = ...) -> None: ...
+
 class RoomSnapshot(_message.Message):
     __slots__ = ("id", "name", "status")
     ID_FIELD_NUMBER: _ClassVar[int]

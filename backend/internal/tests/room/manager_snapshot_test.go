@@ -82,7 +82,7 @@ func TestManagerPreservesAgentRuntimeInRoomSnapshot(t *testing.T) {
 		return append([]model.Agent(nil), agents...)
 	})
 
-	created, err := manager.CreateRoom(context.Background(), "Research room", nil, "", model.DefaultDialoguePolicy())
+	created, err := manager.CreateRoom(context.Background(), "Research room", nil, "", model.DefaultDialoguePolicy(), model.DefaultCollaborationPolicy())
 	if err != nil {
 		t.Fatalf("create room: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestManagerPersistsAndColdLoadsCompatibleCollaborationPolicy(t *testing.T) 
 		AllowAgentToAgentMentions: true,
 		CooldownMS:                25,
 	}
-	created, err := manager.CreateRoom(context.Background(), "Collaboration room", nil, "", legacy)
+	created, err := manager.CreateRoom(context.Background(), "Collaboration room", nil, "", legacy, legacy.ToCollaborationPolicy())
 	if err != nil {
 		t.Fatalf("create room: %v", err)
 	}

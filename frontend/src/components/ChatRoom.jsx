@@ -23,9 +23,10 @@ import MessageComposer from './MessageComposer'
 import MessageList from './MessageList'
 import ParticipantList from './ParticipantList'
 import ResizeHandle from './ResizeHandle'
-import { mergeActivityEvent, normalizeActivityPayload } from './agentActivity'
+import { mergeActivityEvent, mergeCollaborationActivityEvent } from './agentActivity'
 import { buildParticipantJoinedNotice, mergeTimelineMessages } from './liveRoomNotices'
 import { nextRouteAfterLiveTermination } from './roomAccess'
+import { activitiesFromAuditPayload, mergeChatMessageEvent, messagesFromHistoryPayload } from './roomRealtime'
 import { downloadBlobFile } from './meetingMinutes'
 import '../chat-room.css'
 
@@ -36,6 +37,7 @@ const PARTICIPANT_LEFT_EVENT = 'participant_left'
 const ERROR_EVENT = 'error'
 const FOCUS_UPDATE_EVENT = 'focus_update'
 const AGENT_ACTIVITY_EVENT = 'agent_activity'
+const COLLABORATION_ACTIVITY_EVENT = 'collaboration_activity'
 const ROOM_CLOSED_EVENT = 'room_closed'
 const ROOM_ARCHIVED_EVENT = 'room_archived'
 
@@ -147,7 +149,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
           return
         case MESSAGE_EVENT:
           if (event.message) {
-            setMessages((current) => upsertById(current, event.message))
+            setMessages((current) => mergeChatMessageEvent(current, event))
             if (event.message.senderType === 'agent') {
               setThinkingAgents((current) => current.filter((agent) => agent.id !== event.message.senderID))
             }
@@ -169,6 +171,12 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
                 setThinkingAgents((current) => current.filter((agent) => agent.id !== event.activity.agentID))
               }
             }
+          }
+          return
+        case COLLABORATION_ACTIVITY_EVENT:
+          if (event.collaboration) {
+            setActivityItems((current) => mergeCollaborationActivityEvent(current, event.collaboration))
+            setThinkingAgents((current) => mergeCollaborationThinkingAgents(current, event.collaboration))
           }
           return
         case ROOM_CLOSED_EVENT:
@@ -221,13 +229,15 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
       }
 
       if (messagesResult.status === 'fulfilled') {
-        setMessages(messagesResult.value.messages ?? [])
+        setMessages(messagesFromHistoryPayload(messagesResult.value))
       } else {
         loadErrors.push(messagesResult.reason?.message || '加载消息失败。')
       }
 
       if (activityResult.status === 'fulfilled') {
-        setActivityItems(normalizeActivityPayload(activityResult.value))
+        const normalizedActivities = activitiesFromAuditPayload(activityResult.value)
+        setActivityItems(normalizedActivities)
+        setThinkingAgents(thinkingAgentsFromActivities(normalizedActivities))
       } else {
         setActivityError(activityResult.reason?.message || '加载 Agent 活动失败。')
       }
@@ -626,6 +636,31 @@ function agentFromActivity(activity) {
     mention: `@${name}`,
     role: '',
   }
+}
+
+function mergeCollaborationThinkingAgents(current, activity) {
+  switch (activity.kind) {
+    case 'collaboration_started':
+      return []
+    case 'speaker_selected':
+    case 'agent_turn_started':
+      return activity.agentID ? mergeAgents(current, [agentFromActivity(activity)]) : current
+    case 'agent_message_completed':
+      return current.filter((agent) => agent.id !== activity.agentID)
+    case 'completed':
+    case 'stopped':
+    case 'cancelled':
+    case 'failed':
+      return []
+    default:
+      return current
+  }
+}
+
+function thinkingAgentsFromActivities(activities) {
+  return activities
+    .filter((activity) => activity.kind === 'agent_run' && activity.status === 'running' && activity.agentID)
+    .map(agentFromActivity)
 }
 
 function labelForConnectionState(connectionState) {

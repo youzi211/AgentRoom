@@ -1,9 +1,20 @@
 # Collaboration Runtime v1 contract
 
-`CollaborationRuntimeService.ExecuteConversation` executes one immutable,
-multi-turn room collaboration. Go owns room authorization, MySQL state,
-business-message commits, and WebSocket broadcasts. Python owns run-local
-speaker selection, Agent execution, handoff planning, and termination.
+`CollaborationRuntimeService.GetCapabilities` reports runtime readiness and
+the engines registered by the Python service. `ExecuteConversation` executes
+one immutable, multi-turn room collaboration. Go owns room authorization,
+MySQL state, business-message commits, and WebSocket broadcasts. Python owns
+run-local speaker selection, Agent execution, handoff planning, and
+termination.
+
+## Capability discovery
+
+- Capability data comes from the runtime Engine Registry, not from frontend
+  constants.
+- Each engine reports its stable name, version, enabled state, and readiness.
+- The response also lists supported protocol versions and trigger modes.
+- An engine factory that cannot initialize remains visible but is not ready;
+  exception text is not returned to callers.
 
 ## Version and stream rules
 

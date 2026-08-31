@@ -10,7 +10,24 @@ import "google/protobuf/timestamp.proto";
 // CollaborationRuntimeService executes one immutable, multi-turn room
 // collaboration. Go remains responsible for persistence and broadcasting.
 service CollaborationRuntimeService {
+  rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
   rpc ExecuteConversation(ExecuteConversationRequest) returns (stream CollaborationEvent);
+}
+
+message GetCapabilitiesRequest {}
+
+message CollaborationEngineCapability {
+  string engine = 1;
+  string version = 2;
+  bool enabled = 3;
+  bool ready = 4;
+}
+
+message GetCapabilitiesResponse {
+  bool ready = 1;
+  repeated string supported_protocol_versions = 2;
+  repeated CollaborationEngineCapability engines = 3;
+  repeated string supported_trigger_modes = 4;
 }
 
 enum CollaborationEngine {
