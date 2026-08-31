@@ -1,6 +1,9 @@
 package collaboration
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 type Engine string
 
@@ -198,3 +201,18 @@ type Failure struct {
 	Message   string
 	Retryable bool
 }
+
+
+// Shared errors used across collaboration package files.
+var (
+)
+
+
+
+
+// Shared errors used across collaboration package files.
+var (
+	ErrCapacity     = errors.New("collaboration capacity exhausted")
+	ErrDuplicateRun = errors.New("collaboration run is already active")
+	ErrProtocol     = errors.New("collaboration protocol violation")
+)

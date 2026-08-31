@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	collaborationruntimev1 "agentroom/backend/internal/collaborationproto/v1"
+	collaborationruntimev1 "agentroom/backend/internal/collaboration/proto/v1"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"

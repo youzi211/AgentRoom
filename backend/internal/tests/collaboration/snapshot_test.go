@@ -1,4 +1,4 @@
-package collaborationsnapshot_test
+package collaboration_test
 
 import (
 	"crypto/sha256"
@@ -6,14 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"agentroom/backend/internal/collaboration"
-	"agentroom/backend/internal/collaborationsnapshot"
 	"agentroom/backend/internal/model"
+	"agentroom/backend/internal/collaboration"
 )
 
 func TestBuildCreatesOrderedAuthoritativeSnapshot(t *testing.T) {
 	input := validInput()
-	request, err := collaborationsnapshot.Build(input)
+	request, err := collaboration.Build(input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +51,7 @@ func TestBuildCreatesOrderedAuthoritativeSnapshot(t *testing.T) {
 
 func TestBuildDetachesSnapshotFromMutableInputs(t *testing.T) {
 	input := validInput()
-	request, err := collaborationsnapshot.Build(input)
+	request, err := collaboration.Build(input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,41 +81,41 @@ func TestBuildDetachesSnapshotFromMutableInputs(t *testing.T) {
 func TestBuildRejectsInvalidAuthorityInputs(t *testing.T) {
 	tests := []struct {
 		name   string
-		mutate func(*collaborationsnapshot.Input)
+		mutate func(*collaboration.Input)
 	}{
-		{name: "no eligible Agents", mutate: func(input *collaborationsnapshot.Input) { input.Agents = nil }},
-		{name: "disabled Agent", mutate: func(input *collaborationsnapshot.Input) { input.Agents[0].Agent.Enabled = false }},
-		{name: "duplicate Agent", mutate: func(input *collaborationsnapshot.Input) { input.Agents[1].Agent.ID = "agent_1" }},
-		{name: "missing model metadata", mutate: func(input *collaborationsnapshot.Input) { input.Agents[0].ModelReference.Protocol = "" }},
-		{name: "candidate outside snapshot", mutate: func(input *collaborationsnapshot.Input) { input.InitialCandidateAgentIDs = []string{"agent_3"} }},
-		{name: "non-human trigger", mutate: func(input *collaborationsnapshot.Input) { input.Trigger.SenderType = model.SenderTypeAgent }},
-		{name: "negative transcript turn", mutate: func(input *collaborationsnapshot.Input) { input.Transcript[0].TurnIndex = -1 }},
-		{name: "invalid policy", mutate: func(input *collaborationsnapshot.Input) { input.Policy.MaxTurns = -1 }},
-		{name: "invalid limits", mutate: func(input *collaborationsnapshot.Input) { input.Limits.MaxToolSteps = 0 }},
-		{name: "checkpoint Engine mismatch", mutate: func(input *collaborationsnapshot.Input) { input.Checkpoint.Engine = collaboration.EngineAutoGen }},
-		{name: "checkpoint digest mismatch", mutate: func(input *collaborationsnapshot.Input) { input.Checkpoint.SHA256 = "wrong" }},
+		{name: "no eligible Agents", mutate: func(input *collaboration.Input) { input.Agents = nil }},
+		{name: "disabled Agent", mutate: func(input *collaboration.Input) { input.Agents[0].Agent.Enabled = false }},
+		{name: "duplicate Agent", mutate: func(input *collaboration.Input) { input.Agents[1].Agent.ID = "agent_1" }},
+		{name: "missing model metadata", mutate: func(input *collaboration.Input) { input.Agents[0].ModelReference.Protocol = "" }},
+		{name: "candidate outside snapshot", mutate: func(input *collaboration.Input) { input.InitialCandidateAgentIDs = []string{"agent_3"} }},
+		{name: "non-human trigger", mutate: func(input *collaboration.Input) { input.Trigger.SenderType = model.SenderTypeAgent }},
+		{name: "negative transcript turn", mutate: func(input *collaboration.Input) { input.Transcript[0].TurnIndex = -1 }},
+		{name: "invalid policy", mutate: func(input *collaboration.Input) { input.Policy.MaxTurns = -1 }},
+		{name: "invalid limits", mutate: func(input *collaboration.Input) { input.Limits.MaxToolSteps = 0 }},
+		{name: "checkpoint Engine mismatch", mutate: func(input *collaboration.Input) { input.Checkpoint.Engine = collaboration.EngineAutoGen }},
+		{name: "checkpoint digest mismatch", mutate: func(input *collaboration.Input) { input.Checkpoint.SHA256 = "wrong" }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			input := validInput()
 			test.mutate(&input)
-			if _, err := collaborationsnapshot.Build(input); err == nil {
+			if _, err := collaboration.Build(input); err == nil {
 				t.Fatal("expected snapshot build to fail")
 			}
 		})
 	}
 }
 
-func validInput() collaborationsnapshot.Input {
+func validInput() collaboration.Input {
 	payload := []byte("state")
 	reference := collaboration.ModelReference{
 		ID: "model_1", ProfileID: "profile_1", Source: "database",
 		Protocol: model.ModelProtocolOpenAIChatCompletions, ModelName: "test-model", RuntimeScope: model.ModelRuntimeGo,
 	}
-	return collaborationsnapshot.Input{
+	return collaboration.Input{
 		CollaborationRunID: "collab_1", TraceID: "trace_1",
 		Room: model.RoomMeta{ID: "room_1", Name: "Planning"},
-		Agents: []collaborationsnapshot.AgentBinding{
+		Agents: []collaboration.AgentBinding{
 			{Agent: model.Agent{ID: "agent_1", Name: "Architect", Runtime: "", Enabled: true}, ToolNames: []string{"search"}, ModelReference: reference},
 			{Agent: model.Agent{ID: "agent_2", Name: "Reviewer", Runtime: model.AgentRuntimeLLM, Enabled: true}, ModelReference: reference},
 		},

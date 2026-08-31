@@ -1,4 +1,4 @@
-package collaborationturn
+package collaboration
 
 import (
 	"context"
@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"agentroom/backend/internal/collaboration"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/store"
 )
@@ -16,27 +14,33 @@ var ErrInvalidEvent = errors.New("invalid collaboration turn event")
 
 const terminalWriteTimeout = 5 * time.Second
 
+type turnState struct {
+	runID     string
+	turnID    string
+	agentID   string
+	committed bool
+	run       store.AgentRun
+}
+
+
 type turnStore interface {
 	CreateAgentRun(context.Context, store.AgentRun) error
 	CommitAgentRunSuccess(context.Context, store.CommitAgentRunSuccessInput) (model.Message, error)
 	FinishAgentRun(context.Context, string, string, string, time.Time) error
 }
 
-type turnState struct {
-	run store.AgentRun
-}
 
 // Handler owns Agent run persistence for one validated collaboration stream.
 type Handler struct {
 	store               turnStore
-	request             collaboration.Request
+	request             Request
 	agentNames          map[string]string
 	turns               map[string]turnState
 	nextTurnIndex       int
 	lastParentMessageID string
 }
 
-func New(store turnStore, request collaboration.Request) (*Handler, error) {
+func NewTurnHandler(store turnStore, request Request) (*Handler, error) {
 	if store == nil {
 		return nil, fmt.Errorf("%w: store is required", ErrInvalidEvent)
 	}
@@ -57,14 +61,14 @@ func New(store turnStore, request collaboration.Request) (*Handler, error) {
 }
 
 // Handle persists turn events and returns a message only after its transaction commits.
-func (h *Handler) Handle(ctx context.Context, event collaboration.Event) (model.Message, bool, error) {
+func (h *Handler) Handle(ctx context.Context, event Event) (model.Message, bool, error) {
 	switch event.Kind {
-	case collaboration.EventSpeakerSelected, collaboration.EventAgentTurnStarted:
+	case EventSpeakerSelected, EventAgentTurnStarted:
 		if err := h.ensureTurn(ctx, event); err != nil {
 			return model.Message{}, false, err
 		}
 		return model.Message{}, false, nil
-	case collaboration.EventAgentMessageCompleted:
+	case EventAgentMessageCompleted:
 		message, err := h.commitMessage(ctx, event)
 		if err != nil {
 			return model.Message{}, false, err
@@ -75,7 +79,7 @@ func (h *Handler) Handle(ctx context.Context, event collaboration.Event) (model.
 	}
 }
 
-func (h *Handler) ensureTurn(ctx context.Context, event collaboration.Event) error {
+func (h *Handler) ensureTurn(ctx context.Context, event Event) error {
 	if err := h.validateTurnIdentity(event); err != nil {
 		return err
 	}
@@ -107,7 +111,7 @@ func (h *Handler) ensureTurn(ctx context.Context, event collaboration.Event) err
 	return nil
 }
 
-func (h *Handler) commitMessage(ctx context.Context, event collaboration.Event) (model.Message, error) {
+func (h *Handler) commitMessage(ctx context.Context, event Event) (model.Message, error) {
 	if err := h.validateTurnIdentity(event); err != nil {
 		return model.Message{}, err
 	}
@@ -157,7 +161,7 @@ func (h *Handler) commitMessage(ctx context.Context, event collaboration.Event) 
 	return saved, nil
 }
 
-func (h *Handler) validateTurnIdentity(event collaboration.Event) error {
+func (h *Handler) validateTurnIdentity(event Event) error {
 	if event.CollaborationRunID != h.request.CollaborationRunID {
 		return fmt.Errorf("%w: unexpected collaboration run ID", ErrInvalidEvent)
 	}
@@ -170,7 +174,7 @@ func (h *Handler) validateTurnIdentity(event collaboration.Event) error {
 	return nil
 }
 
-func mapKnowledgeSources(sources []collaboration.KnowledgeSource) []model.MessageKnowledgeSource {
+func mapKnowledgeSources(sources []KnowledgeSource) []model.MessageKnowledgeSource {
 	if len(sources) == 0 {
 		return nil
 	}
@@ -183,7 +187,7 @@ func mapKnowledgeSources(sources []collaboration.KnowledgeSource) []model.Messag
 	return result
 }
 
-func mapArtifacts(artifacts []collaboration.Artifact) []model.MessageArtifact {
+func mapArtifacts(artifacts []Artifact) []model.MessageArtifact {
 	if len(artifacts) == 0 {
 		return nil
 	}
@@ -205,9 +209,3 @@ func mapArtifacts(artifacts []collaboration.Artifact) []model.MessageArtifact {
 	return result
 }
 
-func eventTime(value time.Time) time.Time {
-	if value.IsZero() {
-		return time.Now().UTC()
-	}
-	return value.UTC()
-}

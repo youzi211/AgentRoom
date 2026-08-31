@@ -1,4 +1,4 @@
-package collaborationcoordinator
+package collaboration
 
 import (
 	"context"
@@ -7,14 +7,10 @@ import (
 	"io"
 	"sync"
 
-	"agentroom/backend/internal/collaboration"
-	"agentroom/backend/internal/collaborationevent"
 )
 
 var (
 	ErrInvalidConfig = errors.New("collaboration coordinator configuration is invalid")
-	ErrCapacity      = errors.New("collaboration coordinator capacity exhausted")
-	ErrDuplicateRun  = errors.New("collaboration run is already active")
 	ErrClosed        = errors.New("collaboration coordinator is closed")
 )
 
@@ -33,10 +29,10 @@ func (c Config) Validate() error {
 	return nil
 }
 
-type EventHandler func(context.Context, collaboration.Event) error
+type EventHandler func(context.Context, Event) error
 
 type Coordinator struct {
-	runtime collaboration.CollaborationRuntime
+	runtime CollaborationRuntime
 	config  Config
 	slots   chan struct{}
 
@@ -52,7 +48,7 @@ type activeRun struct {
 	done   chan struct{}
 }
 
-func New(runtime collaboration.CollaborationRuntime, config Config) (*Coordinator, error) {
+func NewCoordinator(runtime CollaborationRuntime, config Config) (*Coordinator, error) {
 	if runtime == nil {
 		return nil, fmt.Errorf("%w: runtime is required", ErrInvalidConfig)
 	}
@@ -69,7 +65,7 @@ func New(runtime collaboration.CollaborationRuntime, config Config) (*Coordinato
 
 // Execute runs one collaboration synchronously. A newer call for the same room
 // cancels this call and waits for it to finish before entering the Runtime.
-func (c *Coordinator) Execute(ctx context.Context, request collaboration.Request, handler EventHandler) error {
+func (c *Coordinator) Execute(ctx context.Context, request Request, handler EventHandler) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -115,7 +111,7 @@ func (c *Coordinator) Execute(ctx context.Context, request collaboration.Request
 	if err != nil {
 		return err
 	}
-	validator := collaborationevent.NewValidator(request)
+	validator := NewValidator(request)
 	for {
 		event, recvErr := stream.Recv()
 		if err := callCtx.Err(); err != nil {
@@ -126,7 +122,7 @@ func (c *Coordinator) Execute(ctx context.Context, request collaboration.Request
 		}
 		if errors.Is(recvErr, io.EOF) {
 			if !validator.TerminalSeen() {
-				return fmt.Errorf("%w: stream ended without a terminal event", collaborationevent.ErrProtocol)
+				return fmt.Errorf("%w: stream ended without a terminal event", ErrProtocol)
 			}
 			return nil
 		}

@@ -1,4 +1,4 @@
-package collaborationcoordinator_test
+package collaboration_test
 
 import (
 	"context"
@@ -8,9 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
-
 	"agentroom/backend/internal/collaboration"
-	"agentroom/backend/internal/collaborationcoordinator"
+
 )
 
 type controlledRuntime struct {
@@ -55,7 +54,7 @@ func (s *controlledStream) Recv() (collaboration.Event, error) {
 
 func TestCoordinatorBoundsGlobalConcurrencyAndPendingQueue(t *testing.T) {
 	runtime := &controlledRuntime{started: make(chan startedRun, 3)}
-	coordinator, err := collaborationcoordinator.New(runtime, collaborationcoordinator.Config{MaxConcurrent: 2, MaxPending: 0})
+	coordinator, err := collaboration.NewCoordinator(runtime, collaboration.Config{MaxConcurrent: 2, MaxPending: 0})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +69,7 @@ func TestCoordinatorBoundsGlobalConcurrencyAndPendingQueue(t *testing.T) {
 	assertRooms(t, first.request.Snapshot.Room.ID, second.request.Snapshot.Room.ID, "room_1", "room_2")
 
 	thirdErr := coordinator.Execute(context.Background(), request("room_3", "run_room_3"), nil)
-	if !errors.Is(thirdErr, collaborationcoordinator.ErrCapacity) {
+	if !errors.Is(thirdErr, collaboration.ErrCapacity) {
 		t.Fatalf("expected bounded capacity rejection, got %v", thirdErr)
 	}
 
@@ -85,7 +84,7 @@ func TestCoordinatorBoundsGlobalConcurrencyAndPendingQueue(t *testing.T) {
 
 func TestCoordinatorStartsPendingRunAfterCapacityIsReleased(t *testing.T) {
 	runtime := &controlledRuntime{started: make(chan startedRun, 2)}
-	coordinator, err := collaborationcoordinator.New(runtime, collaborationcoordinator.Config{MaxConcurrent: 1, MaxPending: 1})
+	coordinator, err := collaboration.NewCoordinator(runtime, collaboration.Config{MaxConcurrent: 1, MaxPending: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +113,7 @@ func TestCoordinatorStartsPendingRunAfterCapacityIsReleased(t *testing.T) {
 
 func TestCoordinatorPreemptsSameRoomBeforeStartingReplacement(t *testing.T) {
 	runtime := &controlledRuntime{started: make(chan startedRun, 2)}
-	coordinator, err := collaborationcoordinator.New(runtime, collaborationcoordinator.Config{MaxConcurrent: 1, MaxPending: 1})
+	coordinator, err := collaboration.NewCoordinator(runtime, collaboration.Config{MaxConcurrent: 1, MaxPending: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +143,7 @@ func TestCoordinatorPreemptsSameRoomBeforeStartingReplacement(t *testing.T) {
 
 func TestCoordinatorDropsLateEventsBeforeStartingReplacement(t *testing.T) {
 	runtime := &lateAfterCancelRuntime{started: make(chan string, 2)}
-	coordinator, err := collaborationcoordinator.New(runtime, collaborationcoordinator.Config{MaxConcurrent: 1, MaxPending: 1})
+	coordinator, err := collaboration.NewCoordinator(runtime, collaboration.Config{MaxConcurrent: 1, MaxPending: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,14 +184,14 @@ func TestCoordinatorDropsLateEventsBeforeStartingReplacement(t *testing.T) {
 
 func TestCoordinatorRejectsDuplicateRunAndMissingTerminal(t *testing.T) {
 	runtime := &controlledRuntime{started: make(chan startedRun, 2)}
-	coordinator, err := collaborationcoordinator.New(runtime, collaborationcoordinator.Config{MaxConcurrent: 1, MaxPending: 1})
+	coordinator, err := collaboration.NewCoordinator(runtime, collaboration.Config{MaxConcurrent: 1, MaxPending: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	results := make(chan error, 1)
 	go func() { results <- coordinator.Execute(context.Background(), request("room_1", "run_1"), nil) }()
 	first := receiveStart(t, runtime.started)
-	if err := coordinator.Execute(context.Background(), request("room_1", "run_1"), nil); !errors.Is(err, collaborationcoordinator.ErrDuplicateRun) {
+	if err := coordinator.Execute(context.Background(), request("room_1", "run_1"), nil); !errors.Is(err, collaboration.ErrDuplicateRun) {
 		t.Fatalf("expected duplicate run error, got %v", err)
 	}
 	close(first.finish)
@@ -201,7 +200,7 @@ func TestCoordinatorRejectsDuplicateRunAndMissingTerminal(t *testing.T) {
 	}
 
 	missingTerminal := staticRuntime{events: []collaboration.Event{event("run_2", 1, collaboration.EventAccepted)}}
-	coordinator, err = collaborationcoordinator.New(missingTerminal, collaborationcoordinator.Config{MaxConcurrent: 1})
+	coordinator, err = collaboration.NewCoordinator(missingTerminal, collaboration.Config{MaxConcurrent: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +212,7 @@ func TestCoordinatorRejectsDuplicateRunAndMissingTerminal(t *testing.T) {
 
 func TestCoordinatorCancelsRuntimeWhenHandlerFails(t *testing.T) {
 	runtime := &cancellationRuntime{cancelled: make(chan struct{})}
-	coordinator, err := collaborationcoordinator.New(runtime, collaborationcoordinator.Config{MaxConcurrent: 1})
+	coordinator, err := collaboration.NewCoordinator(runtime, collaboration.Config{MaxConcurrent: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +232,7 @@ func TestCoordinatorCancelsRuntimeWhenHandlerFails(t *testing.T) {
 
 func TestCoordinatorCancelRoomCancelsAndWaitsForActiveRun(t *testing.T) {
 	runtime := &controlledRuntime{started: make(chan startedRun, 1)}
-	coordinator, err := collaborationcoordinator.New(runtime, collaborationcoordinator.Config{MaxConcurrent: 1})
+	coordinator, err := collaboration.NewCoordinator(runtime, collaboration.Config{MaxConcurrent: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +253,7 @@ func TestCoordinatorCancelRoomCancelsAndWaitsForActiveRun(t *testing.T) {
 
 func TestCoordinatorShutdownCancelsAllRunsAndRejectsNewWork(t *testing.T) {
 	runtime := &controlledRuntime{started: make(chan startedRun, 2)}
-	coordinator, err := collaborationcoordinator.New(runtime, collaborationcoordinator.Config{MaxConcurrent: 2})
+	coordinator, err := collaboration.NewCoordinator(runtime, collaboration.Config{MaxConcurrent: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,14 +272,14 @@ func TestCoordinatorShutdownCancelsAllRunsAndRejectsNewWork(t *testing.T) {
 			t.Fatalf("expected shutdown cancellation, got %v", err)
 		}
 	}
-	if err := coordinator.Execute(context.Background(), request("room_3", "run_3"), nil); !errors.Is(err, collaborationcoordinator.ErrClosed) {
+	if err := coordinator.Execute(context.Background(), request("room_3", "run_3"), nil); !errors.Is(err, collaboration.ErrClosed) {
 		t.Fatalf("expected closed coordinator error, got %v", err)
 	}
 }
 
 func TestCoordinatorPropagatesDeadlineCancellation(t *testing.T) {
 	runtime := &controlledRuntime{started: make(chan startedRun, 1)}
-	coordinator, err := collaborationcoordinator.New(runtime, collaborationcoordinator.Config{MaxConcurrent: 1})
+	coordinator, err := collaboration.NewCoordinator(runtime, collaboration.Config{MaxConcurrent: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

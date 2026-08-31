@@ -1,11 +1,11 @@
-package testcollaboration
+package collaboration_test
 
 import (
 	"context"
 	"io"
 	"sync"
-
 	"agentroom/backend/internal/collaboration"
+
 )
 
 type Runtime struct {

@@ -2759,7 +2759,7 @@ func (x *CollaborationEvent) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CollaborationEvent.ProtoReflect.Descriptor instead.
+// Deprecated: Use ProtoReflect.Descriptor instead.
 func (*CollaborationEvent) Descriptor() ([]byte, []int) {
 	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{36}
 }
@@ -3369,7 +3369,7 @@ const file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc = "" +
 	"!COLLABORATION_ERROR_CODE_INTERNAL\x10\x112\x9a\x02\n" +
 	"\x1bCollaborationRuntimeService\x12z\n" +
 	"\x0fGetCapabilities\x122.agentroom.collaboration.v1.GetCapabilitiesRequest\x1a3.agentroom.collaboration.v1.GetCapabilitiesResponse\x12\x7f\n" +
-	"\x13ExecuteConversation\x126.agentroom.collaboration.v1.ExecuteConversationRequest\x1a..agentroom.collaboration.v1.CollaborationEvent0\x01BIZGagentroom/backend/internal/collaborationproto/v1;collaborationruntimev1b\x06proto3"
+	"\x13ExecuteConversation\x126.agentroom.collaboration.v1.ExecuteConversationRequest\x1a..agentroom.collaboration.v1.CollaborationEvent0\x01BIZGagentroom/backend/internal/collaboration/proto/v1;collaborationruntimev1b\x06proto3"
 
 var (
 	file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescOnce sync.Once
@@ -3465,25 +3465,25 @@ var file_collaboration_runtime_v1_collaboration_runtime_proto_depIdxs = []int32{
 	3,  // 30: agentroom.collaboration.v1.CancelledEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
 	3,  // 31: agentroom.collaboration.v1.FailedEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
 	22, // 32: agentroom.collaboration.v1.FailedEvent.failure:type_name -> agentroom.collaboration.v1.CollaborationFailure
-	42, // 33: agentroom.collaboration.v1.CollaborationEvent.occurred_at:type_name -> google.protobuf.Timestamp
-	23, // 34: agentroom.collaboration.v1.CollaborationEvent.accepted:type_name -> agentroom.collaboration.v1.AcceptedEvent
-	24, // 35: agentroom.collaboration.v1.CollaborationEvent.collaboration_started:type_name -> agentroom.collaboration.v1.CollaborationStartedEvent
-	25, // 36: agentroom.collaboration.v1.CollaborationEvent.speaker_selected:type_name -> agentroom.collaboration.v1.SpeakerSelectedEvent
-	26, // 37: agentroom.collaboration.v1.CollaborationEvent.agent_turn_started:type_name -> agentroom.collaboration.v1.AgentTurnStartedEvent
-	27, // 38: agentroom.collaboration.v1.CollaborationEvent.model_started:type_name -> agentroom.collaboration.v1.ModelStartedEvent
-	28, // 39: agentroom.collaboration.v1.CollaborationEvent.model_completed:type_name -> agentroom.collaboration.v1.ModelCompletedEvent
-	29, // 40: agentroom.collaboration.v1.CollaborationEvent.tool_started:type_name -> agentroom.collaboration.v1.ToolStartedEvent
-	30, // 41: agentroom.collaboration.v1.CollaborationEvent.tool_completed:type_name -> agentroom.collaboration.v1.ToolCompletedEvent
-	31, // 42: agentroom.collaboration.v1.CollaborationEvent.tool_failed:type_name -> agentroom.collaboration.v1.ToolFailedEvent
-	32, // 43: agentroom.collaboration.v1.CollaborationEvent.output_delta:type_name -> agentroom.collaboration.v1.OutputDeltaEvent
-	33, // 44: agentroom.collaboration.v1.CollaborationEvent.artifact_ready:type_name -> agentroom.collaboration.v1.ArtifactReadyEvent
-	34, // 45: agentroom.collaboration.v1.CollaborationEvent.handoff_requested:type_name -> agentroom.collaboration.v1.HandoffRequestedEvent
-	35, // 46: agentroom.collaboration.v1.CollaborationEvent.agent_message_completed:type_name -> agentroom.collaboration.v1.AgentMessageCompletedEvent
-	36, // 47: agentroom.collaboration.v1.CollaborationEvent.checkpoint:type_name -> agentroom.collaboration.v1.CheckpointEvent
-	37, // 48: agentroom.collaboration.v1.CollaborationEvent.completed:type_name -> agentroom.collaboration.v1.CompletedEvent
-	38, // 49: agentroom.collaboration.v1.CollaborationEvent.stopped:type_name -> agentroom.collaboration.v1.StoppedEvent
-	39, // 50: agentroom.collaboration.v1.CollaborationEvent.cancelled:type_name -> agentroom.collaboration.v1.CancelledEvent
-	40, // 51: agentroom.collaboration.v1.CollaborationEvent.failed:type_name -> agentroom.collaboration.v1.FailedEvent
+	42, // 33: agentroom.collaboration.v1.occurred_at:type_name -> google.protobuf.Timestamp
+	23, // 34: agentroom.collaboration.v1.accepted:type_name -> agentroom.collaboration.v1.AcceptedEvent
+	24, // 35: agentroom.collaboration.v1.collaboration_started:type_name -> agentroom.collaboration.v1.CollaborationStartedEvent
+	25, // 36: agentroom.collaboration.v1.speaker_selected:type_name -> agentroom.collaboration.v1.SpeakerSelectedEvent
+	26, // 37: agentroom.collaboration.v1.agent_turn_started:type_name -> agentroom.collaboration.v1.AgentTurnStartedEvent
+	27, // 38: agentroom.collaboration.v1.model_started:type_name -> agentroom.collaboration.v1.ModelStartedEvent
+	28, // 39: agentroom.collaboration.v1.model_completed:type_name -> agentroom.collaboration.v1.ModelCompletedEvent
+	29, // 40: agentroom.collaboration.v1.tool_started:type_name -> agentroom.collaboration.v1.ToolStartedEvent
+	30, // 41: agentroom.collaboration.v1.tool_completed:type_name -> agentroom.collaboration.v1.ToolCompletedEvent
+	31, // 42: agentroom.collaboration.v1.tool_failed:type_name -> agentroom.collaboration.v1.ToolFailedEvent
+	32, // 43: agentroom.collaboration.v1.output_delta:type_name -> agentroom.collaboration.v1.OutputDeltaEvent
+	33, // 44: agentroom.collaboration.v1.artifact_ready:type_name -> agentroom.collaboration.v1.ArtifactReadyEvent
+	34, // 45: agentroom.collaboration.v1.handoff_requested:type_name -> agentroom.collaboration.v1.HandoffRequestedEvent
+	35, // 46: agentroom.collaboration.v1.agent_message_completed:type_name -> agentroom.collaboration.v1.AgentMessageCompletedEvent
+	36, // 47: agentroom.collaboration.v1.checkpoint:type_name -> agentroom.collaboration.v1.CheckpointEvent
+	37, // 48: agentroom.collaboration.v1.completed:type_name -> agentroom.collaboration.v1.CompletedEvent
+	38, // 49: agentroom.collaboration.v1.stopped:type_name -> agentroom.collaboration.v1.StoppedEvent
+	39, // 50: agentroom.collaboration.v1.cancelled:type_name -> agentroom.collaboration.v1.CancelledEvent
+	40, // 51: agentroom.collaboration.v1.failed:type_name -> agentroom.collaboration.v1.FailedEvent
 	5,  // 52: agentroom.collaboration.v1.CollaborationRuntimeService.GetCapabilities:input_type -> agentroom.collaboration.v1.GetCapabilitiesRequest
 	17, // 53: agentroom.collaboration.v1.CollaborationRuntimeService.ExecuteConversation:input_type -> agentroom.collaboration.v1.ExecuteConversationRequest
 	7,  // 54: agentroom.collaboration.v1.CollaborationRuntimeService.GetCapabilities:output_type -> agentroom.collaboration.v1.GetCapabilitiesResponse

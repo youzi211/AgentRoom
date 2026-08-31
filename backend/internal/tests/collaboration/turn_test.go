@@ -1,4 +1,4 @@
-package collaborationturn_test
+package collaboration_test
 
 import (
 	"context"
@@ -7,15 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"agentroom/backend/internal/collaboration"
-	"agentroom/backend/internal/collaborationturn"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/tests/teststore"
+	"agentroom/backend/internal/collaboration"
 )
 
 func TestHandlerCreatesAgentRunsAndCommitsTurnMessages(t *testing.T) {
 	memory := &teststore.Store{}
-	handler, err := collaborationturn.New(memory, testRequest())
+	handler, err := collaboration.NewTurnHandler(memory, testRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +86,7 @@ func TestHandlerCreatesAgentRunsAndCommitsTurnMessages(t *testing.T) {
 
 func TestHandlerCompletingOneTurnTwiceReturnsCommittedMessage(t *testing.T) {
 	memory := &teststore.Store{}
-	handler, err := collaborationturn.New(memory, testRequest())
+	handler, err := collaboration.NewTurnHandler(memory, testRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +112,7 @@ func TestHandlerCompletingOneTurnTwiceReturnsCommittedMessage(t *testing.T) {
 func TestHandlerCommitFailureLeavesTurnRunningAndReturnsNoMessage(t *testing.T) {
 	commitErr := errors.New("commit unavailable")
 	memory := &teststore.Store{CommitAgentRunErr: commitErr}
-	handler, err := collaborationturn.New(memory, testRequest())
+	handler, err := collaboration.NewTurnHandler(memory, testRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,13 +131,13 @@ func TestHandlerCommitFailureLeavesTurnRunningAndReturnsNoMessage(t *testing.T) 
 }
 
 func TestHandlerRejectsCompletionWithoutCreatedTurn(t *testing.T) {
-	handler, err := collaborationturn.New(&teststore.Store{}, testRequest())
+	handler, err := collaboration.NewTurnHandler(&teststore.Store{}, testRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
 	completed := turnEvent(collaboration.EventAgentMessageCompleted, "turn_missing", "agent_1", time.Now().UTC())
 	completed.Message = &collaboration.AgentMessage{Content: "invalid"}
-	if _, _, err := handler.Handle(context.Background(), completed); !errors.Is(err, collaborationturn.ErrInvalidEvent) {
+	if _, _, err := handler.Handle(context.Background(), completed); !errors.Is(err, collaboration.ErrInvalidEvent) {
 		t.Fatalf("expected invalid event error, got %v", err)
 	}
 }

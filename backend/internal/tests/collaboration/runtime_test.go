@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"agentroom/backend/internal/collaboration"
-	"agentroom/backend/internal/tests/testcollaboration"
 )
 
 func TestFakeRuntimeRecordsRequestAndStreamsEventsInOrder(t *testing.T) {
@@ -37,7 +36,7 @@ func TestFakeRuntimeRecordsRequestAndStreamsEventsInOrder(t *testing.T) {
 			TurnCount: 0, Reason: collaboration.StopReasonCompleted,
 		}},
 	}
-	fake := &testcollaboration.Runtime{Events: wantEvents}
+	fake := &Runtime{Events: wantEvents}
 
 	stream, err := fake.ExecuteConversation(context.Background(), wantRequest)
 	if err != nil {
@@ -65,13 +64,13 @@ func TestFakeRuntimeRecordsRequestAndStreamsEventsInOrder(t *testing.T) {
 
 func TestFakeRuntimeInjectsExecuteAndStreamErrors(t *testing.T) {
 	executeErr := errors.New("execute failed")
-	fake := &testcollaboration.Runtime{ExecuteErr: executeErr}
+	fake := &Runtime{ExecuteErr: executeErr}
 	if _, err := fake.ExecuteConversation(context.Background(), collaboration.Request{}); !errors.Is(err, executeErr) {
 		t.Fatalf("expected execute error, got %v", err)
 	}
 
 	streamErr := errors.New("stream failed")
-	fake = &testcollaboration.Runtime{StreamErr: streamErr}
+	fake = &Runtime{StreamErr: streamErr}
 	stream, err := fake.ExecuteConversation(context.Background(), collaboration.Request{})
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +81,7 @@ func TestFakeRuntimeInjectsExecuteAndStreamErrors(t *testing.T) {
 }
 
 func TestFakeRuntimeObservesContextCancellation(t *testing.T) {
-	fake := &testcollaboration.Runtime{
+	fake := &Runtime{
 		WaitForCancellation: true,
 		Started:             make(chan struct{}),
 		Cancelled:           make(chan struct{}),
@@ -105,16 +104,22 @@ func TestFakeRuntimeObservesContextCancellation(t *testing.T) {
 }
 
 func TestCollaborationPortHasNoTransportOrFrameworkDependencies(t *testing.T) {
-	packages, err := parser.ParseDir(token.NewFileSet(), filepath.Join("..", "..", "collaboration"), nil, parser.ImportsOnly)
-	if err != nil {
-		t.Fatal(err)
+	// After merging collaboration subpackages, only the neutral type files
+	// (types.go, events.go, runtime.go) must stay free of transport/framework deps.
+	neutralFiles := []string{
+		filepath.Join("..", "..", "collaboration", "types.go"),
+		filepath.Join("..", "..", "collaboration", "events.go"),
+		filepath.Join("..", "..", "collaboration", "runtime.go"),
 	}
-	for _, parsedPackage := range packages {
-		for fileName, file := range parsedPackage.Files {
-			for _, imported := range file.Imports {
-				if imported.Path.Value != `"context"` && imported.Path.Value != `"time"` {
-					t.Fatalf("neutral collaboration port imports %s in %s", imported.Path.Value, fileName)
-				}
+	fset := token.NewFileSet()
+	for _, path := range neutralFiles {
+		file, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, imported := range file.Imports {
+			if imported.Path.Value != `"context"` && imported.Path.Value != `"time"` && imported.Path.Value != `"errors"` {
+				t.Fatalf("neutral collaboration file imports %s in %s", imported.Path.Value, path)
 			}
 		}
 	}

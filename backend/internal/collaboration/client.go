@@ -1,4 +1,4 @@
-package collaborationgrpc
+package collaboration
 
 import (
 	"context"
@@ -9,9 +9,7 @@ import (
 	"io"
 	"os"
 	"time"
-
-	"agentroom/backend/internal/collaboration"
-	collaborationruntimev1 "agentroom/backend/internal/collaborationproto/v1"
+	collaborationruntimev1 "agentroom/backend/internal/collaboration/proto/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -25,10 +23,7 @@ const healthServiceName = "agentroom.collaboration.v1.CollaborationRuntimeServic
 var (
 	ErrInvalidRequest   = errors.New("collaboration runtime request is invalid")
 	ErrAuthentication   = errors.New("collaboration runtime authentication failed")
-	ErrCapacity         = errors.New("collaboration runtime capacity exhausted")
 	ErrUnavailable      = errors.New("collaboration runtime is unavailable")
-	ErrProtocol         = errors.New("collaboration runtime protocol violation")
-	ErrDuplicateRun     = errors.New("collaboration runtime run is already active")
 	ErrRoomBusy         = errors.New("collaboration runtime room is busy")
 	ErrInvalidTransport = errors.New("collaboration runtime transport configuration is invalid")
 )
@@ -75,8 +70,8 @@ type Client struct {
 	maxEventBytes   uint32
 }
 
-var _ collaboration.CollaborationRuntime = (*Client)(nil)
-var _ collaboration.CapabilityProvider = (*Client)(nil)
+var _ CollaborationRuntime = (*Client)(nil)
+var _ CapabilityProvider = (*Client)(nil)
 
 func NewClient(config ClientConfig) (*Client, error) {
 	if err := config.Validate(); err != nil {
@@ -119,12 +114,12 @@ func (c *Client) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) Capabilities(ctx context.Context) (collaboration.RuntimeCapabilities, error) {
+func (c *Client) Capabilities(ctx context.Context) (RuntimeCapabilities, error) {
 	callCtx, cancel := context.WithTimeout(ctx, c.defaultTimeout)
 	defer cancel()
 	response, err := c.client.GetCapabilities(callCtx, &collaborationruntimev1.GetCapabilitiesRequest{})
 	if err != nil {
-		return collaboration.RuntimeCapabilities{}, mapGRPCError(callCtx, err)
+		return RuntimeCapabilities{}, mapGRPCError(callCtx, err)
 	}
 	return mapCapabilities(response)
 }
@@ -133,7 +128,7 @@ func (c *Client) Close() error {
 	return c.conn.Close()
 }
 
-func (c *Client) ExecuteConversation(ctx context.Context, request collaboration.Request) (collaboration.EventStream, error) {
+func (c *Client) ExecuteConversation(ctx context.Context, request Request) (EventStream, error) {
 	mapped, err := mapRequest(request)
 	if err != nil {
 		return nil, err
@@ -163,25 +158,25 @@ type eventStream struct {
 	maxEventBytes uint32
 }
 
-func (s *eventStream) Recv() (collaboration.Event, error) {
+func (s *eventStream) Recv() (Event, error) {
 	event, err := s.stream.Recv()
 	if errors.Is(err, io.EOF) {
 		s.cancel()
-		return collaboration.Event{}, io.EOF
+		return Event{}, io.EOF
 	}
 	if err != nil {
 		mappedErr := mapGRPCError(s.ctx, err)
 		s.cancel()
-		return collaboration.Event{}, mappedErr
+		return Event{}, mappedErr
 	}
 	if err := collaborationruntimev1.ValidateEventSize(event, s.maxEventBytes); err != nil {
 		s.cancel()
-		return collaboration.Event{}, ErrProtocol
+		return Event{}, ErrProtocol
 	}
 	mapped, err := mapEvent(event)
 	if err != nil {
 		s.cancel()
-		return collaboration.Event{}, err
+		return Event{}, err
 	}
 	if isTerminal(mapped.Kind) {
 		s.cancel()
@@ -189,41 +184,41 @@ func (s *eventStream) Recv() (collaboration.Event, error) {
 	return mapped, nil
 }
 
-func isTerminal(kind collaboration.EventKind) bool {
+func isTerminal(kind EventKind) bool {
 	switch kind {
-	case collaboration.EventCompleted, collaboration.EventStopped, collaboration.EventCancelled, collaboration.EventFailed:
+	case EventCompleted, EventStopped, EventCancelled, EventFailed:
 		return true
 	default:
 		return false
 	}
 }
 
-func mapCapabilities(response *collaborationruntimev1.GetCapabilitiesResponse) (collaboration.RuntimeCapabilities, error) {
+func mapCapabilities(response *collaborationruntimev1.GetCapabilitiesResponse) (RuntimeCapabilities, error) {
 	if response == nil || len(response.GetSupportedProtocolVersions()) == 0 {
-		return collaboration.RuntimeCapabilities{}, ErrProtocol
+		return RuntimeCapabilities{}, ErrProtocol
 	}
-	result := collaboration.RuntimeCapabilities{
+	result := RuntimeCapabilities{
 		Ready:                     response.GetReady(),
 		SupportedProtocolVersions: append([]string(nil), response.GetSupportedProtocolVersions()...),
-		Engines:                   make([]collaboration.EngineCapability, 0, len(response.GetEngines())),
-		SupportedTriggerModes:     make([]collaboration.TriggerMode, 0, len(response.GetSupportedTriggerModes())),
+		Engines:                   make([]EngineCapability, 0, len(response.GetEngines())),
+		SupportedTriggerModes:     make([]TriggerMode, 0, len(response.GetSupportedTriggerModes())),
 	}
 	for _, engine := range response.GetEngines() {
 		if engine == nil {
-			return collaboration.RuntimeCapabilities{}, ErrProtocol
+			return RuntimeCapabilities{}, ErrProtocol
 		}
-		mapped := collaboration.Engine(engine.GetEngine())
-		if mapped != collaboration.EngineNative && mapped != collaboration.EngineAutoGen {
-			return collaboration.RuntimeCapabilities{}, ErrProtocol
+		mapped := Engine(engine.GetEngine())
+		if mapped != EngineNative && mapped != EngineAutoGen {
+			return RuntimeCapabilities{}, ErrProtocol
 		}
-		result.Engines = append(result.Engines, collaboration.EngineCapability{
+		result.Engines = append(result.Engines, EngineCapability{
 			Engine: mapped, Version: engine.GetVersion(), Enabled: engine.GetEnabled(), Ready: engine.GetReady(),
 		})
 	}
 	for _, mode := range response.GetSupportedTriggerModes() {
-		mapped := collaboration.TriggerMode(mode)
-		if mapped != collaboration.TriggerMentionOnly && mapped != collaboration.TriggerAutomatic {
-			return collaboration.RuntimeCapabilities{}, ErrProtocol
+		mapped := TriggerMode(mode)
+		if mapped != TriggerMentionOnly && mapped != TriggerAutomatic {
+			return RuntimeCapabilities{}, ErrProtocol
 		}
 		result.SupportedTriggerModes = append(result.SupportedTriggerModes, mapped)
 	}

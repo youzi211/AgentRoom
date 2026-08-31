@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	collaborationruntimev1 "agentroom/backend/internal/collaborationproto/v1"
+	collaborationruntimev1 "agentroom/backend/internal/collaboration/proto/v1"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/durationpb"

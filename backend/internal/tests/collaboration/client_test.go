@@ -1,4 +1,4 @@
-package collaborationgrpc_test
+package collaboration_test
 
 import (
 	"context"
@@ -10,15 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"agentroom/backend/internal/collaboration"
-	"agentroom/backend/internal/collaborationgrpc"
-	collaborationruntimev1 "agentroom/backend/internal/collaborationproto/v1"
+	collaborationruntimev1 "agentroom/backend/internal/collaboration/proto/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	grpc_health_v1 "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"agentroom/backend/internal/collaboration"
 )
 
 type fakeServer struct {
@@ -44,8 +43,8 @@ func (s fakeServer) GetCapabilities(context.Context, *collaborationruntimev1.Get
 func startClient(
 	t *testing.T,
 	handler func(*collaborationruntimev1.ExecuteConversationRequest, grpc.ServerStreamingServer[collaborationruntimev1.CollaborationEvent]) error,
-	configure func(*collaborationgrpc.ClientConfig),
-) (*collaborationgrpc.Client, *health.Server) {
+	configure func(*collaboration.ClientConfig),
+) (*collaboration.Client, *health.Server) {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -57,14 +56,14 @@ func startClient(
 	grpc_health_v1.RegisterHealthServer(server, healthServer)
 	go func() { _ = server.Serve(listener) }()
 
-	clientConfig := collaborationgrpc.ClientConfig{
+	clientConfig := collaboration.ClientConfig{
 		Address: listener.Addr().String(), Insecure: true, Timeout: time.Second,
 		MaxRequestBytes: 1024 * 1024, MaxEventBytes: 1024 * 1024,
 	}
 	if configure != nil {
 		configure(&clientConfig)
 	}
-	client, err := collaborationgrpc.NewClient(clientConfig)
+	client, err := collaboration.NewClient(clientConfig)
 	if err != nil {
 		server.Stop()
 		_ = listener.Close()
@@ -191,7 +190,7 @@ func TestClientUsesCollaborationHealthService(t *testing.T) {
 		t.Fatalf("expected serving client: %v", err)
 	}
 	healthServer.SetServingStatus("agentroom.collaboration.v1.CollaborationRuntimeService", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
-	if err := client.Ready(context.Background()); !errors.Is(err, collaborationgrpc.ErrUnavailable) {
+	if err := client.Ready(context.Background()); !errors.Is(err, collaboration.ErrUnavailable) {
 		t.Fatalf("expected unavailable health status, got %v", err)
 	}
 }
@@ -250,7 +249,7 @@ func TestClientAppliesDefaultDeadline(t *testing.T) {
 		<-stream.Context().Done()
 		close(cancelled)
 		return stream.Context().Err()
-	}, func(config *collaborationgrpc.ClientConfig) {
+	}, func(config *collaboration.ClientConfig) {
 		config.Timeout = 30 * time.Millisecond
 	})
 	request := validRequest()
@@ -301,14 +300,14 @@ func TestClientEnforcesMessageLimits(t *testing.T) {
 		return stream.Send(turnProtoEvent(1, &collaborationruntimev1.CollaborationEvent_OutputDelta{OutputDelta: &collaborationruntimev1.OutputDeltaEvent{
 			Text: strings.Repeat("x", 2048),
 		}}))
-	}, func(config *collaborationgrpc.ClientConfig) {
+	}, func(config *collaboration.ClientConfig) {
 		config.MaxRequestBytes = 1024
 		config.MaxEventBytes = 512
 	})
 
 	oversized := validRequest()
 	oversized.Snapshot.Trigger.Content = strings.Repeat("x", 4096)
-	if _, err := client.ExecuteConversation(context.Background(), oversized); !errors.Is(err, collaborationgrpc.ErrInvalidRequest) {
+	if _, err := client.ExecuteConversation(context.Background(), oversized); !errors.Is(err, collaboration.ErrInvalidRequest) {
 		t.Fatalf("expected request limit error, got %v", err)
 	}
 
@@ -316,7 +315,7 @@ func TestClientEnforcesMessageLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := stream.Recv(); !errors.Is(err, collaborationgrpc.ErrCapacity) {
+	if _, err := stream.Recv(); !errors.Is(err, collaboration.ErrCapacity) {
 		t.Fatalf("expected receive limit error, got %v", err)
 	}
 }
@@ -330,7 +329,7 @@ func TestClientDoesNotExposeRemoteErrorText(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = stream.Recv()
-	if !errors.Is(err, collaborationgrpc.ErrProtocol) {
+	if !errors.Is(err, collaboration.ErrProtocol) {
 		t.Fatalf("expected protocol error, got %v", err)
 	}
 	if strings.Contains(strings.ToLower(err.Error()), "secret") || strings.Contains(strings.ToLower(err.Error()), "authorization") {
@@ -339,10 +338,10 @@ func TestClientDoesNotExposeRemoteErrorText(t *testing.T) {
 }
 
 func TestClientRejectsInvalidTLSConfiguration(t *testing.T) {
-	config := collaborationgrpc.ClientConfig{
+	config := collaboration.ClientConfig{
 		Address: "runtime.invalid:443", Timeout: time.Second, MaxRequestBytes: 1024, MaxEventBytes: 1024,
 	}
-	if _, err := collaborationgrpc.NewClient(config); !errors.Is(err, collaborationgrpc.ErrInvalidTransport) {
+	if _, err := collaboration.NewClient(config); !errors.Is(err, collaboration.ErrInvalidTransport) {
 		t.Fatalf("expected missing CA error, got %v", err)
 	}
 
@@ -351,12 +350,12 @@ func TestClientRejectsInvalidTLSConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	config.CAFile = caFile
-	if _, err := collaborationgrpc.NewClient(config); !errors.Is(err, collaborationgrpc.ErrInvalidTransport) {
+	if _, err := collaboration.NewClient(config); !errors.Is(err, collaboration.ErrInvalidTransport) {
 		t.Fatalf("expected invalid CA error, got %v", err)
 	}
 
 	config.ClientCertFile = "client.pem"
-	if _, err := collaborationgrpc.NewClient(config); !errors.Is(err, collaborationgrpc.ErrInvalidTransport) {
+	if _, err := collaboration.NewClient(config); !errors.Is(err, collaboration.ErrInvalidTransport) {
 		t.Fatalf("expected incomplete mTLS identity error, got %v", err)
 	}
 }

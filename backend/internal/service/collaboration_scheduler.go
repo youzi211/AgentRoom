@@ -10,10 +10,6 @@ import (
 
 	"agentroom/backend/internal/agent"
 	"agentroom/backend/internal/collaboration"
-	"agentroom/backend/internal/collaborationcoordinator"
-	"agentroom/backend/internal/collaborationrun"
-	"agentroom/backend/internal/collaborationsnapshot"
-	"agentroom/backend/internal/collaborationturn"
 	"agentroom/backend/internal/logging"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/realtime"
@@ -30,7 +26,7 @@ type RemoteCollaborationConfig struct {
 }
 
 type collaborationExecutor interface {
-	Execute(context.Context, collaboration.Request, collaborationcoordinator.EventHandler) error
+	Execute(context.Context, collaboration.Request, collaboration.EventHandler) error
 }
 
 type remoteCollaborationStore interface {
@@ -133,11 +129,11 @@ func (s *RemoteCollaborationScheduler) HandleHumanMessage(ctx context.Context, c
 	if err != nil {
 		return errors.Join(err, s.failPreparation(ctx, runID, createdAt))
 	}
-	lifecycle, err := collaborationrun.New(s.store, request, engineVersion)
+	lifecycle, err := collaboration.NewLifecycle(s.store, request, engineVersion)
 	if err != nil {
 		return errors.Join(err, s.failPreparation(ctx, runID, createdAt))
 	}
-	turns, err := collaborationturn.New(s.store, request)
+	turns, err := collaboration.NewTurnHandler(s.store, request)
 	if err != nil {
 		return errors.Join(err, s.failPreparation(ctx, runID, createdAt))
 	}
@@ -236,7 +232,7 @@ func (s *RemoteCollaborationScheduler) buildRequest(
 	agents []model.Agent,
 	mentioned []model.Agent,
 ) (collaboration.Request, error) {
-	bindings := make([]collaborationsnapshot.AgentBinding, 0, len(agents))
+	bindings := make([]collaboration.AgentBinding, 0, len(agents))
 	for _, currentAgent := range agents {
 		scope := model.RuntimeScopeForAgent(currentAgent.Runtime)
 		resolved, err := s.modelResolver.Resolve(ctx, scope, currentAgent.ModelProfileID)
@@ -247,7 +243,7 @@ func (s *RemoteCollaborationScheduler) buildRequest(
 		if profileID == "" {
 			profileID = "environment:" + scope
 		}
-		bindings = append(bindings, collaborationsnapshot.AgentBinding{
+		bindings = append(bindings, collaboration.AgentBinding{
 			Agent: currentAgent,
 			ModelReference: collaboration.ModelReference{
 				ID: "model_ref_" + currentAgent.ID, ProfileID: profileID, Source: resolved.Source,
@@ -259,7 +255,7 @@ func (s *RemoteCollaborationScheduler) buildRequest(
 	for _, candidate := range mentioned {
 		candidateIDs = append(candidateIDs, candidate.ID)
 	}
-	return collaborationsnapshot.Build(collaborationsnapshot.Input{
+	return collaboration.Build(collaboration.Input{
 		CollaborationRunID:       runID,
 		TraceID:                  runID,
 		Room:                     currentRoom.Info(),

@@ -1,4 +1,4 @@
-package collaborationrun
+package collaboration
 
 import (
 	"context"
@@ -6,16 +6,13 @@ import (
 	"fmt"
 	"time"
 
-	"agentroom/backend/internal/collaboration"
-	"agentroom/backend/internal/collaborationevent"
-	"agentroom/backend/internal/collaborationgrpc"
+
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/store"
 )
 
 var ErrInvalidLifecycle = errors.New("invalid collaboration run lifecycle")
 
-const terminalWriteTimeout = 5 * time.Second
 
 type lifecycleStore interface {
 	StartCollaborationRun(context.Context, string, string, time.Time) error
@@ -32,7 +29,7 @@ type Lifecycle struct {
 	terminalCommitted bool
 }
 
-func New(store lifecycleStore, request collaboration.Request, engineVersion string) (*Lifecycle, error) {
+func NewLifecycle(store lifecycleStore, request Request, engineVersion string) (*Lifecycle, error) {
 	if store == nil {
 		return nil, fmt.Errorf("%w: store is required", ErrInvalidLifecycle)
 	}
@@ -47,7 +44,7 @@ func New(store lifecycleStore, request collaboration.Request, engineVersion stri
 	}, nil
 }
 
-func (l *Lifecycle) Handle(ctx context.Context, event collaboration.Event) error {
+func (l *Lifecycle) Handle(ctx context.Context, event Event) error {
 	if event.CollaborationRunID != l.runID {
 		return fmt.Errorf("%w: unexpected collaboration run ID", ErrInvalidLifecycle)
 	}
@@ -55,14 +52,14 @@ func (l *Lifecycle) Handle(ctx context.Context, event collaboration.Event) error
 		return nil
 	}
 	switch event.Kind {
-	case collaboration.EventAccepted:
+	case EventAccepted:
 		return l.store.StartCollaborationRun(ctx, l.runID, l.engineVersion, eventTime(event.OccurredAt))
-	case collaboration.EventAgentMessageCompleted:
+	case EventAgentMessageCompleted:
 		if event.TurnID != "" {
 			l.completedTurnIDs[event.TurnID] = struct{}{}
 		}
 		return nil
-	case collaboration.EventCompleted, collaboration.EventStopped, collaboration.EventCancelled, collaboration.EventFailed:
+	case EventCompleted, EventStopped, EventCancelled, EventFailed:
 		terminal, err := terminalInput(l.runID, event)
 		if err != nil {
 			return err
@@ -103,7 +100,7 @@ func (l *Lifecycle) Converge(ctx context.Context, executionErr error) error {
 	return nil
 }
 
-func terminalInput(runID string, event collaboration.Event) (store.FinishCollaborationRunInput, error) {
+func terminalInput(runID string, event Event) (store.FinishCollaborationRunInput, error) {
 	if event.Terminal == nil {
 		return store.FinishCollaborationRunInput{}, fmt.Errorf("%w: terminal payload is required", ErrInvalidLifecycle)
 	}
@@ -111,25 +108,25 @@ func terminalInput(runID string, event collaboration.Event) (store.FinishCollabo
 		RunID: runID, TurnCount: int(event.Terminal.TurnCount), CompletedAt: eventTime(event.OccurredAt),
 	}
 	switch event.Kind {
-	case collaboration.EventCompleted:
+	case EventCompleted:
 		input.Status = model.CollaborationRunStatusSucceeded
 		input.StopReason = model.CollaborationStopReasonCompleted
-	case collaboration.EventStopped:
+	case EventStopped:
 		input.Status = model.CollaborationRunStatusStopped
 		input.StopReason = string(event.Terminal.Reason)
-	case collaboration.EventCancelled:
+	case EventCancelled:
 		input.StopReason = string(event.Terminal.Reason)
 		switch event.Terminal.Reason {
-		case collaboration.StopReasonCancelled:
+		case StopReasonCancelled:
 			input.Status = model.CollaborationRunStatusCancelled
-		case collaboration.StopReasonDeadlineExceeded:
+		case StopReasonDeadlineExceeded:
 			input.Status = model.CollaborationRunStatusTimeout
-		case collaboration.StopReasonInterrupted:
+		case StopReasonInterrupted:
 			input.Status = model.CollaborationRunStatusInterrupted
 		default:
 			return store.FinishCollaborationRunInput{}, fmt.Errorf("%w: unsupported cancellation reason", ErrInvalidLifecycle)
 		}
-	case collaboration.EventFailed:
+	case EventFailed:
 		input.Status = model.CollaborationRunStatusFailed
 		input.StopReason = string(event.Terminal.Reason)
 		input.Error = terminalFailureAudit(event.Terminal.Failure)
@@ -152,11 +149,11 @@ func terminalFromError(runID string, turnCount int, err error, completedAt time.
 	case errors.Is(err, context.Canceled):
 		input.Status = model.CollaborationRunStatusCancelled
 		input.StopReason = model.CollaborationStopReasonCancelled
-	case errors.Is(err, collaborationevent.ErrProtocol), errors.Is(err, collaborationgrpc.ErrProtocol):
+	case errors.Is(err, ErrProtocol), errors.Is(err, ErrProtocol):
 		input.Status = model.CollaborationRunStatusFailed
 		input.StopReason = model.CollaborationStopReasonProtocolError
 		input.Error = "collaboration protocol validation failed"
-	case errors.Is(err, collaborationgrpc.ErrUnavailable):
+	case errors.Is(err, ErrUnavailable):
 		input.Status = model.CollaborationRunStatusInterrupted
 		input.StopReason = model.CollaborationStopReasonInterrupted
 		input.Error = "collaboration Runtime became unavailable"
@@ -168,7 +165,7 @@ func terminalFromError(runID string, turnCount int, err error, completedAt time.
 	return input
 }
 
-func terminalFailureAudit(failure *collaboration.Failure) string {
+func terminalFailureAudit(failure *Failure) string {
 	if failure == nil || failure.Code == "" {
 		return "collaboration Engine failed"
 	}

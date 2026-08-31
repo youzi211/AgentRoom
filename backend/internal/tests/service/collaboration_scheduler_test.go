@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"agentroom/backend/internal/collaboration"
-	"agentroom/backend/internal/collaborationcoordinator"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/realtime"
 	"agentroom/backend/internal/room"
@@ -23,7 +22,7 @@ type capturingCollaborationCoordinator struct {
 	err      error
 }
 
-func (c *capturingCollaborationCoordinator) Execute(ctx context.Context, request collaboration.Request, handler collaborationcoordinator.EventHandler) error {
+func (c *capturingCollaborationCoordinator) Execute(ctx context.Context, request collaboration.Request, handler collaboration.EventHandler) error {
 	c.mu.Lock()
 	c.requests = append(c.requests, request)
 	events := c.events

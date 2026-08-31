@@ -1,19 +1,16 @@
-package collaborationevent
+package collaboration
 
 import (
-	"errors"
 	"fmt"
-
-	"agentroom/backend/internal/collaboration"
 )
 
-var ErrProtocol = errors.New("collaboration event protocol violation")
-
-type turnState struct {
+type validationTurnState struct {
 	agentID   string
 	started   bool
 	completed bool
 }
+
+
 
 // Validator applies AgentRoom's stream and turn invariants to neutral events.
 type Validator struct {
@@ -28,12 +25,12 @@ type Validator struct {
 	started              bool
 	terminal             bool
 	activeTurnID         string
-	turns                map[string]*turnState
+	turns                map[string]*validationTurnState
 	selectedTurnsByAgent map[string]uint32
 	completedTurns       uint32
 }
 
-func NewValidator(request collaboration.Request) *Validator {
+func NewValidator(request Request) *Validator {
 	allowedAgents := make(map[string]struct{}, len(request.Snapshot.Agents))
 	for _, agent := range request.Snapshot.Agents {
 		allowedAgents[agent.ID] = struct{}{}
@@ -45,32 +42,32 @@ func NewValidator(request collaboration.Request) *Validator {
 		maxTurnsPerAgent:     request.Snapshot.Policy.MaxTurnsPerAgent,
 		allowAgentHandoff:    request.Snapshot.Policy.AllowAgentHandoff,
 		allowSelfFollowup:    request.Snapshot.Policy.AllowSelfFollowup,
-		turns:                make(map[string]*turnState),
+		turns:                make(map[string]*validationTurnState),
 		selectedTurnsByAgent: make(map[string]uint32),
 	}
 }
 
-func (v *Validator) Validate(event collaboration.Event) error {
+func (v *Validator) Validate(event Event) error {
 	if err := v.validateEnvelope(event); err != nil {
 		return err
 	}
 
 	switch event.Kind {
-	case collaboration.EventAccepted:
+	case EventAccepted:
 		if v.accepted {
 			return protocolError("accepted event was repeated")
 		}
 		v.accepted = true
-	case collaboration.EventCollaborationStarted:
+	case EventCollaborationStarted:
 		if v.started || len(v.turns) != 0 {
 			return protocolError("collaboration_started is out of order")
 		}
 		v.started = true
-	case collaboration.EventSpeakerSelected:
+	case EventSpeakerSelected:
 		if err := v.selectTurn(event); err != nil {
 			return err
 		}
-	case collaboration.EventAgentTurnStarted:
+	case EventAgentTurnStarted:
 		turn, err := v.activeTurn(event)
 		if err != nil {
 			return err
@@ -79,32 +76,32 @@ func (v *Validator) Validate(event collaboration.Event) error {
 			return protocolError("turn %q was started more than once", event.TurnID)
 		}
 		turn.started = true
-	case collaboration.EventModelStarted, collaboration.EventModelCompleted, collaboration.EventOutputDelta:
+	case EventModelStarted, EventModelCompleted, EventOutputDelta:
 		if _, err := v.activeTurn(event); err != nil {
 			return err
 		}
-	case collaboration.EventToolStarted, collaboration.EventToolCompleted, collaboration.EventToolFailed:
+	case EventToolStarted, EventToolCompleted, EventToolFailed:
 		if _, err := v.activeTurn(event); err != nil {
 			return err
 		}
 		if event.Tool == nil {
 			return protocolError("%s event payload is required", event.Kind)
 		}
-	case collaboration.EventArtifactReady:
+	case EventArtifactReady:
 		if _, err := v.activeTurn(event); err != nil {
 			return err
 		}
 		if event.Artifact == nil {
 			return protocolError("artifact_ready event payload is required")
 		}
-	case collaboration.EventHandoffRequested:
+	case EventHandoffRequested:
 		if _, err := v.activeTurn(event); err != nil {
 			return err
 		}
 		if err := v.validateHandoff(event); err != nil {
 			return err
 		}
-	case collaboration.EventAgentMessageCompleted:
+	case EventAgentMessageCompleted:
 		turn, err := v.activeTurn(event)
 		if err != nil {
 			return err
@@ -115,11 +112,11 @@ func (v *Validator) Validate(event collaboration.Event) error {
 		turn.completed = true
 		v.completedTurns++
 		v.activeTurnID = ""
-	case collaboration.EventCheckpoint:
+	case EventCheckpoint:
 		if event.Checkpoint == nil {
 			return protocolError("checkpoint event payload is required")
 		}
-	case collaboration.EventCompleted, collaboration.EventStopped, collaboration.EventCancelled, collaboration.EventFailed:
+	case EventCompleted, EventStopped, EventCancelled, EventFailed:
 		if err := v.validateTerminal(event); err != nil {
 			return err
 		}
@@ -140,8 +137,8 @@ func (v *Validator) CompletedTurns() uint32 {
 	return v.completedTurns
 }
 
-func (v *Validator) validateEnvelope(event collaboration.Event) error {
-	if event.ProtocolVersion != collaboration.ProtocolVersion {
+func (v *Validator) validateEnvelope(event Event) error {
+	if event.ProtocolVersion != ProtocolVersion {
 		return protocolError("unsupported protocol version")
 	}
 	if event.CollaborationRunID == "" || event.CollaborationRunID != v.runID {
@@ -153,7 +150,7 @@ func (v *Validator) validateEnvelope(event collaboration.Event) error {
 	if event.Sequence == 0 || event.Sequence <= v.lastSequence {
 		return protocolError("event sequence must increase")
 	}
-	if !v.accepted && event.Kind != collaboration.EventAccepted {
+	if !v.accepted && event.Kind != EventAccepted {
 		return protocolError("first event must be accepted")
 	}
 	if isTurnScoped(event.Kind) {
@@ -169,7 +166,7 @@ func (v *Validator) validateEnvelope(event collaboration.Event) error {
 	return nil
 }
 
-func (v *Validator) selectTurn(event collaboration.Event) error {
+func (v *Validator) selectTurn(event Event) error {
 	if v.activeTurnID != "" {
 		return protocolError("turn %q is still active", v.activeTurnID)
 	}
@@ -182,13 +179,13 @@ func (v *Validator) selectTurn(event collaboration.Event) error {
 	if v.maxTurnsPerAgent == 0 || v.selectedTurnsByAgent[event.AgentID] >= v.maxTurnsPerAgent {
 		return protocolError("maximum turns for Agent exceeded")
 	}
-	v.turns[event.TurnID] = &turnState{agentID: event.AgentID}
+	v.turns[event.TurnID] = &validationTurnState{agentID: event.AgentID}
 	v.selectedTurnsByAgent[event.AgentID]++
 	v.activeTurnID = event.TurnID
 	return nil
 }
 
-func (v *Validator) activeTurn(event collaboration.Event) (*turnState, error) {
+func (v *Validator) activeTurn(event Event) (*validationTurnState, error) {
 	turn, ok := v.turns[event.TurnID]
 	if !ok || v.activeTurnID != event.TurnID {
 		return nil, protocolError("event references a turn that is not active")
@@ -202,7 +199,7 @@ func (v *Validator) activeTurn(event collaboration.Event) (*turnState, error) {
 	return turn, nil
 }
 
-func (v *Validator) validateHandoff(event collaboration.Event) error {
+func (v *Validator) validateHandoff(event Event) error {
 	if !v.allowAgentHandoff || event.Handoff == nil || event.Handoff.TargetAgentID == "" {
 		return protocolError("handoff is not allowed or has no target")
 	}
@@ -215,20 +212,20 @@ func (v *Validator) validateHandoff(event collaboration.Event) error {
 	return nil
 }
 
-func (v *Validator) validateTerminal(event collaboration.Event) error {
+func (v *Validator) validateTerminal(event Event) error {
 	if event.Terminal == nil {
 		return protocolError("terminal event payload is required")
 	}
 	if event.Terminal.TurnCount != v.completedTurns {
 		return protocolError("terminal turn count does not match completed turns")
 	}
-	if event.Kind == collaboration.EventCompleted && v.activeTurnID != "" {
+	if event.Kind == EventCompleted && v.activeTurnID != "" {
 		return protocolError("completed event cannot close an active turn")
 	}
 	if !terminalReasonAllowed(event.Kind, event.Terminal.Reason) {
 		return protocolError("terminal reason is incompatible with event kind")
 	}
-	if event.Kind == collaboration.EventFailed {
+	if event.Kind == EventFailed {
 		if event.Terminal.Failure == nil {
 			return protocolError("failed event requires failure details")
 		}
@@ -238,41 +235,41 @@ func (v *Validator) validateTerminal(event collaboration.Event) error {
 	return nil
 }
 
-func isTurnScoped(kind collaboration.EventKind) bool {
+func isTurnScoped(kind EventKind) bool {
 	switch kind {
-	case collaboration.EventSpeakerSelected,
-		collaboration.EventAgentTurnStarted,
-		collaboration.EventModelStarted,
-		collaboration.EventModelCompleted,
-		collaboration.EventToolStarted,
-		collaboration.EventToolCompleted,
-		collaboration.EventToolFailed,
-		collaboration.EventOutputDelta,
-		collaboration.EventArtifactReady,
-		collaboration.EventHandoffRequested,
-		collaboration.EventAgentMessageCompleted:
+	case EventSpeakerSelected,
+		EventAgentTurnStarted,
+		EventModelStarted,
+		EventModelCompleted,
+		EventToolStarted,
+		EventToolCompleted,
+		EventToolFailed,
+		EventOutputDelta,
+		EventArtifactReady,
+		EventHandoffRequested,
+		EventAgentMessageCompleted:
 		return true
 	default:
 		return false
 	}
 }
 
-func terminalReasonAllowed(kind collaboration.EventKind, reason collaboration.StopReason) bool {
+func terminalReasonAllowed(kind EventKind, reason StopReason) bool {
 	switch kind {
-	case collaboration.EventCompleted:
-		return reason == collaboration.StopReasonCompleted
-	case collaboration.EventStopped:
-		return reason == collaboration.StopReasonMaxTurns ||
-			reason == collaboration.StopReasonMaxTurnsPerAgent ||
-			reason == collaboration.StopReasonEmptyOutput ||
-			reason == collaboration.StopReasonDuplicateOutput ||
-			reason == collaboration.StopReasonNoEligibleAgent
-	case collaboration.EventCancelled:
-		return reason == collaboration.StopReasonCancelled ||
-			reason == collaboration.StopReasonDeadlineExceeded ||
-			reason == collaboration.StopReasonInterrupted
-	case collaboration.EventFailed:
-		return reason == collaboration.StopReasonEngineFailure || reason == collaboration.StopReasonProtocolError
+	case EventCompleted:
+		return reason == StopReasonCompleted
+	case EventStopped:
+		return reason == StopReasonMaxTurns ||
+			reason == StopReasonMaxTurnsPerAgent ||
+			reason == StopReasonEmptyOutput ||
+			reason == StopReasonDuplicateOutput ||
+			reason == StopReasonNoEligibleAgent
+	case EventCancelled:
+		return reason == StopReasonCancelled ||
+			reason == StopReasonDeadlineExceeded ||
+			reason == StopReasonInterrupted
+	case EventFailed:
+		return reason == StopReasonEngineFailure || reason == StopReasonProtocolError
 	default:
 		return false
 	}

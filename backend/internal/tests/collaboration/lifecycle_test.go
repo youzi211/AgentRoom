@@ -1,4 +1,4 @@
-package collaborationrun_test
+package collaboration_test
 
 import (
 	"context"
@@ -7,13 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"agentroom/backend/internal/collaboration"
-	"agentroom/backend/internal/collaborationevent"
-	"agentroom/backend/internal/collaborationgrpc"
-	"agentroom/backend/internal/collaborationrun"
 	"agentroom/backend/internal/model"
 	"agentroom/backend/internal/store"
 	"agentroom/backend/internal/tests/teststore"
+	"agentroom/backend/internal/collaboration"
 )
 
 func TestLifecycleMapsAllRemoteTerminalStates(t *testing.T) {
@@ -65,9 +62,9 @@ func TestLifecycleConvergesExecutionErrors(t *testing.T) {
 	}{
 		{name: "cancelled", err: context.Canceled, wantStatus: model.CollaborationRunStatusCancelled, wantReason: model.CollaborationStopReasonCancelled},
 		{name: "timeout", err: context.DeadlineExceeded, wantStatus: model.CollaborationRunStatusTimeout, wantReason: model.CollaborationStopReasonDeadlineExceeded},
-		{name: "protocol", err: fmt.Errorf("validate: %w", collaborationevent.ErrProtocol), wantStatus: model.CollaborationRunStatusFailed, wantReason: model.CollaborationStopReasonProtocolError},
-		{name: "transport protocol", err: collaborationgrpc.ErrProtocol, wantStatus: model.CollaborationRunStatusFailed, wantReason: model.CollaborationStopReasonProtocolError},
-		{name: "interrupted", err: collaborationgrpc.ErrUnavailable, wantStatus: model.CollaborationRunStatusInterrupted, wantReason: model.CollaborationStopReasonInterrupted},
+		{name: "protocol", err: fmt.Errorf("validate: %w", collaboration.ErrProtocol), wantStatus: model.CollaborationRunStatusFailed, wantReason: model.CollaborationStopReasonProtocolError},
+		{name: "transport protocol", err: collaboration.ErrProtocol, wantStatus: model.CollaborationRunStatusFailed, wantReason: model.CollaborationStopReasonProtocolError},
+		{name: "interrupted", err: collaboration.ErrUnavailable, wantStatus: model.CollaborationRunStatusInterrupted, wantReason: model.CollaborationStopReasonInterrupted},
 		{name: "engine failure", err: errors.New("provider secret"), wantStatus: model.CollaborationRunStatusFailed, wantReason: model.CollaborationStopReasonEngineFailure},
 	}
 	for _, test := range tests {
@@ -107,7 +104,7 @@ func TestLifecycleTerminalCommitAndConvergenceAreIdempotent(t *testing.T) {
 	}
 }
 
-func startedLifecycle(t *testing.T) (*teststore.Store, *collaborationrun.Lifecycle) {
+func startedLifecycle(t *testing.T) (*teststore.Store, *collaboration.Lifecycle) {
 	t.Helper()
 	memory := &teststore.Store{}
 	now := time.Now().UTC()
@@ -116,7 +113,7 @@ func startedLifecycle(t *testing.T) (*teststore.Store, *collaborationrun.Lifecyc
 	}); err != nil {
 		t.Fatal(err)
 	}
-	lifecycle, err := collaborationrun.New(memory, collaboration.Request{CollaborationRunID: "collab_1"}, "native-v1")
+	lifecycle, err := collaboration.NewLifecycle(memory, collaboration.Request{CollaborationRunID: "collab_1"}, "native-v1")
 	if err != nil {
 		t.Fatal(err)
 	}

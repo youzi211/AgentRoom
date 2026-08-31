@@ -15,8 +15,6 @@ import (
 	"agentroom/backend/internal/agent"
 	"agentroom/backend/internal/api"
 	"agentroom/backend/internal/collaboration"
-	"agentroom/backend/internal/collaborationcoordinator"
-	"agentroom/backend/internal/collaborationgrpc"
 	"agentroom/backend/internal/config"
 	"agentroom/backend/internal/llm"
 	"agentroom/backend/internal/logging"
@@ -153,10 +151,10 @@ func main() {
 			}),
 		))
 	}
-	var collaborationClient *collaborationgrpc.Client
-	var collaborationCoordinator *collaborationcoordinator.Coordinator
+	var collaborationClient *collaboration.Client
+	var collaborationCoordinator *collaboration.Coordinator
 	if collaborationRuntimeConfig.Mode == config.CollaborationRuntimeModeRemote {
-		collaborationClient, err = collaborationgrpc.NewClient(collaborationgrpc.ClientConfig{
+		collaborationClient, err = collaboration.NewClient(collaboration.ClientConfig{
 			Address:         collaborationRuntimeConfig.GRPCAddress,
 			Insecure:        collaborationRuntimeConfig.GRPCInsecure,
 			ServerName:      collaborationRuntimeConfig.ServerName,
@@ -171,7 +169,7 @@ func main() {
 			fatal(logger, "create remote Collaboration Runtime client", err)
 		}
 		defer collaborationClient.Close()
-		collaborationCoordinator, err = collaborationcoordinator.New(collaborationClient, collaborationcoordinator.Config{
+		collaborationCoordinator, err = collaboration.NewCoordinator(collaborationClient, collaboration.Config{
 			MaxConcurrent: collaborationRuntimeConfig.MaxConcurrent,
 			MaxPending:    collaborationRuntimeConfig.MaxPending,
 		})

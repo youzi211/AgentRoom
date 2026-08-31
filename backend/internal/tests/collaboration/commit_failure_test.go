@@ -1,4 +1,4 @@
-package collaborationturn_test
+package collaboration_test
 
 import (
 	"context"
@@ -8,10 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"agentroom/backend/internal/collaboration"
-	"agentroom/backend/internal/collaborationcoordinator"
-	"agentroom/backend/internal/collaborationturn"
 	"agentroom/backend/internal/tests/teststore"
+	"agentroom/backend/internal/collaboration"
 )
 
 type candidateRuntime struct {
@@ -60,11 +58,11 @@ func TestCommitFailureCancelsStreamAndDiscardsLaterCandidateEvents(t *testing.T)
 			completedStreamEvent(6, "turn_2", "agent_2", "must be discarded"),
 		},
 	}
-	coordinator, err := collaborationcoordinator.New(runtime, collaborationcoordinator.Config{MaxConcurrent: 1})
+	coordinator, err := collaboration.NewCoordinator(runtime, collaboration.Config{MaxConcurrent: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	turns, err := collaborationturn.New(memory, request)
+	turns, err := collaboration.NewTurnHandler(memory, request)
 	if err != nil {
 		t.Fatal(err)
 	}

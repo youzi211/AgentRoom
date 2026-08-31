@@ -1,4 +1,4 @@
-package collaborationsnapshot
+package collaboration
 
 import (
 	"crypto/sha256"
@@ -6,15 +6,13 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"agentroom/backend/internal/collaboration"
 	"agentroom/backend/internal/model"
 )
 
 type AgentBinding struct {
 	Agent          model.Agent
 	ToolNames      []string
-	ModelReference collaboration.ModelReference
+	ModelReference ModelReference
 }
 
 type Input struct {
@@ -26,76 +24,76 @@ type Input struct {
 	Transcript               []model.Message
 	KnowledgeChunks          []model.KnowledgeChunk
 	Policy                   model.CollaborationPolicy
-	Limits                   collaboration.ExecutionLimits
+	Limits                   ExecutionLimits
 	InitialCandidateAgentIDs []string
-	Checkpoint               *collaboration.Checkpoint
+	Checkpoint               *Checkpoint
 }
 
-func Build(input Input) (collaboration.Request, error) {
+func Build(input Input) (Request, error) {
 	if strings.TrimSpace(input.CollaborationRunID) == "" {
-		return collaboration.Request{}, errors.New("collaboration run ID is required")
+		return Request{}, errors.New("collaboration run ID is required")
 	}
 	if strings.TrimSpace(input.Room.ID) == "" {
-		return collaboration.Request{}, errors.New("collaboration room ID is required")
+		return Request{}, errors.New("collaboration room ID is required")
 	}
 	if strings.TrimSpace(input.Trigger.ID) == "" {
-		return collaboration.Request{}, errors.New("collaboration trigger message ID is required")
+		return Request{}, errors.New("collaboration trigger message ID is required")
 	}
 	policy := input.Policy.WithDefaults()
 	if err := policy.Validate(); err != nil {
-		return collaboration.Request{}, err
+		return Request{}, err
 	}
 	limits, err := buildLimits(input.Limits)
 	if err != nil {
-		return collaboration.Request{}, err
+		return Request{}, err
 	}
 	engine, err := mapEngine(policy.Engine)
 	if err != nil {
-		return collaboration.Request{}, err
+		return Request{}, err
 	}
 	triggerMode, err := mapTriggerMode(policy.TriggerMode)
 	if err != nil {
-		return collaboration.Request{}, err
+		return Request{}, err
 	}
 
 	agents, references, agentIDs, err := buildAgents(input.Agents)
 	if err != nil {
-		return collaboration.Request{}, err
+		return Request{}, err
 	}
 	candidates, err := buildCandidates(input.InitialCandidateAgentIDs, agentIDs)
 	if err != nil {
-		return collaboration.Request{}, err
+		return Request{}, err
 	}
 	trigger, err := buildMessage(input.Trigger)
 	if err != nil {
-		return collaboration.Request{}, err
+		return Request{}, err
 	}
-	if trigger.SenderType != collaboration.SenderHuman {
-		return collaboration.Request{}, errors.New("collaboration trigger message must be human")
+	if trigger.SenderType != SenderHuman {
+		return Request{}, errors.New("collaboration trigger message must be human")
 	}
 	transcript, err := buildMessages(input.Transcript)
 	if err != nil {
-		return collaboration.Request{}, err
+		return Request{}, err
 	}
 	knowledge, err := buildKnowledge(input.KnowledgeChunks)
 	if err != nil {
-		return collaboration.Request{}, err
+		return Request{}, err
 	}
 
 	status := strings.TrimSpace(input.Room.Status)
 	if status == "" {
 		status = model.RoomStatusActive
 	}
-	request := collaboration.Request{
-		ProtocolVersion:    collaboration.ProtocolVersion,
+	request := Request{
+		ProtocolVersion:    ProtocolVersion,
 		CollaborationRunID: input.CollaborationRunID,
 		TraceID:            input.TraceID,
 		Engine:             engine,
-		Snapshot: collaboration.ConversationSnapshot{
-			Room:   collaboration.RoomSnapshot{ID: input.Room.ID, Name: input.Room.Name, Status: status},
+		Snapshot: ConversationSnapshot{
+			Room:   RoomSnapshot{ID: input.Room.ID, Name: input.Room.Name, Status: status},
 			Agents: agents, Trigger: trigger, Transcript: transcript, KnowledgeChunks: knowledge,
 			ModelReferences: references,
-			Policy: collaboration.PolicySnapshot{
+			Policy: PolicySnapshot{
 				Version: model.CollaborationPolicyVersion, Engine: engine, TriggerMode: triggerMode,
 				MaxTurns: uint32(policy.MaxTurns), MaxTurnsPerAgent: uint32(policy.MaxTurnsPerAgent),
 				AllowAgentHandoff: policy.AllowAgentHandoff, AllowSelfFollowup: policy.AllowSelfFollowup,
@@ -107,17 +105,17 @@ func Build(input Input) (collaboration.Request, error) {
 	}
 	if input.Checkpoint != nil {
 		if input.Checkpoint.Engine != engine {
-			return collaboration.Request{}, errors.New("collaboration checkpoint Engine does not match policy")
+			return Request{}, errors.New("collaboration checkpoint Engine does not match policy")
 		}
 		if strings.TrimSpace(input.Checkpoint.EngineVersion) == "" || strings.TrimSpace(input.Checkpoint.FormatVersion) == "" || strings.TrimSpace(input.Checkpoint.SHA256) == "" {
-			return collaboration.Request{}, errors.New("collaboration checkpoint metadata is required")
+			return Request{}, errors.New("collaboration checkpoint metadata is required")
 		}
 		if input.Checkpoint.SizeBytes != uint64(len(input.Checkpoint.Payload)) {
-			return collaboration.Request{}, errors.New("collaboration checkpoint size does not match payload")
+			return Request{}, errors.New("collaboration checkpoint size does not match payload")
 		}
 		digest := fmt.Sprintf("%x", sha256.Sum256(input.Checkpoint.Payload))
 		if !strings.EqualFold(input.Checkpoint.SHA256, digest) {
-			return collaboration.Request{}, errors.New("collaboration checkpoint SHA-256 does not match payload")
+			return Request{}, errors.New("collaboration checkpoint SHA-256 does not match payload")
 		}
 		checkpoint := *input.Checkpoint
 		checkpoint.Payload = append([]byte(nil), input.Checkpoint.Payload...)
@@ -126,11 +124,11 @@ func Build(input Input) (collaboration.Request, error) {
 	return request, nil
 }
 
-func buildAgents(bindings []AgentBinding) ([]collaboration.AgentSnapshot, []collaboration.ModelReference, map[string]struct{}, error) {
-	agents := make([]collaboration.AgentSnapshot, 0, len(bindings))
-	references := make([]collaboration.ModelReference, 0, len(bindings))
+func buildAgents(bindings []AgentBinding) ([]AgentSnapshot, []ModelReference, map[string]struct{}, error) {
+	agents := make([]AgentSnapshot, 0, len(bindings))
+	references := make([]ModelReference, 0, len(bindings))
 	agentIDs := make(map[string]struct{}, len(bindings))
-	referenceByID := make(map[string]collaboration.ModelReference, len(bindings))
+	referenceByID := make(map[string]ModelReference, len(bindings))
 	for _, binding := range bindings {
 		agent := binding.Agent
 		if strings.TrimSpace(agent.ID) == "" {
@@ -164,7 +162,7 @@ func buildAgents(bindings []AgentBinding) ([]collaboration.AgentSnapshot, []coll
 		}
 
 		agentIDs[agent.ID] = struct{}{}
-		agents = append(agents, collaboration.AgentSnapshot{
+		agents = append(agents, AgentSnapshot{
 			ID: agent.ID, Name: agent.Name, Mention: agent.Mention, Role: agent.Role,
 			Description: agent.Description, SystemPrompt: agent.SystemPrompt,
 			Runtime: model.NormalizeAgentRuntime(agent.Runtime), ModelReferenceID: reference.ID,
@@ -193,8 +191,8 @@ func buildCandidates(candidateIDs []string, agentIDs map[string]struct{}) ([]str
 	return candidates, nil
 }
 
-func buildMessages(messages []model.Message) ([]collaboration.MessageSnapshot, error) {
-	mapped := make([]collaboration.MessageSnapshot, 0, len(messages))
+func buildMessages(messages []model.Message) ([]MessageSnapshot, error) {
+	mapped := make([]MessageSnapshot, 0, len(messages))
 	for _, message := range messages {
 		value, err := buildMessage(message)
 		if err != nil {
@@ -205,31 +203,31 @@ func buildMessages(messages []model.Message) ([]collaboration.MessageSnapshot, e
 	return mapped, nil
 }
 
-func buildMessage(message model.Message) (collaboration.MessageSnapshot, error) {
+func buildMessage(message model.Message) (MessageSnapshot, error) {
 	if strings.TrimSpace(message.ID) == "" {
-		return collaboration.MessageSnapshot{}, errors.New("collaboration message ID is required")
+		return MessageSnapshot{}, errors.New("collaboration message ID is required")
 	}
 	if message.TurnIndex < 0 {
-		return collaboration.MessageSnapshot{}, fmt.Errorf("message %q has a negative turn index", message.ID)
+		return MessageSnapshot{}, fmt.Errorf("message %q has a negative turn index", message.ID)
 	}
 	senderType, err := mapSenderType(message.SenderType)
 	if err != nil {
-		return collaboration.MessageSnapshot{}, err
+		return MessageSnapshot{}, err
 	}
-	return collaboration.MessageSnapshot{
+	return MessageSnapshot{
 		ID: message.ID, SenderID: message.SenderID, SenderName: message.SenderName,
 		SenderType: senderType, Content: message.Content, CreatedAt: message.CreatedAt,
 		TurnIndex: uint32(message.TurnIndex), ParentMessageID: message.ParentMessageID,
 	}, nil
 }
 
-func buildKnowledge(chunks []model.KnowledgeChunk) ([]collaboration.KnowledgeChunk, error) {
-	mapped := make([]collaboration.KnowledgeChunk, 0, len(chunks))
+func buildKnowledge(chunks []model.KnowledgeChunk) ([]KnowledgeChunk, error) {
+	mapped := make([]KnowledgeChunk, 0, len(chunks))
 	for _, chunk := range chunks {
 		if chunk.ChunkIndex < 0 {
 			return nil, fmt.Errorf("knowledge chunk %q has a negative index", chunk.ID)
 		}
-		mapped = append(mapped, collaboration.KnowledgeChunk{
+		mapped = append(mapped, KnowledgeChunk{
 			ID: chunk.ID, DocumentID: chunk.DocumentID, DocumentName: chunk.DocumentName,
 			Scope: chunk.Scope, ScopeID: chunk.ScopeID, ChunkIndex: uint32(chunk.ChunkIndex), Content: chunk.Content,
 		})
@@ -237,46 +235,46 @@ func buildKnowledge(chunks []model.KnowledgeChunk) ([]collaboration.KnowledgeChu
 	return mapped, nil
 }
 
-func buildLimits(limits collaboration.ExecutionLimits) (collaboration.ExecutionLimits, error) {
+func buildLimits(limits ExecutionLimits) (ExecutionLimits, error) {
 	if limits.Timeout <= 0 {
-		return collaboration.ExecutionLimits{}, errors.New("collaboration timeout must be positive")
+		return ExecutionLimits{}, errors.New("collaboration timeout must be positive")
 	}
 	if limits.MaxOutputBytes == 0 || limits.MaxArtifactBytes == 0 || limits.MaxToolSteps == 0 || limits.MaxRequestBytes == 0 || limits.MaxEventBytes == 0 || limits.MaxCheckpointBytes == 0 {
-		return collaboration.ExecutionLimits{}, errors.New("collaboration byte limits must be positive")
+		return ExecutionLimits{}, errors.New("collaboration byte limits must be positive")
 	}
 	return limits, nil
 }
 
-func mapEngine(engine string) (collaboration.Engine, error) {
+func mapEngine(engine string) (Engine, error) {
 	switch engine {
 	case model.CollaborationEngineNative:
-		return collaboration.EngineNative, nil
+		return EngineNative, nil
 	case model.CollaborationEngineAutoGen:
-		return collaboration.EngineAutoGen, nil
+		return EngineAutoGen, nil
 	default:
 		return "", fmt.Errorf("unsupported collaboration Engine %q", engine)
 	}
 }
 
-func mapTriggerMode(mode string) (collaboration.TriggerMode, error) {
+func mapTriggerMode(mode string) (TriggerMode, error) {
 	switch mode {
 	case model.CollaborationTriggerMentionOnly:
-		return collaboration.TriggerMentionOnly, nil
+		return TriggerMentionOnly, nil
 	case model.CollaborationTriggerAutomatic:
-		return collaboration.TriggerAutomatic, nil
+		return TriggerAutomatic, nil
 	default:
 		return "", fmt.Errorf("unsupported collaboration trigger mode %q", mode)
 	}
 }
 
-func mapSenderType(senderType string) (collaboration.SenderType, error) {
+func mapSenderType(senderType string) (SenderType, error) {
 	switch senderType {
 	case model.SenderTypeHuman:
-		return collaboration.SenderHuman, nil
+		return SenderHuman, nil
 	case model.SenderTypeAgent:
-		return collaboration.SenderAgent, nil
+		return SenderAgent, nil
 	case model.SenderTypeSystem:
-		return collaboration.SenderSystem, nil
+		return SenderSystem, nil
 	default:
 		return "", fmt.Errorf("unsupported collaboration sender type %q", senderType)
 	}
