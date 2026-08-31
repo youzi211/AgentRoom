@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides project context and guidelines for AI coding agents (Claude Code, Codex, etc.) working in this repository.
 
 ## What This Is
 
@@ -21,15 +21,19 @@ go -C backend build ./cmd/server      # verify it builds
 npm --prefix frontend install
 npm --prefix frontend run dev         # Vite dev server on :5173, proxies /api -> :8080
 npm --prefix frontend run build       # production build
-node --test frontend/src/**/*.test.mjs  # frontend tests
+node --test frontend/src/api/roomClient.test.mjs  # single frontend test (PowerShell does not expand globs)
 
 # Python Runtime
-uv --directory deepagent run pytest   # run all Python tests
-uv --directory deepagent run agent-runtime  # start gRPC runtime service
+uv --directory deepagent run pytest   # run all Python tests (164 tests)
+uv --directory deepagent run agent-runtime  # start gRPC runtime on :50051
 
 # Full stack
 docker compose up --build             # mysql + backend + frontend + agent-runtime
 docker compose config                 # validate compose
+
+# Proto regeneration (after changing .proto files)
+scripts/generate-collaboration-runtime-proto.sh   # regenerates Go + Python proto code
+scripts/check-collaboration-runtime-proto.sh       # verifies generated code is up to date
 ```
 
 Local dev requires a reachable MySQL 8 and `MYSQL_DSN` (with `parseTime=true`) plus `DB_AUTO_MIGRATE=true` in `.env`. Copy `.env.example` to `.env` first. Start the local MySQL80 Windows service if needed.
@@ -105,7 +109,7 @@ api → service → room / agent / collaboration → store → model
 ## 代码实现准则
 
 - **不要重复造轮子**：标准库能做的不自己写，已有工具函数不重新实现。
-- **不要过度设计**：YAGNI（You Aren't Gonna Need It）。不为假想需求建抽象层。
+- **不要过度设计**：YAGNI。不为假想需求建抽象层。
 - **改一行能解决的就不改五行**：每行改动都应能追溯到需求。
 - **测试是行为契约**：测试验证公开行为，不验证实现细节。改实现不改测试，除非行为本身变了。
 
@@ -158,6 +162,27 @@ Python owns: speaker selection, Agent turn execution, engine state, checkpoint.
 
 React + Vite + Mantine. `components/` holds UI, `api/roomClient.js` is the backend client, `collaborationRuntime.js` maps collaboration events to UI state, `routing.js` is shared routing.
 
+## Common Pitfalls
+
+- **PowerShell 不展开 glob**：`node --test frontend/src/**/*.test.mjs` 在 PowerShell 下不会展开通配符。逐个指定文件，或用 `Get-ChildItem` 管道。
+- **改 proto 后忘记重新生成**：修改 `.proto` 文件后必须运行 `scripts/generate-collaboration-runtime-proto.sh`，否则 Go 和 Python 的生成代码不一致。
+- **远程协作失败不自动回滚**：`COLLABORATION_RUNTIME_MODE=remote` 时，gRPC 流中断不会自动切回 `legacy` 模式重做同一 run。每个 run 在开始前固定引擎，失败就是失败。
+- **`AGENT_RUNTIME_ENABLE_FAKE_EXECUTOR=true`**：本地端到端测试时用 Fake Executor 避免真实模型调用。生产环境绝对不要开启。
+- **MySQL 必须先启动**：`go -C backend run ./cmd/server` 在没有 MySQL 时会直接 fatal。Windows 下先 `Start-Service MySQL80`。
+- **CRLF 警告无害**：Git 在 Windows 上提示 LF→CRLF 是正常的，不影响功能。
+- **`collaboration` 包的 `types.go`/`events.go`/`runtime.go` 必须保持中立**：这三个文件不 import gRPC/protobuf/任何框架。有测试 `TestCollaborationPortHasNoTransportOrFrameworkDependencies` 验证。
+
+## Do Not Commit
+
+- `.mcp.json` — 本地 MCP 配置
+- `.env` — 含密钥
+- `deepagent/.env` — 含密钥
+- `deepagent/.venv/` — Python 虚拟环境
+- `frontend/node_modules/` — npm 依赖
+- `frontend/dist/` — 构建产物
+- `backend/internal/collaboration/proto/v1/*.pb.go` 的手动修改 — 生成代码，用脚本重新生成
+- `deepagent/src/collaboration_runtime/v1/*_pb2*.py` 的手动修改 — 同上
+
 ## Conventions
 
 - Go: `gofmt`-clean; exported `PascalCase`, internal `camelCase`. Prefer small package-local changes.
@@ -166,4 +191,3 @@ React + Vite + Mantine. `components/` holds UI, `api/roomClient.js` is the backe
 - When changing schema/migrations/env/config, update `README.md` and relevant `docs/`.
 - Commit messages in Chinese, Conventional Commits format: `<type>: <中文描述>`.
 - Branch prefix `codex/`, e.g. `codex/feat/user-registration`. Do not develop on `main`.
-- Do not commit `.mcp.json` or `.env`.
