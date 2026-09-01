@@ -11,7 +11,7 @@ from collaboration_runtime.model_client import (
     CollaborationModelUsage,
     FakeCollaborationModelClient,
 )
-from collaboration_runtime.models import ModelReference
+from collaboration_runtime.models import ModelSelection
 
 
 def model_request(purpose, *, agent_id="", candidate_agent_ids=()):
@@ -20,13 +20,15 @@ def model_request(purpose, *, agent_id="", candidate_agent_ids=()):
         collaboration_run_id="collaboration_1",
         trace_id="trace_1",
         purpose=purpose,
-        model_reference=ModelReference(
+        model_selection=ModelSelection(
             id="model_1",
             profile_id="profile_1",
             source="test",
             protocol="fake",
             model_name="fake-model",
             runtime_scope="collaboration",
+            credential_ref="",
+            purpose="agent_turn",
         ),
         messages=(CollaborationModelMessage(role="user", content="Choose or respond"),),
         agent_id=agent_id,

@@ -43,15 +43,15 @@ def collaboration_request():
                     id="agent_server",
                     name="Server agent",
                     runtime="llm",
-                    model_reference_id="model_server",
+                    model_selection_id="model_server",
                 )
             ],
             trigger=collaboration_runtime_pb2.MessageSnapshot(
                 id="message_server",
                 sender_type=collaboration_runtime_pb2.SENDER_TYPE_HUMAN,
             ),
-            model_references=[
-                collaboration_runtime_pb2.ModelReference(
+            model_selections=[
+                collaboration_runtime_pb2.ModelSelection(
                     id="model_server",
                     profile_id="profile_server",
                     source="test",

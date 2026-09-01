@@ -245,9 +245,10 @@ func (s *RemoteCollaborationScheduler) buildRequest(
 		}
 		bindings = append(bindings, collaboration.AgentBinding{
 			Agent: currentAgent,
-			ModelReference: collaboration.ModelReference{
-				ID: "model_ref_" + currentAgent.ID, ProfileID: profileID, Source: resolved.Source,
+			ModelSelection: collaboration.ModelSelection{
+				ID: "model_sel_" + currentAgent.ID, ProfileID: profileID, Source: resolved.Source,
 				Protocol: model.ModelProtocolOpenAIChatCompletions, ModelName: resolved.ModelName, RuntimeScope: scope,
+				CredentialRef: "", Purpose: collaboration.ModelSelectionPurposeUnspecified,
 			},
 		})
 	}

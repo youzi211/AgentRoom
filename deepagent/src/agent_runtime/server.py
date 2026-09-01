@@ -15,6 +15,8 @@ from .service import AgentRuntimeServicer
 from .security import install_sensitive_data_filter
 from .v1 import agent_runtime_pb2, agent_runtime_pb2_grpc
 from collaboration_runtime.agent_executor import RuntimeRegistryAgentExecutor
+from collaboration_runtime.model_execution import ModelExecutionService
+from agent_runtime.model_config import ModelConfigResolver
 from collaboration_runtime.registry import CollaborationEngineRegistry
 from collaboration_runtime.service import CollaborationRuntimeServicer
 from collaboration_runtime.v1 import collaboration_runtime_pb2_grpc
@@ -46,6 +48,10 @@ class RuntimeServer:
             self.collaboration_registry = build_collaboration_registry(
                 self.settings,
                 RuntimeRegistryAgentExecutor(self.registry, work_dir=self.settings.work_dir),
+                model_execution_service=ModelExecutionService(
+                    ModelConfigResolver(),
+                    None,  # ModelClientFactory - wired in production
+                ),
             )
         self.collaboration_servicer = CollaborationRuntimeServicer(
             self.collaboration_registry,
@@ -150,7 +156,7 @@ def build_registry(settings: RuntimeSettings) -> ExecutorRegistry:
     return registry
 
 
-def build_collaboration_registry(settings: RuntimeSettings, executor=None) -> CollaborationEngineRegistry:
+def build_collaboration_registry(settings: RuntimeSettings, executor=None, model_execution_service=None) -> CollaborationEngineRegistry:
     """Build the collaboration Engine Registry from runtime settings (11.1).
 
     Only engines in ``COLLABORATION_ENGINE_ALLOWLIST`` are registered. The
@@ -173,8 +179,8 @@ def build_collaboration_registry(settings: RuntimeSettings, executor=None) -> Co
 
         registry.register(
             "autogen",
-            lambda: AutoGenCollaborationEngine(executor),
-            ready_when=lambda: False,  # production-ready only with Model Gateway
+            lambda: AutoGenCollaborationEngine(executor, model_client=model_execution_service),
+            ready_when=lambda: model_execution_service is not None and model_execution_service.ready,
             version=AutoGenCollaborationEngine.version,
         )
     return registry

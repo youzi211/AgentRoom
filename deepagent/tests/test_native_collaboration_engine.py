@@ -8,7 +8,7 @@ import pytest
 from collaboration_engine_contract import assert_engine_contract, contract_request
 from collaboration_runtime.executor import ExecutorEvent, ExecutorEventKind
 from collaboration_runtime.engines import NativeCollaborationEngine
-from collaboration_runtime.models import AgentSnapshot, ModelReference
+from collaboration_runtime.models import AgentSnapshot, ModelSelection
 
 
 def test_native_engine_passes_shared_collaboration_contract():
@@ -34,7 +34,7 @@ def test_native_engine_preserves_deduplicated_eligible_initial_candidate_order()
         id="agent_second",
         name="Second",
         mention="@Second",
-        model_reference_id="model_second",
+        model_selection_id="model_second",
     )
     unsupported = AgentSnapshot(
         id="agent_unsupported",
@@ -44,20 +44,22 @@ def test_native_engine_preserves_deduplicated_eligible_initial_candidate_order()
         description="Unsupported runtime",
         system_prompt="Respond",
         runtime="unknown",
-        model_reference_id="model_contract",
+        model_selection_id="model_contract",
     )
     request = replace(
         base,
         agents=(base.agents[0], second, unsupported),
-        model_references=(
-            *base.model_references,
-            ModelReference(
+        model_selections=(
+            *base.model_selections,
+            ModelSelection(
                 id="model_second",
                 profile_id="profile_second",
                 source="test",
                 protocol="fake",
                 model_name="fake-second",
                 runtime_scope="collaboration",
+                credential_ref="",
+                purpose="agent_turn",
             ),
         ),
         initial_candidate_agent_ids=(
@@ -401,7 +403,7 @@ def test_native_engine_maps_executor_activity_and_completed_message_data():
         async def execute(self, _turn, _cancel_event):
             yield ExecutorEvent(
                 ExecutorEventKind.MODEL_STARTED,
-                data={"model_reference_id": "spoofed_model"},
+                data={"model_selection_id": "spoofed_model"},
             )
             yield ExecutorEvent(
                 ExecutorEventKind.TOOL_STARTED,
@@ -440,7 +442,7 @@ def test_native_engine_maps_executor_activity_and_completed_message_data():
             yield ExecutorEvent(
                 ExecutorEventKind.MODEL_COMPLETED,
                 data={
-                    "model_reference_id": "spoofed_model",
+                    "model_selection_id": "spoofed_model",
                     "usage": {
                         "input_tokens": 11,
                         "output_tokens": 7,
@@ -461,7 +463,7 @@ def test_native_engine_maps_executor_activity_and_completed_message_data():
                         },
                     ),
                     "model": {
-                        "model_reference_id": "spoofed_model",
+                        "model_selection_id": "spoofed_model",
                         "profile_id": "spoofed_profile",
                         "source": "spoofed_source",
                         "model_name": "spoofed_name",
@@ -502,7 +504,7 @@ def test_native_engine_maps_executor_activity_and_completed_message_data():
         "collaboration_contract:turn:1"
     }
     assert {event.agent_id for event in turn_events} == {"agent_contract"}
-    assert events[3].data == {"model_reference_id": "model_contract"}
+    assert events[3].data == {"model_selection_id": "model_contract"}
     assert events[6].data == {
         "tool_call_id": "tool_2",
         "tool_name": "fetch",
@@ -510,7 +512,7 @@ def test_native_engine_maps_executor_activity_and_completed_message_data():
         "retryable": True,
     }
     assert events[9].data == {
-        "model_reference_id": "model_contract",
+        "model_selection_id": "model_contract",
         "usage": {"input_tokens": 11, "output_tokens": 7, "total_tokens": 18},
     }
     assert events[10].data == {
@@ -524,7 +526,7 @@ def test_native_engine_maps_executor_activity_and_completed_message_data():
             },
         ),
         "model": {
-            "model_reference_id": "model_contract",
+            "model_selection_id": "model_contract",
             "profile_id": "profile_contract",
             "source": "test",
             "model_name": "fake-model",

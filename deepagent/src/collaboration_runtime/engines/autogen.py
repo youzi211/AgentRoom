@@ -49,7 +49,7 @@ from ..models import (
     EngineEvent,
     EventKind,
     MessageSnapshot,
-    ModelReference,
+    ModelSelection,
 )
 from ._shared import (
     artifact_data,
@@ -136,12 +136,12 @@ class AutoGenCollaborationEngine:
             return
 
         candidates = initial_candidates(request)
-        model_ids = {model.id for model in request.model_references}
+        model_ids = {model.id for model in request.model_selections}
         eligible = tuple(
             agent
             for agent in request.agents
             if agent.runtime in {"llm", "deepagent"}
-            and agent.model_reference_id in model_ids
+            and agent.model_selection_id in model_ids
         )
         if not eligible:
             yield EngineEvent(
@@ -222,8 +222,8 @@ class AutoGenCollaborationEngine:
                 turn_id=turn_id,
                 agent_id=agent.id,
             )
-            model_reference = next(
-                model for model in request.model_references if model.id == agent.model_reference_id
+            model_selection = next(
+                model for model in request.model_selections if model.id == agent.model_selection_id
             )
 
             participant = _AgentRoomParticipant(
@@ -231,7 +231,7 @@ class AutoGenCollaborationEngine:
                 executor=self._executor,
                 mapping=mapping,
                 request=request,
-                model_reference=model_reference,
+                model_selection=model_selection,
                 turn_id=turn_id,
                 turn_index=turn_index,
                 transcript=tuple(transcript),
@@ -252,7 +252,7 @@ class AutoGenCollaborationEngine:
                         yield protocol_failure(turn_count)
                         return
                     try:
-                        completed_payload = completed_data(event.data, model_reference)
+                        completed_payload = completed_data(event.data, model_selection)
                     except (AttributeError, TypeError, ValueError, OverflowError):
                         yield protocol_failure(turn_count)
                         return
@@ -280,7 +280,7 @@ class AutoGenCollaborationEngine:
                             event,
                             turn_id,
                             agent.id,
-                            model_reference,
+                            model_selection,
                         )
                     except (AttributeError, TypeError, ValueError, OverflowError):
                         mapped = None
@@ -446,7 +446,7 @@ class _AgentRoomParticipant(BaseChatAgent):
         executor,
         mapping: _ParticipantMapping,
         request: CollaborationRequest,
-        model_reference: ModelReference,
+        model_selection: ModelSelection,
         turn_id: str,
         turn_index: int,
         transcript: tuple[MessageSnapshot, ...],
@@ -460,7 +460,7 @@ class _AgentRoomParticipant(BaseChatAgent):
         self._agent = agent
         self._executor = executor
         self._request = request
-        self._model_reference = model_reference
+        self._model_selection = model_selection
         self._turn_id = turn_id
         self._turn_index = turn_index
         self._transcript = transcript
@@ -504,7 +504,7 @@ class _AgentRoomParticipant(BaseChatAgent):
                 trigger=self._trigger,
                 transcript=self._transcript,
                 knowledge_chunks=self._request.knowledge_chunks,
-                model_reference=self._model_reference,
+                model_selection=self._model_selection,
                 limits=self._request.limits,
             )
             completed_payload = None
@@ -512,7 +512,7 @@ class _AgentRoomParticipant(BaseChatAgent):
                 if self._cancel_event.is_set():
                     raise asyncio.CancelledError
                 if event.kind is ExecutorEventKind.COMPLETED:
-                    completed_payload = completed_data(event.data, self._model_reference)
+                    completed_payload = completed_data(event.data, self._model_selection)
                     break
                 if event.kind is ExecutorEventKind.FAILED:
                     # Surface failure as an empty TextMessage + Stop so the
@@ -560,7 +560,7 @@ class _AgentRoomParticipant(BaseChatAgent):
             trigger=self._trigger,
             transcript=self._transcript,
             knowledge_chunks=self._request.knowledge_chunks,
-            model_reference=self._model_reference,
+            model_selection=self._model_selection,
             limits=self._request.limits,
         )
         async for event in self._executor.execute(turn_request, self._cancel_event):
@@ -581,8 +581,9 @@ class _CollaborationModelChatClient(ChatCompletionClient):
     autogen-collaboration-engine → "AutoGen 通过框架中立模型端口调用模型").
     """
 
-    def __init__(self, model_client) -> None:
-        self._client = model_client
+    def __init__(self, execution_service, selector_selection) -> None:
+        self._service = execution_service
+        self._selection = selector_selection
         self._total = RequestUsage(0, 0)
         self._actual = RequestUsage(0, 0)
 
@@ -591,17 +592,14 @@ class _CollaborationModelChatClient(ChatCompletionClient):
 
         neutral_messages = tuple(_to_collaboration_message(m) for m in messages)
         request_id = f"selector-{id(self)}"
-        response = await self._client.complete(
-            _ModelRequestAdapter.to_request(
-                request_id=request_id,
-                messages=neutral_messages,
-                purpose="selector",
-            ),
-            _to_event(cancellation_token),
+        response = await self._service.complete(
+            self._selection,
+            neutral_messages,
+            cancel_event=_to_event(cancellation_token),
         )
         usage = RequestUsage(
-            prompt_tokens=int(response.usage.input_tokens),
-            completion_tokens=int(response.usage.output_tokens),
+            prompt_tokens=int(response.input_tokens),
+            completion_tokens=int(response.output_tokens),
         )
         self._total = RequestUsage(
             self._total.prompt_tokens + usage.prompt_tokens,
@@ -679,38 +677,6 @@ def _to_event(cancellation_token):
         if cancellation_token.is_cancelled():
             event.set()
     return event
-
-
-class _ModelRequestAdapter:
-    """Translate AutoGen selector messages into the neutral model request."""
-
-    @staticmethod
-    def to_request(*, request_id: str, messages, purpose: str):
-        from collaboration_runtime.model_client import (
-            CollaborationModelPurpose,
-            CollaborationModelRequest,
-            ModelReference,
-        )
-
-        # Selector calls do not carry an AgentRoom model reference; use a
-        # neutral placeholder. Production wiring must replace this with the
-        # selector Profile from the Model Gateway configuration.
-        return CollaborationModelRequest(
-            request_id=request_id,
-            collaboration_run_id="",
-            trace_id="",
-            purpose=CollaborationModelPurpose.SELECTOR,
-            model_reference=ModelReference(
-                id="",
-                profile_id="",
-                source="",
-                protocol="",
-                model_name="",
-                runtime_scope="collaboration",
-            ),
-            messages=tuple(messages),
-        )
-
 
 __all__ = [
     "ADAPTER_STATE_VERSION",

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from agent_runtime.context import RunContext
 from agent_runtime.events import EventPayload
+from agent_runtime.model_config import ModelConfigResolver
 from agent_runtime.registry import ExecutorRegistry
 from agent_runtime.v1 import agent_runtime_pb2
 from google.protobuf.duration_pb2 import Duration
@@ -13,14 +14,25 @@ from .executor import AgentTurnRequest, ExecutorEvent, ExecutorEventKind
 
 
 class RuntimeRegistryAgentExecutor:
-    """Adapter from the single-Agent ExecutorRegistry to collaboration turns."""
+    """Adapter from the single-Agent ExecutorRegistry to collaboration turns.
 
-    def __init__(self, registry: ExecutorRegistry, *, work_dir: Path) -> None:
+    Resolves ModelSelection credentials via ModelConfigResolver before
+    building the single-agent runtime request.
+    """
+
+    def __init__(
+        self,
+        registry: ExecutorRegistry,
+        *,
+        work_dir: Path,
+        config_resolver: ModelConfigResolver | None = None,
+    ) -> None:
         self._registry = registry
         self._work_dir = Path(work_dir)
+        self._config_resolver = config_resolver or ModelConfigResolver()
 
     async def execute(self, request: AgentTurnRequest, cancel_event: asyncio.Event):
-        runtime_request = _runtime_request(request)
+        runtime_request = _runtime_request(request, self._config_resolver)
         executor = self._registry.resolve(runtime_request.executor_kind)
         run = RunContext.create(runtime_request, self._work_dir)
         try:
@@ -35,13 +47,27 @@ class RuntimeRegistryAgentExecutor:
             run.cleanup()
 
 
-def _runtime_request(request: AgentTurnRequest) -> agent_runtime_pb2.ExecuteAgentRequest:
+def _runtime_request(
+    request: AgentTurnRequest,
+    config_resolver: ModelConfigResolver,
+) -> agent_runtime_pb2.ExecuteAgentRequest:
     timeout = Duration(seconds=int(request.limits.timeout_seconds))
     runtime = request.agent.runtime.strip().lower()
     executor_kind = {
         "llm": agent_runtime_pb2.EXECUTOR_KIND_LLM,
         "deepagent": agent_runtime_pb2.EXECUTOR_KIND_DEEPAGENT,
     }.get(runtime, agent_runtime_pb2.EXECUTOR_KIND_UNSPECIFIED)
+
+    # Resolve ModelSelection to a complete ModelConfig with credentials
+    model_config = config_resolver.resolve(
+        profile_id=request.model_selection.profile_id,
+        source=request.model_selection.source,
+        protocol=request.model_selection.protocol,
+        model_name=request.model_selection.model_name,
+        runtime_scope=request.model_selection.runtime_scope,
+        credential_ref=request.model_selection.credential_ref,
+    )
+
     return agent_runtime_pb2.ExecuteAgentRequest(
         protocol_version="v1",
         run_id=request.turn_id,
@@ -59,16 +85,18 @@ def _runtime_request(request: AgentTurnRequest) -> agent_runtime_pb2.ExecuteAgen
             description=request.agent.description,
             system_prompt=request.agent.system_prompt,
             runtime=request.agent.runtime,
-            model_profile_id=request.model_reference.profile_id,
+            model_profile_id=model_config.profile_id,
         ),
         trigger=_message_snapshot(request.trigger),
         recent_messages=tuple(_message_snapshot(message) for message in request.transcript),
         knowledge_chunks=tuple(_knowledge_chunk(chunk) for chunk in request.knowledge_chunks),
         model=agent_runtime_pb2.ModelConnection(
-            protocol=request.model_reference.protocol,
-            model_name=request.model_reference.model_name,
-            profile_id=request.model_reference.profile_id,
-            source=request.model_reference.source,
+            protocol=model_config.protocol,
+            base_url=model_config.base_url,
+            model_name=model_config.model_name,
+            profile_id=model_config.profile_id,
+            source=model_config.source,
+            api_key=model_config.api_key,
         ),
         limits=agent_runtime_pb2.ExecutionLimits(
             timeout=timeout,

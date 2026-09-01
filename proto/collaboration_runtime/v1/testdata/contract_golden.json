@@ -19,8 +19,10 @@
           "description": "Drafts the answer",
           "systemPrompt": "Write a concise response.",
           "runtime": "llm",
-          "modelReferenceId": "model_primary",
-          "toolNames": ["search"]
+          "modelSelectionId": "model_primary",
+          "toolNames": [
+            "search"
+          ]
         }
       ],
       "trigger": {
@@ -52,14 +54,16 @@
           "content": "Approved context"
         }
       ],
-      "modelReferences": [
+      "modelSelections": [
         {
           "id": "model_primary",
           "profileId": "profile_primary",
           "source": "custom",
           "protocol": "openai_chat_completions",
           "modelName": "contract-model",
-          "runtimeScope": "python"
+          "runtimeScope": "python",
+          "credentialRef": "",
+          "purpose": "MODEL_SELECTION_PURPOSE_AGENT_TURN"
         }
       ],
       "policy": {
@@ -83,7 +87,9 @@
         "maxEventBytes": 4194304,
         "maxCheckpointBytes": 1048576
       },
-      "initialCandidateAgentIds": ["agent_writer"]
+      "initialCandidateAgentIds": [
+        "agent_writer"
+      ]
     }
   },
   "events": [
@@ -115,7 +121,7 @@
       "agentMessageCompleted": {
         "content": "Draft complete.",
         "model": {
-          "modelReferenceId": "model_primary",
+          "modelSelectionId": "model_primary",
           "profileId": "profile_primary",
           "source": "custom",
           "modelName": "contract-model"

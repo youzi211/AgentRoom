@@ -1,4 +1,5 @@
 import asyncio
+import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -30,6 +31,10 @@ class RecordingExecutor:
 
 
 def test_runtime_registry_agent_executor_delegates_llm_turn_to_agent_runtime_executor(tmp_path):
+    # Set environment credentials for the resolver to find
+    os.environ["MODEL_API_KEY"] = "fake-test-key"
+    os.environ["MODEL_BASE_URL"] = "https://test.example.com/v1"
+
     collaboration = contract_request()
     request = AgentTurnRequest(
         collaboration_run_id=collaboration.collaboration_run_id,
@@ -41,7 +46,7 @@ def test_runtime_registry_agent_executor_delegates_llm_turn_to_agent_runtime_exe
         trigger=collaboration.trigger,
         transcript=collaboration.transcript,
         knowledge_chunks=collaboration.knowledge_chunks,
-        model_reference=collaboration.model_references[0],
+        model_selection=collaboration.model_selections[0],
         limits=collaboration.limits,
     )
     executor = RuntimeRegistryAgentExecutor(
@@ -77,7 +82,7 @@ def test_agent_executor_is_shared_by_llm_and_deepagent(runtime):
         trigger=collaboration.trigger,
         transcript=collaboration.transcript,
         knowledge_chunks=collaboration.knowledge_chunks,
-        model_reference=collaboration.model_references[0],
+        model_selection=collaboration.model_selections[0],
         limits=collaboration.limits,
     )
     executor = RecordingExecutor()

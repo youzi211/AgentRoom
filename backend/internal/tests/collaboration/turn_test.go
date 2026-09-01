@@ -31,7 +31,7 @@ func TestHandlerCreatesAgentRunsAndCommitsTurnMessages(t *testing.T) {
 	completed.Message = &collaboration.AgentMessage{
 		Content: "analysis complete",
 		Model: collaboration.ModelAudit{
-			ModelReferenceID: "model_ref_1", ProfileID: "profile_1", Source: "database", ModelName: "model-a",
+			ModelSelectionID: "model_sel_1", ProfileID: "profile_1", Source: "database", ModelName: "model-a",
 		},
 		KnowledgeSources: []collaboration.KnowledgeSource{{DocumentID: "doc_1", DocumentName: "Plan", Scope: "room"}},
 		Artifacts: []collaboration.Artifact{{

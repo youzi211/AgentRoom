@@ -31,6 +31,10 @@ def production_boundary_files():
     return BOUNDARY_FILES + engine_files
 
 
+def _engine_files():
+    return tuple((COLLABORATION_ROOT / "engines").rglob("*.py"))
+
+
 def test_collaboration_engines_do_not_bypass_the_model_gateway():
     violations = []
 
@@ -53,4 +57,47 @@ def test_collaboration_engines_do_not_bypass_the_model_gateway():
             if term in lowered:
                 violations.append(f"{path.name}: forbidden source term {term}")
 
+    assert violations == []
+
+
+def test_engines_do_not_import_model_config():
+    """Engine files MUST NOT import agent_runtime.model_config.
+    ModelConfig is a preparation-stage object; engines operate on
+    ModelSelection only.
+    """
+    violations = []
+    for path in _engine_files():
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                if "agent_runtime.model_config" in node.module:
+                    violations.append(f"{path.name}: forbidden import {node.module}")
+    assert violations == []
+
+
+def test_engines_do_not_contain_hardcoded_credential_ref():
+    """credential_ref only allowed in ModelConfigResolver and CredentialResolver.
+    Engines must not hardcode a credential_ref; the reference comes from
+    the ModelSelection provided by the Go Control Plane.
+    """
+    violations = []
+    for path in _engine_files():
+        source = path.read_text(encoding="utf-8")
+        if "credential_ref" in source:
+            violations.append(f"{path.name}: contains hardcoded credential_ref")
+    assert violations == []
+
+
+def test_model_client_factory_does_not_access_credentials():
+    """ModelClientFactory (in model_client.py) must not receive credential_ref
+    or read environment variables.
+    """
+    path = COLLABORATION_ROOT / "model_client.py"
+    source = path.read_text(encoding="utf-8")
+    violations = []
+    if "credential_ref" in source:
+        violations.append("model_client.py contains credential_ref")
+    if "os.environ" in source or "environ[" in source:
+        violations.append("model_client.py reads environment variables")
     assert violations == []

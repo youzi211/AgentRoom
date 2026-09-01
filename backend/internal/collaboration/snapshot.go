@@ -12,7 +12,7 @@ import (
 type AgentBinding struct {
 	Agent          model.Agent
 	ToolNames      []string
-	ModelReference ModelReference
+	ModelSelection ModelSelection
 }
 
 type Input struct {
@@ -56,7 +56,7 @@ func Build(input Input) (Request, error) {
 		return Request{}, err
 	}
 
-	agents, references, agentIDs, err := buildAgents(input.Agents)
+	agents, selections, agentIDs, err := buildAgents(input.Agents)
 	if err != nil {
 		return Request{}, err
 	}
@@ -92,7 +92,7 @@ func Build(input Input) (Request, error) {
 		Snapshot: ConversationSnapshot{
 			Room:   RoomSnapshot{ID: input.Room.ID, Name: input.Room.Name, Status: status},
 			Agents: agents, Trigger: trigger, Transcript: transcript, KnowledgeChunks: knowledge,
-			ModelReferences: references,
+			ModelSelections: selections,
 			Policy: PolicySnapshot{
 				Version: model.CollaborationPolicyVersion, Engine: engine, TriggerMode: triggerMode,
 				MaxTurns: uint32(policy.MaxTurns), MaxTurnsPerAgent: uint32(policy.MaxTurnsPerAgent),
@@ -124,11 +124,11 @@ func Build(input Input) (Request, error) {
 	return request, nil
 }
 
-func buildAgents(bindings []AgentBinding) ([]AgentSnapshot, []ModelReference, map[string]struct{}, error) {
+func buildAgents(bindings []AgentBinding) ([]AgentSnapshot, []ModelSelection, map[string]struct{}, error) {
 	agents := make([]AgentSnapshot, 0, len(bindings))
-	references := make([]ModelReference, 0, len(bindings))
+	selections := make([]ModelSelection, 0, len(bindings))
 	agentIDs := make(map[string]struct{}, len(bindings))
-	referenceByID := make(map[string]ModelReference, len(bindings))
+	selectionByID := make(map[string]ModelSelection, len(bindings))
 	for _, binding := range bindings {
 		agent := binding.Agent
 		if strings.TrimSpace(agent.ID) == "" {
@@ -146,33 +146,33 @@ func buildAgents(bindings []AgentBinding) ([]AgentSnapshot, []ModelReference, ma
 		if !model.IsValidAgentRuntime(agent.Runtime) {
 			return nil, nil, nil, fmt.Errorf("unsupported runtime for collaboration Agent %q", agent.ID)
 		}
-		reference := binding.ModelReference
-		if strings.TrimSpace(reference.ID) == "" || strings.TrimSpace(reference.ProfileID) == "" ||
-			strings.TrimSpace(reference.Source) == "" || strings.TrimSpace(reference.Protocol) == "" ||
-			strings.TrimSpace(reference.ModelName) == "" || strings.TrimSpace(reference.RuntimeScope) == "" {
-			return nil, nil, nil, fmt.Errorf("collaboration Agent %q requires an approved model reference", agent.ID)
+		selection := binding.ModelSelection
+		if strings.TrimSpace(selection.ID) == "" || strings.TrimSpace(selection.ProfileID) == "" ||
+			strings.TrimSpace(selection.Source) == "" || strings.TrimSpace(selection.Protocol) == "" ||
+			strings.TrimSpace(selection.ModelName) == "" || strings.TrimSpace(selection.RuntimeScope) == "" {
+			return nil, nil, nil, fmt.Errorf("collaboration Agent %q requires an approved model selection", agent.ID)
 		}
-		if existing, ok := referenceByID[reference.ID]; ok {
-			if existing != reference {
-				return nil, nil, nil, fmt.Errorf("conflicting collaboration model reference %q", reference.ID)
+		if existing, ok := selectionByID[selection.ID]; ok {
+			if existing != selection {
+				return nil, nil, nil, fmt.Errorf("conflicting collaboration model selection %q", selection.ID)
 			}
 		} else {
-			referenceByID[reference.ID] = reference
-			references = append(references, reference)
+			selectionByID[selection.ID] = selection
+			selections = append(selections, selection)
 		}
 
 		agentIDs[agent.ID] = struct{}{}
 		agents = append(agents, AgentSnapshot{
 			ID: agent.ID, Name: agent.Name, Mention: agent.Mention, Role: agent.Role,
 			Description: agent.Description, SystemPrompt: agent.SystemPrompt,
-			Runtime: model.NormalizeAgentRuntime(agent.Runtime), ModelReferenceID: reference.ID,
+			Runtime: model.NormalizeAgentRuntime(agent.Runtime), ModelSelectionID: selection.ID,
 			ToolNames: append([]string(nil), binding.ToolNames...),
 		})
 	}
 	if len(agents) == 0 {
 		return nil, nil, nil, errors.New("collaboration requires at least one eligible Agent")
 	}
-	return agents, references, agentIDs, nil
+	return agents, selections, agentIDs, nil
 }
 
 func buildCandidates(candidateIDs []string, agentIDs map[string]struct{}) ([]string, error) {

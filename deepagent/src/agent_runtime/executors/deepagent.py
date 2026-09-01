@@ -180,19 +180,39 @@ def _research_question(run: RunContext) -> str:
 
 
 def _request_settings(run: RunContext) -> Settings:
-    connection = run.request.model
+    """Build DeepAgent Settings from the resolved ModelConfig or protobuf.
+
+    Prefers the resolved ModelConfig (set by the service layer) over the
+    raw protobuf ModelConnection to avoid direct credential reads from
+    the transport layer.
+    """
+    config = run.model_config
+    if config is not None:
+        protocol = "anthropic" if config.protocol.lower().startswith("anthropic") else "openai"
+        custom = CustomEndpoint(
+            enabled=True,
+            protocol=protocol,
+            base_url=config.base_url,
+            api_key=config.api_key,
+            model_name=config.model_name,
+        )
+    else:
+        connection = run.request.model
+        protocol = "anthropic" if connection.protocol.lower().startswith("anthropic") else "openai"
+        custom = CustomEndpoint(
+            enabled=True,
+            protocol=protocol,
+            base_url=connection.base_url,
+            api_key=connection.api_key,
+            model_name=connection.model_name,
+        )
+
     runtime_env = {"TAVILY_API_KEY": os.environ.get("TAVILY_API_KEY", "")}
-    custom = CustomEndpoint(
-        enabled=True,
-        protocol="anthropic" if connection.protocol.lower().startswith("anthropic") else "openai",
-        base_url=connection.base_url,
-        api_key=connection.api_key,
-        model_name=connection.model_name,
-    )
+    model_name = config.model_name if config is not None else run.request.model.model_name
     return Settings(
         config_path=PROJECT_DIR / "deepagent.toml",
         env_path=PROJECT_DIR / ".env",
-        model_name=connection.model_name,
+        model_name=model_name,
         search_max_results=5,
         search_topic="general",
         include_raw_content=False,

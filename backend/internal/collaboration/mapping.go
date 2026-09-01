@@ -2,7 +2,7 @@ package collaboration
 
 import (
 	"fmt"
-	collaborationruntimev1 "agentroom/backend/internal/collaboration/proto/v1"
+	collaborationruntimev1 "agentroom/backend/internal/collaborationproto/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -56,7 +56,7 @@ func mapRequest(request Request) (*collaborationruntimev1.ExecuteConversationReq
 		mapped.Snapshot.Agents = append(mapped.Snapshot.Agents, &collaborationruntimev1.AgentSnapshot{
 			Id: agent.ID, Name: agent.Name, Mention: agent.Mention, Role: agent.Role,
 			Description: agent.Description, SystemPrompt: agent.SystemPrompt, Runtime: agent.Runtime,
-			ModelReferenceId: agent.ModelReferenceID, ToolNames: append([]string(nil), agent.ToolNames...),
+			ModelSelectionId: agent.ModelSelectionID, ToolNames: append([]string(nil), agent.ToolNames...),
 		})
 	}
 	for _, message := range request.Snapshot.Transcript {
@@ -68,10 +68,11 @@ func mapRequest(request Request) (*collaborationruntimev1.ExecuteConversationReq
 			Scope: chunk.Scope, ScopeId: chunk.ScopeID, ChunkIndex: chunk.ChunkIndex, Content: chunk.Content,
 		})
 	}
-	for _, reference := range request.Snapshot.ModelReferences {
-		mapped.Snapshot.ModelReferences = append(mapped.Snapshot.ModelReferences, &collaborationruntimev1.ModelReference{
-			Id: reference.ID, ProfileId: reference.ProfileID, Source: reference.Source,
-			Protocol: reference.Protocol, ModelName: reference.ModelName, RuntimeScope: reference.RuntimeScope,
+	for _, selection := range request.Snapshot.ModelSelections {
+		mapped.Snapshot.ModelSelections = append(mapped.Snapshot.ModelSelections, &collaborationruntimev1.ModelSelection{
+			Id: selection.ID, ProfileId: selection.ProfileID, Source: selection.Source,
+			Protocol: selection.Protocol, ModelName: selection.ModelName, RuntimeScope: selection.RuntimeScope,
+			CredentialRef: selection.CredentialRef, Purpose: collaborationruntimev1.ModelSelectionPurpose(collaborationruntimev1.ModelSelectionPurpose_value[string(selection.Purpose)]),
 		})
 	}
 	if request.Checkpoint != nil {
@@ -128,9 +129,9 @@ func mapEvent(event *collaborationruntimev1.CollaborationEvent) (Event, error) {
 	case *collaborationruntimev1.CollaborationEvent_AgentTurnStarted:
 		mapped.Kind = EventAgentTurnStarted
 	case *collaborationruntimev1.CollaborationEvent_ModelStarted:
-		mapped.Kind, mapped.ModelReferenceID = EventModelStarted, payload.ModelStarted.GetModelReferenceId()
+		mapped.Kind, mapped.ModelSelectionID = EventModelStarted, payload.ModelStarted.GetModelSelectionId()
 	case *collaborationruntimev1.CollaborationEvent_ModelCompleted:
-		mapped.Kind, mapped.ModelReferenceID = EventModelCompleted, payload.ModelCompleted.GetModelReferenceId()
+		mapped.Kind, mapped.ModelSelectionID = EventModelCompleted, payload.ModelCompleted.GetModelSelectionId()
 		mapped.Usage = mapUsage(payload.ModelCompleted.GetUsage())
 	case *collaborationruntimev1.CollaborationEvent_ToolStarted:
 		mapped.Kind = EventToolStarted
@@ -222,7 +223,7 @@ func mapModelAudit(audit *collaborationruntimev1.ModelAudit) ModelAudit {
 		return ModelAudit{}
 	}
 	return ModelAudit{
-		ModelReferenceID: audit.GetModelReferenceId(), ProfileID: audit.GetProfileId(),
+		ModelSelectionID: audit.GetModelSelectionId(), ProfileID: audit.GetProfileId(),
 		Source: audit.GetSource(), ModelName: audit.GetModelName(),
 	}
 }

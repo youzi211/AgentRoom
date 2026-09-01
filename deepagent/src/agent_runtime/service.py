@@ -14,15 +14,22 @@ from .registry import ExecutorNotFound, ExecutorRegistry
 from .stream import backpressured_events
 from .telemetry import RuntimeTelemetry
 from .v1 import agent_runtime_pb2, agent_runtime_pb2_grpc
+from agent_runtime.model_config import ModelConfig, ModelConfigResolver
 
 
 LOGGER = logging.getLogger(__name__)
 
 
 class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServiceServicer):
-    def __init__(self, settings: RuntimeSettings, registry: ExecutorRegistry) -> None:
+    def __init__(
+        self,
+        settings: RuntimeSettings,
+        registry: ExecutorRegistry,
+        model_config_resolver: ModelConfigResolver | None = None,
+    ) -> None:
         self.settings = settings
         self.registry = registry
+        self._model_config_resolver = model_config_resolver or ModelConfigResolver()
         self.capacity = CapacityLimiter(
             settings.max_concurrency,
             settings.deepagent_concurrency,
@@ -53,6 +60,11 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServiceServicer):
             return
 
         run = RunContext.create(request, self.settings.work_dir)
+        # Resolve ModelConfig from the protobuf ModelConnection at the service
+        # boundary, before the executor touches credentials. Executors read
+        # run.model_config instead of the raw protobuf.
+        if request.HasField("model"):
+            run.model_config = ModelConfig.from_protobuf(request.model)
         call_metrics = self.telemetry.begin(request)
         outcome = "failed"
         grpc_status = "OK"

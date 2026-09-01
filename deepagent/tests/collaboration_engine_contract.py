@@ -6,7 +6,7 @@ from collaboration_runtime.models import (
     CollaborationRequest,
     ExecutionLimits,
     MessageSnapshot,
-    ModelReference,
+    ModelSelection,
     RoomSnapshot,
 )
 
@@ -14,7 +14,14 @@ from collaboration_runtime.models import (
 TERMINAL_KINDS = {"completed", "stopped", "cancelled", "failed"}
 
 
-def contract_request(run_id="collaboration_contract"):
+def contract_request(run_id="collaboration_contract", *, credential_ref="environment:deepagent"):
+    """Create a contract test request.
+
+    Args:
+        run_id: Unique run identifier.
+        credential_ref: Credential reference for model resolution.
+            Override to test credential resolution failure scenarios.
+    """
     return CollaborationRequest(
         protocol_version="v1",
         collaboration_run_id=run_id,
@@ -30,7 +37,7 @@ def contract_request(run_id="collaboration_contract"):
                 description="Contract agent",
                 system_prompt="Respond",
                 runtime="llm",
-                model_reference_id="model_contract",
+                model_selection_id="model_contract",
             ),
         ),
         trigger=MessageSnapshot(
@@ -42,14 +49,16 @@ def contract_request(run_id="collaboration_contract"):
         ),
         transcript=(),
         knowledge_chunks=(),
-        model_references=(
-            ModelReference(
+        model_selections=(
+            ModelSelection(
                 id="model_contract",
                 profile_id="profile_contract",
                 source="test",
                 protocol="fake",
                 model_name="fake-model",
                 runtime_scope="collaboration",
+                credential_ref=credential_ref,
+                purpose="agent_turn",
             ),
         ),
         policy=CollaborationPolicy(

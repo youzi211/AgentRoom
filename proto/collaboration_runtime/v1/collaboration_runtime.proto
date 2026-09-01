@@ -99,7 +99,7 @@ message AgentSnapshot {
   string description = 5;
   string system_prompt = 6;
   string runtime = 7;
-  string model_reference_id = 8;
+  string model_selection_id = 8;
   repeated string tool_names = 9;
 }
 
@@ -125,15 +125,25 @@ message KnowledgeChunk {
   string content = 7;
 }
 
-// ModelReference identifies a control-plane approved model profile. Credentials
+// ModelSelectionPurpose classifies why a model profile is being requested.
+enum ModelSelectionPurpose {
+  MODEL_SELECTION_PURPOSE_UNSPECIFIED = 0;
+  MODEL_SELECTION_PURPOSE_AGENT_TURN = 1;
+  MODEL_SELECTION_PURPOSE_SPEAKER_SELECTION = 2;
+}
+
+// ModelSelection identifies a control-plane approved model profile. Credentials
 // and provider clients are resolved behind the framework-neutral model port.
-message ModelReference {
+// credential_ref is opaque to Engines and Events; only the Resolver uses it.
+message ModelSelection {
   string id = 1;
   string profile_id = 2;
   string source = 3;
   string protocol = 4;
   string model_name = 5;
   string runtime_scope = 6;
+  string credential_ref = 7;
+  ModelSelectionPurpose purpose = 8;
 }
 
 message CollaborationPolicySnapshot {
@@ -176,7 +186,7 @@ message ConversationSnapshot {
   MessageSnapshot trigger = 3;
   repeated MessageSnapshot transcript = 4;
   repeated KnowledgeChunk knowledge_chunks = 5;
-  repeated ModelReference model_references = 6;
+  repeated ModelSelection model_selections = 6;
   CollaborationPolicySnapshot policy = 7;
   ExecutionLimits limits = 8;
   repeated string initial_candidate_agent_ids = 9;
@@ -198,7 +208,7 @@ message Usage {
 }
 
 message ModelAudit {
-  string model_reference_id = 1;
+  string model_selection_id = 1;
   string profile_id = 2;
   string source = 3;
   string model_name = 4;
@@ -237,11 +247,11 @@ message SpeakerSelectedEvent {
 message AgentTurnStartedEvent {}
 
 message ModelStartedEvent {
-  string model_reference_id = 1;
+  string model_selection_id = 1;
 }
 
 message ModelCompletedEvent {
-  string model_reference_id = 1;
+  string model_selection_id = 1;
   Usage usage = 2;
 }
 

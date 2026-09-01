@@ -23,7 +23,7 @@ from collaboration_runtime.model_gateway import (
     ModelGatewayResponse,
     ModelGatewayUsage,
 )
-from collaboration_runtime.models import ModelReference
+from collaboration_runtime.models import ModelSelection
 
 
 class RecordingModelGatewayCore:
@@ -67,13 +67,15 @@ def model_request(purpose, *, agent_id="", candidate_agent_ids=()):
         collaboration_run_id="collaboration_1",
         trace_id="trace_1",
         purpose=purpose,
-        model_reference=ModelReference(
-            id="model_reference_1",
+        model_selection=ModelSelection(
+            id="model_selection_1",
             profile_id="profile_1",
             source="room_agent",
             protocol="openai_chat_completions",
             model_name="example-model",
             runtime_scope="collaboration",
+            credential_ref="",
+            purpose="agent_turn",
         ),
         messages=(
             CollaborationModelMessage(role="system", content="Coordinate safely"),
@@ -172,7 +174,7 @@ def test_gateway_adapter_rejects_incomplete_profile_and_missing_capability():
     request = model_request(CollaborationModelPurpose.SELECTOR)
     incomplete = replace(
         request,
-        model_reference=replace(request.model_reference, profile_id=""),
+        model_selection=replace(request.model_selection, profile_id=""),
     )
     core = RecordingModelGatewayCore(ModelGatewayResponse(content="unused"))
     client = ModelGatewayCollaborationModelClient(core)

@@ -337,16 +337,16 @@ class CollaborationRuntimeServicer(
             agent_id = agent.id.strip()
             if not agent_id or agent_id in agent_ids:
                 raise ValueError("Agent IDs must be non-empty and unique")
-            if not agent.name.strip() or not agent.runtime.strip() or not agent.model_reference_id.strip():
-                raise ValueError("Agent identity, runtime, and model reference are required")
+            if not agent.name.strip() or not agent.runtime.strip() or not agent.model_selection_id.strip():
+                raise ValueError("Agent identity, runtime, and model selection are required")
             agent_ids.add(agent_id)
-            referenced_models.add(agent.model_reference_id)
+            referenced_models.add(agent.model_selection_id)
 
         model_ids: set[str] = set()
-        for model in snapshot.model_references:
+        for model in snapshot.model_selections:
             model_id = model.id.strip()
             if not model_id or model_id in model_ids:
-                raise ValueError("model reference IDs must be non-empty and unique")
+                raise ValueError("model selection IDs must be non-empty and unique")
             if not all(
                 value.strip()
                 for value in (

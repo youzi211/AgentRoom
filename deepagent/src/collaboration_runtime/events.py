@@ -156,11 +156,11 @@ class CollaborationEventWriter:
             return "agent_turn_started", collaboration_runtime_pb2.AgentTurnStartedEvent()
         if event.kind is EventKind.MODEL_STARTED:
             return "model_started", collaboration_runtime_pb2.ModelStartedEvent(
-                model_reference_id=_text(data, "model_reference_id")
+                model_selection_id=_text(data, "model_selection_id")
             )
         if event.kind is EventKind.MODEL_COMPLETED:
             return "model_completed", collaboration_runtime_pb2.ModelCompletedEvent(
-                model_reference_id=_text(data, "model_reference_id"), usage=_usage(data.get("usage", {}))
+                model_selection_id=_text(data, "model_selection_id"), usage=_usage(data.get("usage", {}))
             )
         if event.kind is EventKind.TOOL_STARTED:
             return "tool_started", collaboration_runtime_pb2.ToolStartedEvent(
@@ -282,7 +282,7 @@ def _knowledge_source(data) -> collaboration_runtime_pb2.KnowledgeSource:
 
 def _model_audit(data) -> collaboration_runtime_pb2.ModelAudit:
     return collaboration_runtime_pb2.ModelAudit(
-        model_reference_id=str(data.get("model_reference_id", "")),
+        model_selection_id=str(data.get("model_selection_id", "")),
         profile_id=str(data.get("profile_id", "")),
         source=str(data.get("source", "")),
         model_name=str(data.get("model_name", "")),

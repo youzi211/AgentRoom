@@ -138,7 +138,7 @@ class ModelGatewayCollaborationModelClient:
 
 
 def _gateway_request(request: CollaborationModelRequest) -> ModelGatewayRequest:
-    model = request.model_reference
+    model = request.model_selection
     if not model.profile_id or not model.protocol or not model.model_name:
         raise CollaborationModelError(
             CollaborationModelErrorCode.NOT_CONFIGURED,

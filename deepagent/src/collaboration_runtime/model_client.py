@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
-from .models import ModelReference
+from .models import ModelSelection
 
 
 class CollaborationModelPurpose(StrEnum):
@@ -49,7 +49,7 @@ class CollaborationModelRequest:
     collaboration_run_id: str
     trace_id: str
     purpose: CollaborationModelPurpose
-    model_reference: ModelReference
+    model_selection: ModelSelection
     messages: tuple[CollaborationModelMessage, ...]
     agent_id: str = ""
     candidate_agent_ids: tuple[str, ...] = ()
@@ -109,3 +109,11 @@ class FakeCollaborationModelClient:
         if isinstance(response, BaseException):
             raise response
         return response
+
+
+from agent_runtime.model_config import ModelConfig
+
+
+@runtime_checkable
+class ModelClientFactory(Protocol):
+    def create(self, config: ModelConfig) -> CollaborationModelClient: ...
