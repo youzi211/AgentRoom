@@ -63,6 +63,7 @@ Docker Compose 由四个服务组成：
 | [前端与部署](frontend-and-deployment.md) | React 路由、页面和 API Client、Docker 拓扑、部署与浏览器安全边界 | `frontend/`、Dockerfile、Compose、nginx、部署配置 |
 | [协作运行时迁移基线](collaboration-runtime-baseline.md) | mention/guided 行为、消息提交顺序、Runtime 取消、artifact 与脱敏基线 | Collaboration Runtime 迁移与回归测试 |
 | [Collaboration Runtime 真实模型隔离评估](collaboration-runtime-real-model-evaluation.md) | Native/AutoGen 真实模型隔离评估、延迟、token、费用与成功率 | Collaboration Runtime 灰度验收 |
+| [ADR-001：分离控制面、协作编排、Agent 执行与模型执行](decisions/ADR-001-control-collaboration-agent-model-execution-boundaries.md) | 模型选择、凭据解析、Agent 执行、AutoGen Selector 与模型消费者的强制边界 | Collaboration Runtime、Executor、模型配置与凭据链路 |
 
 ## 仓库模块地图
 
