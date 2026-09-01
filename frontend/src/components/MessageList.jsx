@@ -1,21 +1,21 @@
 import { forwardRef } from 'react'
-import { Avatar, Badge, Button, Paper, Text, Title } from '@mantine/core'
+import { Avatar, Badge, Button, Text, Title } from '@mantine/core'
 
 const MessageList = forwardRef(function MessageList({ currentParticipantName, messages, onDownloadArtifact, thinkingAgents = [] }, ref) {
   if (messages.length === 0 && thinkingAgents.length === 0) {
     return (
-      <Paper component="section" className="message-panel message-panel--empty" withBorder radius="md" shadow="none">
+      <section className="message-panel message-panel--empty">
         <div className="empty-state empty-state--conversation">
           <Text className="eyebrow eyebrow--subtle">对话</Text>
           <Title order={2} className="message-empty-title">开始一次协作会议</Title>
           <Text className="muted-text">@产品经理 讨论需求，或上传会议文件后邀请 Agent 参与。</Text>
         </div>
-      </Paper>
+      </section>
     )
   }
 
   return (
-    <Paper component="section" className="message-panel" aria-label="消息列表" withBorder radius="md" shadow="none">
+    <section className="message-panel" aria-label="消息列表">
       <ul className="message-list" ref={ref}>
         {messages.map((message) => {
           const messageRole = roleForMessage(message, currentParticipantName)
@@ -28,7 +28,7 @@ const MessageList = forwardRef(function MessageList({ currentParticipantName, me
                   {avatarTextForMessage(message, messageRole)}
                 </Avatar>
               ) : null}
-              <Paper component="article" className={`message-card message-card--${messageRole}`} withBorder radius="md" shadow="none">
+              <article className={`message-card message-card--${messageRole}`}>
                 <div className="message-meta">
                   <div className="message-author-group">
                     <Text component="span" className="message-author">{message.senderName}</Text>
@@ -70,7 +70,7 @@ const MessageList = forwardRef(function MessageList({ currentParticipantName, me
                     ))}
                   </div>
                 ) : null}
-              </Paper>
+              </article>
             </li>
           )
         })}
@@ -79,7 +79,7 @@ const MessageList = forwardRef(function MessageList({ currentParticipantName, me
             <Avatar className="message-avatar message-avatar--agent" radius="sm" color="teal" aria-hidden="true">
               {agent.name.charAt(0).toUpperCase()}
             </Avatar>
-            <Paper component="article" className="message-card message-card--agent message-card--thinking" withBorder radius="md" shadow="none">
+            <article className="message-card message-card--agent message-card--thinking">
               <div className="message-meta">
                 <div className="message-author-group">
                   <Text component="span" className="message-author">{agent.name}</Text>
@@ -92,11 +92,11 @@ const MessageList = forwardRef(function MessageList({ currentParticipantName, me
                 <span className="typing-dot" />
                 正在思考...
               </Text>
-            </Paper>
+            </article>
           </li>
         ))}
       </ul>
-    </Paper>
+    </section>
   )
 })
 

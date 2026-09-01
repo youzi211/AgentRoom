@@ -1,24 +1,24 @@
-import { Badge, Paper, Text, Title } from '@mantine/core'
+import { Badge, Text, Title } from '@mantine/core'
 
 function FocusTimeline({ focusPoints = [] }) {
   if (focusPoints.length === 0) {
     return (
-      <Paper component="section" className="sidebar-section focus-panel" withBorder radius="md" shadow="none">
+      <section className="sidebar-section focus-panel">
         <div className="sidebar-header">
-          <Title order={2}>会议焦点</Title>
+          <Title order={3}>会议焦点</Title>
           <Badge className="sidebar-count" color="teal" variant="light">0</Badge>
         </div>
         <Text className="sidebar-empty">发送消息后，AI 会自动提取会议焦点。</Text>
-      </Paper>
+      </section>
     )
   }
 
   const groupedPoints = groupByTime(focusPoints)
 
   return (
-    <Paper component="section" className="sidebar-section focus-panel" withBorder radius="md" shadow="none">
+    <section className="sidebar-section focus-panel">
       <div className="sidebar-header">
-        <Title order={2}>会议焦点</Title>
+        <Title order={3}>会议焦点</Title>
         <Badge className="sidebar-count" color="teal" variant="light">{focusPoints.length}</Badge>
       </div>
       <div className="focus-timeline">
@@ -39,7 +39,7 @@ function FocusTimeline({ focusPoints = [] }) {
           </div>
         ))}
       </div>
-    </Paper>
+    </section>
   )
 }
 

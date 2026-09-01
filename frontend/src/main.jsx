@@ -10,24 +10,36 @@ const appFontFamily =
 
 const theme = createTheme({
   primaryColor: 'teal',
+  primaryShade: 6,
   defaultRadius: 'sm',
   fontFamily: appFontFamily,
+  fontSizes: {
+    xs: '0.75rem',
+    sm: '0.85rem',
+    md: '0.9rem',
+    lg: '1.1rem',
+    xl: '1.25rem',
+  },
   headings: {
     fontFamily: appFontFamily,
-    fontWeight: '800',
+    sizes: {
+      h1: { fontSize: '1.5rem', fontWeight: '800', lineHeight: '1.3' },
+      h2: { fontSize: '1.25rem', fontWeight: '700', lineHeight: '1.35' },
+      h3: { fontSize: '1.1rem', fontWeight: '600', lineHeight: '1.4' },
+    },
   },
   colors: {
     teal: [
-      '#eef9f5',
-      '#d9eee8',
-      '#b6ded2',
-      '#8bcabb',
-      '#63b3a3',
-      '#439e8d',
-      '#2f8777',
-      '#256b60',
-      '#1f564e',
-      '#193f3a',
+      '#F0FDFA', // 0
+      '#CCFBF1', // 1
+      '#99F6E4', // 2
+      '#5EEAD4', // 3
+      '#2DD4BF', // 4
+      '#14B8A6', // 5
+      '#0D9488', // 6 — PRIMARY
+      '#0F766E', // 7 — hover
+      '#115E59', // 8
+      '#134E4A', // 9
     ],
   },
 })

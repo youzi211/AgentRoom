@@ -1,4 +1,4 @@
-import { Avatar, Badge, Button, Paper, Text } from '@mantine/core'
+import { Avatar, Badge, Button, Text } from '@mantine/core'
 
 function AgentRoster({ agents, thinkingAgents = [], onInsertMention }) {
   const thinkingIDs = new Set(thinkingAgents.map((agent) => agent.id))
@@ -15,7 +15,7 @@ function AgentRoster({ agents, thinkingAgents = [], onInsertMention }) {
       ) : (
         <ul className="sidebar-list">
           {agents.map((agent) => (
-            <Paper component="li" className="sidebar-list-item sidebar-list-item--stacked" key={agent.id} withBorder radius="md" shadow="none">
+            <li className="sidebar-list-item sidebar-list-item--stacked" key={agent.id}>
               <div className="agent-row">
                 <div className="agent-identity">
                   <Avatar className="sidebar-avatar agent-avatar" radius="sm" color="teal">{agent.name.charAt(0).toUpperCase()}</Avatar>
@@ -29,7 +29,7 @@ function AgentRoster({ agents, thinkingAgents = [], onInsertMention }) {
                 </Button>
               </div>
               {agent.description ? <Text className="agent-description">{agent.description}</Text> : null}
-            </Paper>
+            </li>
           ))}
         </ul>
       )}

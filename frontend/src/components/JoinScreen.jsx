@@ -470,7 +470,7 @@ function JoinScreen({ errorMessage, isSubmitting, onCreateRoom, onJoinRoom, onOp
                 </div>
 
                 {collaborationState.isAuthoritative && !collaborationAvailable ? (
-                  <Alert color="yellow" variant="light">协作 Runtime 暂不可用，仍可创建不包含 Agent 的会议。</Alert>
+                  <Alert color="orange" variant="light">协作 Runtime 暂不可用，仍可创建不包含 Agent 的会议。</Alert>
                 ) : null}
 
                 {showAdvancedCreate ? (
@@ -692,7 +692,7 @@ function ExistingRoomsTable({ canJoin, errorMessage, isLoading, onCopyRoomId, on
       {rooms.slice(0, 3).map((roomItem) => (
         <div className="entry-room-table-row" role="row" key={roomItem.id}>
           <span role="cell">{roomItem.name || '未命名会议'}</span>
-          <Button type="button" className="entry-room-id-button" variant="subtle" color="gray" size="compact-xs" rightSection={<Copy size={13} />} onClick={() => onCopyRoomId(roomItem)}>
+          <Button type="button" className="entry-room-id-button" variant="subtle" color="gray" size="xs" rightSection={<Copy size={13} />} onClick={() => onCopyRoomId(roomItem)}>
             {roomItem.id}
           </Button>
           <span role="cell">{roomItem.hasPasscode ? '需要口令' : '公开加入'}</span>

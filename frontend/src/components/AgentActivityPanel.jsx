@@ -9,10 +9,10 @@ function AgentActivityPanel({ activities = [], errorMessage = '', isLoading = fa
 
   return (
     <>
-      <Paper component="section" className="sidebar-section agent-activity-panel" withBorder radius="md" shadow="none">
+      <section className="sidebar-section agent-activity-panel">
         <div className="sidebar-header">
           <div>
-            <Title order={2}>协作活动</Title>
+            <Title order={3}>协作活动</Title>
             <Text className="sidebar-note">当前运行、发言与交接</Text>
           </div>
           <Badge className="sidebar-count" color="teal" variant="light">{currentActivities.length}</Badge>
@@ -24,10 +24,16 @@ function AgentActivityPanel({ activities = [], errorMessage = '', isLoading = fa
           <Text component="span">{activities.length} 条记录</Text>
         </Group>
         {errorMessage ? <Alert color="red" variant="light">{errorMessage}</Alert> : null}
-        {isLoading ? <Text className="agent-activity-notice">正在加载 Agent 活动...</Text> : null}
+        {isLoading ? (
+          <div className="sidebar-loading">
+            <div className="sidebar-loading-skeleton sidebar-loading-skeleton--medium" />
+            <div className="sidebar-loading-skeleton sidebar-loading-skeleton--short" />
+            <div className="sidebar-loading-skeleton" />
+          </div>
+        ) : null}
         {!isLoading && visibleActivities.length === 0 ? <Text className="agent-activity-notice">暂无正在进行的协作</Text> : null}
         {visibleActivities.length > 0 ? <ActivityList activities={visibleActivities} /> : null}
-      </Paper>
+      </section>
 
       <Modal
         opened={isHistoryOpen}

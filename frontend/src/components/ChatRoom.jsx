@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Avatar, Badge, Button, Group, Paper, Select, Text, Title } from '@mantine/core'
+import { Avatar, Badge, Button, Group, Select, Text, Title } from '@mantine/core'
 import {
   createRoomSocket,
   deleteKnowledgeDocument,
@@ -419,7 +419,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
 
   return (
     <main className="chat-workbench">
-      <Paper component="header" className="chat-topbar" withBorder radius="md" shadow="xs">
+      <header className="chat-topbar">
         <div className="chat-room-meta">
           <Avatar className="brand-mark brand-mark--small" radius="sm" color="teal">AR</Avatar>
           <strong className="chat-brand-name">AgentRoom</strong>
@@ -444,12 +444,12 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
             离开
           </Button>
         </Group>
-      </Paper>
+      </header>
 
       {errorMessage ? <p className="banner banner--error banner--compact">{errorMessage}</p> : null}
 
       <div className="chat-layout">
-        <Paper component="aside" className="chat-sidebar chat-context-panel" style={{ width: leftPanelWidth, minWidth: leftPanelWidth }} withBorder radius="md" shadow="xs">
+        <aside className="chat-sidebar chat-context-panel" style={{ width: leftPanelWidth, minWidth: leftPanelWidth }}>
           <section className="sidebar-section meeting-context-summary">
             <div className="sidebar-header">
               <h2>会议上下文</h2>
@@ -547,7 +547,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
             onUploadDocument={(file) => uploadRoomKnowledge(roomId, file)}
             onDeleteDocument={deleteKnowledgeDocument}
           />
-        </Paper>
+        </aside>
 
         <ResizeHandle
           direction="horizontal"
@@ -558,7 +558,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
         />
 
         <section className="conversation-workspace">
-          <Paper className="conversation-heading" withBorder radius="md" shadow="xs">
+          <div className="conversation-heading">
             <div>
               <Text className="eyebrow eyebrow--subtle">实时讨论</Text>
               <Title order={2}>会议记录与决策流</Title>
@@ -572,7 +572,7 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
                 {thinkingAgents.length > 0 ? `${thinkingAgents.length} 个 Agent 正在思考` : '等待讨论'}
               </Badge>
             </Group>
-          </Paper>
+          </div>
           <MessageList
             ref={messageListRef}
             currentParticipantName={participantName}
@@ -599,13 +599,13 @@ export default function ChatRoom({ initialRoom, participantName, roomId, roomPas
           size={rightPanelWidth}
         />
 
-        <Paper component="aside" className="chat-sidebar agent-workbench-panel" style={{ width: rightPanelWidth, minWidth: rightPanelWidth }} withBorder radius="md" shadow="xs">
+        <aside className="chat-sidebar agent-workbench-panel" style={{ width: rightPanelWidth, minWidth: rightPanelWidth }}>
           <div className="agent-roster-region">
             <AgentRoster agents={agents} thinkingAgents={thinkingAgents} onInsertMention={handleInsertMention} />
           </div>
           <FocusTimeline focusPoints={focusPoints} />
           <AgentActivityPanel activities={activityItems} errorMessage={activityError} isLoading={activityLoading} />
-        </Paper>
+        </aside>
       </div>
     </main>
   )

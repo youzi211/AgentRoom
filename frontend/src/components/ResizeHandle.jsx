@@ -35,6 +35,30 @@ export default function ResizeHandle({
     }
   }, [direction, size])
 
+  const handleKeyDown = useCallback((e) => {
+    const key = e.key
+    if (key !== 'ArrowLeft' && key !== 'ArrowRight' && key !== 'ArrowUp' && key !== 'ArrowDown') {
+      return
+    }
+    e.preventDefault()
+    const step = e.shiftKey ? 32 : 8
+    const isHorizontal = direction === 'horizontal'
+    const delta = key === 'ArrowLeft' || key === 'ArrowDown' ? -step : step
+    const signedDelta = invertDelta ? -delta : delta
+    const min = isHorizontal ? minWidth : (minHeight || minWidth)
+    const max = isHorizontal ? maxWidth : (maxHeight || maxWidth)
+    const newSize = calculateResizeSize({
+      currentPosition: 0,
+      invertDelta,
+      maxSize: max,
+      minSize: min,
+      startPosition: 0,
+      startSize: size,
+    }) + signedDelta
+    const clamped = Math.max(min, Math.min(max ?? Infinity, newSize))
+    onResize?.(clamped)
+  }, [direction, invertDelta, minWidth, maxWidth, minHeight, maxHeight, size, onResize])
+
   useEffect(() => {
     if (!isDragging) return
 
@@ -76,10 +100,13 @@ export default function ResizeHandle({
   return (
     <div
       ref={handleRef}
+      aria-label="调整面板大小"
       aria-orientation={direction === 'horizontal' ? 'vertical' : 'horizontal'}
       className={`resize-handle resize-handle--${direction}${isDragging ? ' resize-handle--active' : ''}`}
+      onKeyDown={handleKeyDown}
       onMouseDown={handleMouseDown}
       role="separator"
+      tabIndex={0}
     />
   )
 }

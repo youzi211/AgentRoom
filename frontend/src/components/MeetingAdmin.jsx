@@ -174,7 +174,10 @@ function MeetingAdmin() {
         {runtimeState.errorMessage ? (
           <Alert color="red" variant="light">{runtimeState.errorMessage}</Alert>
         ) : runtimeState.isLoading ? (
-          <Text className="sidebar-empty">正在加载...</Text>
+          <div className="sidebar-loading">
+            <div className="sidebar-loading-skeleton sidebar-loading-skeleton--medium" />
+            <div className="sidebar-loading-skeleton sidebar-loading-skeleton--short" />
+          </div>
         ) : runtimeState.capabilities ? (
           <div className="collaboration-runtime-summary">
             <div>
@@ -244,7 +247,13 @@ function MeetingAdmin() {
         </div>
 
         {isLoading ? (
-          <Text className="sidebar-empty">正在加载...</Text>
+          <div className="sidebar-loading">
+            <div className="sidebar-loading-skeleton" />
+            <div className="sidebar-loading-skeleton sidebar-loading-skeleton--medium" />
+            <div className="sidebar-loading-skeleton sidebar-loading-skeleton--short" />
+            <div className="sidebar-loading-skeleton" />
+            <div className="sidebar-loading-skeleton sidebar-loading-skeleton--medium" />
+          </div>
         ) : rooms.length === 0 ? (
           <Text className="sidebar-empty">暂无会议记录。</Text>
         ) : (
@@ -265,7 +274,7 @@ function MeetingAdmin() {
               <Table.Tr key={roomItem.id}>
                 <Table.Td className="meeting-cell-name">
                   <strong>{roomItem.name}</strong>
-                  <Button type="button" className="meeting-room-id" title="复制房间 ID" variant="subtle" color="gray" size="compact-xs" onClick={() => handleCopyId(roomItem.id)}>
+                  <Button type="button" className="meeting-room-id" title="复制房间 ID" variant="subtle" color="gray" size="xs" onClick={() => handleCopyId(roomItem.id)}>
                     {roomItem.id}
                   </Button>
                 </Table.Td>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Badge, Button, Group, Paper, Stack, Text, Title } from '@mantine/core'
+import { Alert, Badge, Button, Group, Stack, Text, Title } from '@mantine/core'
 
 function KnowledgePanel({ description, disabled = false, emptyText, listDocuments, onDeleteDocument, onUploadDocument, title }) {
   const [documents, setDocuments] = useState([])
@@ -81,10 +81,10 @@ function KnowledgePanel({ description, disabled = false, emptyText, listDocument
   }
 
   return (
-    <Paper component="section" className="sidebar-section knowledge-panel" withBorder radius="md" shadow="none">
+    <section className="sidebar-section knowledge-panel">
       <div className="sidebar-header">
         <div>
-          <Title order={2}>{title}</Title>
+          <Title order={3}>{title}</Title>
           {description ? <Text className="sidebar-note">{description}</Text> : null}
         </div>
         <Badge className="sidebar-count" color="teal" variant="light">{documents.length}</Badge>
@@ -107,13 +107,16 @@ function KnowledgePanel({ description, disabled = false, emptyText, listDocument
       {errorMessage ? <Alert color="red" variant="light">{errorMessage}</Alert> : null}
 
       {isLoading ? (
-        <Text className="sidebar-empty">正在加载知识文档...</Text>
+        <div className="sidebar-loading">
+          <div className="sidebar-loading-skeleton sidebar-loading-skeleton--medium" />
+          <div className="sidebar-loading-skeleton sidebar-loading-skeleton--short" />
+        </div>
       ) : documents.length === 0 ? (
         <Text className="sidebar-empty">{emptyText}</Text>
       ) : (
         <Stack component="ul" className="knowledge-list" gap="xs">
           {documents.map((document) => (
-            <Paper component="li" className="knowledge-list-item" key={document.id} withBorder radius="md" shadow="none">
+            <li className="knowledge-list-item" key={document.id}>
               <div className="knowledge-document-main">
                 <Text className="knowledge-document-name">{document.fileName}</Text>
                 <Text className="knowledge-document-meta">
@@ -134,11 +137,11 @@ function KnowledgePanel({ description, disabled = false, emptyText, listDocument
                   删除
                 </Button>
               ) : null}
-            </Paper>
+            </li>
           ))}
         </Stack>
       )}
-    </Paper>
+    </section>
   )
 }
 

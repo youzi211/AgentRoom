@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Badge, Button, Group, Paper, Stack, Text, Title } from '@mantine/core'
+import { Badge, Button, Group, Stack, Text, Title } from '@mantine/core'
 import { buildLocalMeetingMinutesMarkdown, downloadMarkdownFile, minutesFilename, normalizeMinutesPayload } from './meetingMinutes'
 
 function MeetingMinutesPanel({
@@ -66,9 +66,9 @@ function MeetingMinutesPanel({
   }
 
   return (
-    <Paper component="section" className="sidebar-section minutes-panel" withBorder radius="md" shadow="none">
+    <section className="sidebar-section minutes-panel">
       <div className="sidebar-header">
-        <Title order={2}>会议产物</Title>
+        <Title order={3}>会议产物</Title>
         <Badge className="sidebar-count" color="teal" variant="light">MD</Badge>
       </div>
       <Stack gap="sm">
@@ -95,7 +95,7 @@ function MeetingMinutesPanel({
         </details>
       ) : null}
       </Stack>
-    </Paper>
+    </section>
   )
 }
 

@@ -1,10 +1,10 @@
-import { Avatar, Badge, Paper, Stack, Text, Title } from '@mantine/core'
+import { Avatar, Badge, Stack, Text, Title } from '@mantine/core'
 
 function ParticipantList({ participants }) {
   return (
-    <Paper component="section" className="sidebar-section" withBorder radius="md" shadow="none">
+    <section className="sidebar-section">
       <div className="sidebar-header">
-        <Title order={2}>在线成员</Title>
+        <Title order={3}>在线成员</Title>
         <Badge className="sidebar-count" color="teal" variant="light">{participants.length}</Badge>
       </div>
 
@@ -13,7 +13,7 @@ function ParticipantList({ participants }) {
       ) : (
         <Stack component="ul" className="sidebar-list" gap="xs">
           {participants.map((participant) => (
-            <Paper component="li" className="sidebar-list-item" key={participant.id} withBorder radius="md" shadow="none">
+            <li className="sidebar-list-item" key={participant.id}>
               <div className="participant-identity">
                 <Avatar className="sidebar-avatar participant-avatar" radius="sm" color="teal">{participant.name.charAt(0).toUpperCase()}</Avatar>
                 <div className="sidebar-copy">
@@ -21,11 +21,11 @@ function ParticipantList({ participants }) {
                   <Text className="sidebar-secondary">{formatJoinedAt(participant.joinedAt)} 加入</Text>
                 </div>
               </div>
-            </Paper>
+            </li>
           ))}
         </Stack>
       )}
-    </Paper>
+    </section>
   )
 }
 
