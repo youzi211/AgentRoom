@@ -93,6 +93,14 @@ class ModelConfigPreparationError(RuntimeError):
     """Preparation-stage model config resolution failure. No engine fallback."""
 
 
+class CredentialAccessDeniedError(ModelConfigPreparationError):
+    """Credential was found but access was denied (authentication failure)."""
+
+
+class CredentialProviderUnavailableError(ModelConfigPreparationError):
+    """Credential provider is temporarily unavailable (retryable)."""
+
+
 # ---------------------------------------------------------------------------
 # CredentialResolver - resolve credential references
 # Phase 1 supports: environment:go and environment:deepagent

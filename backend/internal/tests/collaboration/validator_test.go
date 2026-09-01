@@ -218,3 +218,50 @@ func validationRequest() collaboration.Request {
 	req.Snapshot.Agents = append(req.Snapshot.Agents, collaboration.AgentSnapshot{ID: "agent_2"})
 	return req
 }
+
+// ---------------------------------------------------------------------------
+// Task 7: Event-order contract for preparation failures
+// ---------------------------------------------------------------------------
+
+func TestValidatorAcceptsPreparationFailureSequence(t *testing.T) {
+	validator := collaboration.NewValidator(validationRequest())
+	events := []collaboration.Event{
+		runEvent(1, collaboration.EventAccepted),
+		runEvent(2, collaboration.EventCollaborationStarted),
+		validationTurnEvent(3, collaboration.EventSpeakerSelected, "turn_1", "agent_1"),
+		validationTurnEvent(4, collaboration.EventAgentTurnStarted, "turn_1", "agent_1"),
+		withTerminal(
+			runEvent(5, collaboration.EventFailed),
+			0,
+			collaboration.StopReasonEngineFailure,
+			&collaboration.Failure{Code: collaboration.ErrorModelNotConfigured, Message: "model not configured", Retryable: false},
+		),
+	}
+	for _, event := range events {
+		if err := validator.Validate(event); err != nil {
+			t.Fatalf("validate %s: %v", event.Kind, err)
+		}
+	}
+	if !validator.TerminalSeen() {
+		t.Fatal("expected terminal to be seen after preparation failure")
+	}
+}
+
+func TestValidatorRejectsModelStartedAfterPreparationFailure(t *testing.T) {
+	validator := collaboration.NewValidator(validationRequest())
+	mustValidate(t, validator, runEvent(1, collaboration.EventAccepted))
+	mustValidate(t, validator, runEvent(2, collaboration.EventCollaborationStarted))
+	mustValidate(t, validator, validationTurnEvent(3, collaboration.EventSpeakerSelected, "turn_1", "agent_1"))
+	mustValidate(t, validator, validationTurnEvent(4, collaboration.EventAgentTurnStarted, "turn_1", "agent_1"))
+	failed := withTerminal(
+		runEvent(5, collaboration.EventFailed),
+		0,
+		collaboration.StopReasonEngineFailure,
+		&collaboration.Failure{Code: collaboration.ErrorModelNotConfigured, Retryable: false},
+	)
+	mustValidate(t, validator, failed)
+	lateEvent := validationTurnEvent(6, collaboration.EventModelStarted, "turn_1", "agent_1")
+	if err := validator.Validate(lateEvent); !errors.Is(err, collaboration.ErrProtocol) {
+		t.Fatalf("expected protocol error for event after terminal, got %v", err)
+	}
+}

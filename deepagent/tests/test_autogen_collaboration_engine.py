@@ -376,3 +376,88 @@ async def _collect(engine, request, *, cancelled=False):
     if cancelled:
         cancel_event.set()
     return [event async for event in engine.execute(request, cancel_event)]
+
+
+
+# ---------------------------------------------------------------------------
+# Task 7: No-fallback regression for AutoGen engine
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("factory", [NativeCollaborationEngine, AutoGenCollaborationEngine])
+def test_engine_preparation_failure_terminates_without_fallback(factory):
+    """A Resolver/executor failure must terminate the run immediately.
+
+    No second turn, no legacy runner, no engine switch.
+    """
+
+    class CountingFailingExecutor:
+        def __init__(self):
+            self.calls = 0
+            self.agent_ids: list[str] = []
+
+        async def execute(self, turn, _cancel_event):
+            self.calls += 1
+            self.agent_ids.append(turn.agent.id)
+            yield ExecutorEvent(
+                ExecutorEventKind.FAILED,
+                data={"code": "model_not_configured", "retryable": False},
+            )
+
+    executor = CountingFailingExecutor()
+    engine = factory(executor)
+    events = asyncio.run(_collect(engine, contract_request("no_fallback_test")))
+
+    assert [event.kind for event in events if event.kind in TERMINAL_KINDS] == ["failed"]
+    assert events[-1].kind == "failed"
+    assert events[-1].data["code"] == "model_not_configured"
+    assert events[-1].data["retryable"] is False
+    # Only one executor call — no retry or fallback
+    assert executor.calls == 1
+    assert executor.agent_ids == ["agent_contract"]
+
+
+@pytest.mark.parametrize("factory", [NativeCollaborationEngine, AutoGenCollaborationEngine])
+def test_engine_preparation_failure_emits_no_model_events(factory):
+    """Preparation failure must not emit model_started or model_completed."""
+
+    class FailingExecutor:
+        async def execute(self, turn, _cancel_event):
+            yield ExecutorEvent(
+                ExecutorEventKind.FAILED,
+                data={"code": "model_not_configured", "retryable": False},
+            )
+
+    engine = FailingExecutor()
+    events = asyncio.run(_collect(factory(engine), contract_request("no_model_events")))
+
+    assert not any(event.kind == "model_started" for event in events)
+    assert not any(event.kind == "model_completed" for event in events)
+    assert not any(event.kind == "agent_message_completed" for event in events)
+    assert events[-1].kind == "failed"
+
+
+@pytest.mark.parametrize("factory", [NativeCollaborationEngine, AutoGenCollaborationEngine])
+def test_engine_preparation_failure_does_not_leak_credentials(factory):
+    """Failed event payload must not contain api_key or credential_ref."""
+
+    class LeakyExecutor:
+        async def execute(self, turn, _cancel_event):
+            yield ExecutorEvent(
+                ExecutorEventKind.FAILED,
+                data={
+                    "code": "model_not_configured",
+                    "retryable": False,
+                    "api_key": "sk-secret-key-12345",
+                    "credential_ref": "environment:deepagent",
+                },
+            )
+
+    engine = LeakyExecutor()
+    events = asyncio.run(_collect(factory(engine), contract_request("leak_check")))
+
+    serialized = repr(events)
+    assert "sk-secret-key-12345" not in serialized
+    failed_event = [event for event in events if event.kind == "failed"][0]
+    assert "api_key" not in failed_event.data
+    assert "credential_ref" not in failed_event.data

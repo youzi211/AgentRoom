@@ -602,3 +602,167 @@ def test_native_engine_rejects_executor_events_after_terminal(trailing_event):
         "turn_count": 0,
     }
     assert all(event.kind != "agent_message_completed" for event in events)
+
+
+
+# ---------------------------------------------------------------------------
+# Task 7: Event-order contract and no-fallback regression
+# ---------------------------------------------------------------------------
+
+
+def test_native_engine_success_event_order_contract():
+    """Success sequence must be: agent_turn_started, model_started, output_delta*, 
+    model_completed, agent_message_completed."""
+
+    class FullSuccessExecutor:
+        async def execute(self, turn, _cancel_event):
+            yield ExecutorEvent(ExecutorEventKind.MODEL_STARTED, data={"model_name": "test"})
+            yield ExecutorEvent(ExecutorEventKind.OUTPUT_DELTA, data={"text": "hello"})
+            yield ExecutorEvent(ExecutorEventKind.MODEL_COMPLETED, data={"model_name": "test", "usage": {"input_tokens": 1, "output_tokens": 2, "total_tokens": 3}})
+            yield ExecutorEvent(ExecutorEventKind.COMPLETED, data={"content": "hello", "artifacts": (), "knowledge_sources": (), "model": {"profile_id": "p", "source": "s", "model_name": "test"}, "usage": {"input_tokens": 1, "output_tokens": 2, "total_tokens": 3}})
+
+    async def scenario():
+        return [
+            event
+            async for event in NativeCollaborationEngine(FullSuccessExecutor()).execute(
+                contract_request(), asyncio.Event()
+            )
+        ]
+
+    events = asyncio.run(scenario())
+    # Filter to turn-level events (skip collaboration_started, speaker_selected, terminal completed)
+    turn_kinds = [
+        e.kind for e in events
+        if e.kind in {
+            "agent_turn_started", "model_started", "output_delta",
+            "model_completed", "agent_message_completed",
+        }
+    ]
+    assert turn_kinds == [
+        "agent_turn_started",
+        "model_started",
+        "output_delta",
+        "model_completed",
+        "agent_message_completed",
+    ]
+    assert events[-1].kind == "completed"
+
+
+def test_native_engine_preparation_failure_event_order_contract():
+    """Preparation failure sequence must be: agent_turn_started, failed.
+    
+    No model_started, model_completed, or agent_message_completed.
+    """
+
+    class PreparationFailureExecutor:
+        async def execute(self, turn, _cancel_event):
+            yield ExecutorEvent(
+                ExecutorEventKind.FAILED,
+                data={"code": "model_not_configured", "retryable": False},
+            )
+
+    async def scenario():
+        return [
+            event
+            async for event in NativeCollaborationEngine(PreparationFailureExecutor()).execute(
+                contract_request(), asyncio.Event()
+            )
+        ]
+
+    events = asyncio.run(scenario())
+    turn_kinds = [
+        e.kind for e in events
+        if e.kind in {
+            "agent_turn_started", "model_started", "output_delta",
+            "model_completed", "agent_message_completed", "failed",
+        }
+    ]
+    assert turn_kinds == ["agent_turn_started", "failed"]
+    assert events[-1].kind == "failed"
+    assert events[-1].data["code"] == "model_not_configured"
+    assert events[-1].data["retryable"] is False
+
+
+def test_native_engine_preparation_failure_emits_no_model_events():
+    """Preparation failure must not emit model_started or model_completed."""
+
+    class PreparationFailureExecutor:
+        async def execute(self, turn, _cancel_event):
+            yield ExecutorEvent(
+                ExecutorEventKind.FAILED,
+                data={"code": "model_not_configured", "retryable": False},
+            )
+
+    async def scenario():
+        return [
+            event
+            async for event in NativeCollaborationEngine(PreparationFailureExecutor()).execute(
+                contract_request(), asyncio.Event()
+            )
+        ]
+
+    events = asyncio.run(scenario())
+    assert not any(e.kind == "model_started" for e in events)
+    assert not any(e.kind == "model_completed" for e in events)
+    assert not any(e.kind == "agent_message_completed" for e in events)
+
+
+def test_native_engine_preparation_failure_does_not_invoke_another_engine():
+    """Resolver failure must terminate the run — never invoke another executor turn."""
+
+    class CountingExecutor:
+        def __init__(self):
+            self.calls = 0
+
+        async def execute(self, turn, _cancel_event):
+            self.calls += 1
+            yield ExecutorEvent(
+                ExecutorEventKind.FAILED,
+                data={"code": "model_not_configured", "retryable": False},
+            )
+
+    executor = CountingExecutor()
+
+    async def scenario():
+        return [
+            event
+            async for event in NativeCollaborationEngine(executor).execute(
+                contract_request(), asyncio.Event()
+            )
+        ]
+
+    events = asyncio.run(scenario())
+    assert events[-1].kind == "failed"
+    assert executor.calls == 1  # Only one turn attempted, no retry/fallback
+
+
+def test_native_engine_preparation_failure_does_not_leak_credentials():
+    """Failed event must not contain api_key or credential_ref."""
+
+    class LeakyExecutor:
+        async def execute(self, turn, _cancel_event):
+            yield ExecutorEvent(
+                ExecutorEventKind.FAILED,
+                data={
+                    "code": "model_not_configured",
+                    "retryable": False,
+                    "api_key": "sk-secret-key-12345",
+                    "credential_ref": "environment:deepagent",
+                },
+            )
+
+    async def scenario():
+        return [
+            event
+            async for event in NativeCollaborationEngine(LeakyExecutor()).execute(
+                contract_request(), asyncio.Event()
+            )
+        ]
+
+    events = asyncio.run(scenario())
+    serialized = repr(events)
+    assert "sk-secret-key-12345" not in serialized
+    # The engine failure event should only have reason, code, retryable, turn_count
+    failed_event = [e for e in events if e.kind == "failed"][0]
+    assert "api_key" not in failed_event.data
+    assert "credential_ref" not in failed_event.data

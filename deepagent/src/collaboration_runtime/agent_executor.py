@@ -5,7 +5,12 @@ from pathlib import Path
 
 from agent_runtime.context import RunContext
 from agent_runtime.events import EventPayload
-from agent_runtime.model_config import ModelConfigResolver
+from agent_runtime.model_config import (
+    CredentialAccessDeniedError,
+    CredentialProviderUnavailableError,
+    ModelConfigPreparationError,
+    ModelConfigResolver,
+)
 from agent_runtime.registry import ExecutorRegistry
 from agent_runtime.v1 import agent_runtime_pb2
 from google.protobuf.duration_pb2 import Duration
@@ -32,7 +37,11 @@ class RuntimeRegistryAgentExecutor:
         self._config_resolver = config_resolver or ModelConfigResolver()
 
     async def execute(self, request: AgentTurnRequest, cancel_event: asyncio.Event):
-        runtime_request = _runtime_request(request, self._config_resolver)
+        try:
+            runtime_request = _runtime_request(request, self._config_resolver)
+        except ModelConfigPreparationError as exc:
+            yield _preparation_failure(exc)
+            return
         executor = self._registry.resolve(runtime_request.executor_kind)
         run = RunContext.create(runtime_request, self._work_dir)
         try:
@@ -45,6 +54,33 @@ class RuntimeRegistryAgentExecutor:
                     yield mapped
         finally:
             run.cleanup()
+
+
+
+def _preparation_failure(exc: ModelConfigPreparationError) -> ExecutorEvent:
+    """Map a ModelConfigPreparationError to a stable FAILED executor event.
+
+    The mapping never exposes provider text or credential_ref values:
+    - credential_not_found / invalid config -> model_not_configured (retryable=false)
+    - credential_access_denied -> model_authentication_failed (retryable=false)
+    - credential_provider_unavailable -> engine_unavailable (retryable=true)
+    """
+    if isinstance(exc, CredentialProviderUnavailableError):
+        return ExecutorEvent(
+            ExecutorEventKind.FAILED,
+            {"code": "engine_unavailable", "retryable": True},
+        )
+    if isinstance(exc, CredentialAccessDeniedError):
+        return ExecutorEvent(
+            ExecutorEventKind.FAILED,
+            {"code": "model_authentication_failed", "retryable": False},
+        )
+    # CredentialNotFoundError and generic ModelConfigPreparationError
+    # both map to model_not_configured.
+    return ExecutorEvent(
+        ExecutorEventKind.FAILED,
+        {"code": "model_not_configured", "retryable": False},
+    )
 
 
 def _runtime_request(
