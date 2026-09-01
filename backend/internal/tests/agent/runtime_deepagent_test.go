@@ -2,6 +2,8 @@ package agent_test
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,7 +99,7 @@ func TestDeepAgentRuntimeInjectsResolvedModelAndRedactsSecretFromReportAndErrors
 	workDir := t.TempDir()
 	runtime := agent.NewDeepAgentRuntime(agent.DeepAgentRuntimeConfig{
 		Command: os.Args[0], Args: []string{"-test.run=TestDeepAgentRuntimeHelperProcess", "--"},
-		Env:     []string{"AGENTROOM_DEEPAGENT_HELPER=1", "AGENTROOM_DEEPAGENT_REQUIRE_MODEL_ENV=1", "AGENTROOM_DEEPAGENT_ECHO_MODEL_KEY_REPORT=1"},
+		Env:     []string{"AGENTROOM_DEEPAGENT_HELPER=1", "AGENTROOM_DEEPAGENT_REQUIRE_MODEL_STDIN=1", "AGENTROOM_DEEPAGENT_ECHO_MODEL_KEY_REPORT=1"},
 		WorkDir: workDir, Timeout: 5 * time.Second, Resolver: resolver,
 	})
 	response, err := runtime.Respond(context.Background(), agent.AgentRuntimeRequest{RunID: "run_secret", Agent: model.Agent{Runtime: model.AgentRuntimeDeepAgent}, Trigger: model.Message{Content: "research"}})
@@ -216,6 +218,23 @@ func TestDeepAgentRuntimeHelperProcess(t *testing.T) {
 		os.Exit(2)
 	}
 	cliArgs := args[separator+1:]
+
+	// Read model config from stdin when --model-config-stdin is present.
+	var modelConfig map[string]string
+	hasModelStdin := false
+	for _, arg := range cliArgs {
+		if arg == "--model-config-stdin" {
+			hasModelStdin = true
+			break
+		}
+	}
+	if hasModelStdin {
+		stdinData, _ := io.ReadAll(os.Stdin)
+		if len(stdinData) > 0 {
+			_ = json.Unmarshal(stdinData, &modelConfig)
+		}
+	}
+
 	if os.Getenv("AGENTROOM_DEEPAGENT_REQUIRE_QUESTION_SEPARATOR") == "1" {
 		foundQuestionSeparator := false
 		for _, arg := range cliArgs {
@@ -232,14 +251,15 @@ func TestDeepAgentRuntimeHelperProcess(t *testing.T) {
 		if arg == "--fail" {
 			message := "simulated deepagent failure"
 			if os.Getenv("AGENTROOM_DEEPAGENT_ECHO_MODEL_KEY_ERROR") == "1" {
-				message += " " + os.Getenv("MODEL_API_KEY")
+				key := modelConfig["api_key"]
+				message += " " + key
 			}
 			_, _ = os.Stderr.WriteString(message)
 			os.Exit(7)
 		}
 	}
-	if os.Getenv("AGENTROOM_DEEPAGENT_REQUIRE_MODEL_ENV") == "1" {
-		if os.Getenv("MODEL_PROTOCOL") != "openai" || os.Getenv("MODEL_BASE_URL") != "https://deep.example/v1" || os.Getenv("MODEL_NAME") != "deep-model" || os.Getenv("MODEL_API_KEY") == "" {
+	if os.Getenv("AGENTROOM_DEEPAGENT_REQUIRE_MODEL_STDIN") == "1" {
+		if modelConfig["protocol"] != "openai" || modelConfig["base_url"] != "https://deep.example/v1" || modelConfig["model_name"] != "deep-model" || modelConfig["api_key"] == "" {
 			os.Exit(9)
 		}
 	}
@@ -254,6 +274,8 @@ func TestDeepAgentRuntimeHelperProcess(t *testing.T) {
 			}
 		case "--config":
 			i++
+		case "--model-config-stdin":
+			// flag consumed above
 		case "--":
 			if i+1 < len(cliArgs) {
 				question = cliArgs[i+1]
@@ -275,7 +297,8 @@ func TestDeepAgentRuntimeHelperProcess(t *testing.T) {
 	}
 	content := "# Report\n\nQuestion: " + question + "\n"
 	if os.Getenv("AGENTROOM_DEEPAGENT_ECHO_MODEL_KEY_REPORT") == "1" {
-		content += "Key: " + os.Getenv("MODEL_API_KEY") + "\n"
+		key := modelConfig["api_key"]
+		content += "Key: " + key + "\n"
 	}
 	if err := os.WriteFile(filepath.Join(reportDir, "report.md"), []byte(content), 0o644); err != nil {
 		os.Exit(5)

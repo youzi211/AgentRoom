@@ -65,6 +65,12 @@ class CollaborationErrorCode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     COLLABORATION_ERROR_CODE_CANCELLED: _ClassVar[CollaborationErrorCode]
     COLLABORATION_ERROR_CODE_DEADLINE_EXCEEDED: _ClassVar[CollaborationErrorCode]
     COLLABORATION_ERROR_CODE_INTERNAL: _ClassVar[CollaborationErrorCode]
+
+class ModelSelectionPurpose(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    MODEL_SELECTION_PURPOSE_UNSPECIFIED: _ClassVar[ModelSelectionPurpose]
+    MODEL_SELECTION_PURPOSE_AGENT_TURN: _ClassVar[ModelSelectionPurpose]
+    MODEL_SELECTION_PURPOSE_SPEAKER_SELECTION: _ClassVar[ModelSelectionPurpose]
 COLLABORATION_ENGINE_UNSPECIFIED: CollaborationEngine
 COLLABORATION_ENGINE_NATIVE: CollaborationEngine
 COLLABORATION_ENGINE_AUTOGEN: CollaborationEngine
@@ -105,6 +111,9 @@ COLLABORATION_ERROR_CODE_PROTOCOL_ERROR: CollaborationErrorCode
 COLLABORATION_ERROR_CODE_CANCELLED: CollaborationErrorCode
 COLLABORATION_ERROR_CODE_DEADLINE_EXCEEDED: CollaborationErrorCode
 COLLABORATION_ERROR_CODE_INTERNAL: CollaborationErrorCode
+MODEL_SELECTION_PURPOSE_UNSPECIFIED: ModelSelectionPurpose
+MODEL_SELECTION_PURPOSE_AGENT_TURN: ModelSelectionPurpose
+MODEL_SELECTION_PURPOSE_SPEAKER_SELECTION: ModelSelectionPurpose
 
 class GetCapabilitiesRequest(_message.Message):
     __slots__ = ()
@@ -145,7 +154,7 @@ class RoomSnapshot(_message.Message):
     def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., status: _Optional[str] = ...) -> None: ...
 
 class AgentSnapshot(_message.Message):
-    __slots__ = ("id", "name", "mention", "role", "description", "system_prompt", "runtime", "model_reference_id", "tool_names")
+    __slots__ = ("id", "name", "mention", "role", "description", "system_prompt", "runtime", "model_selection_id", "tool_names")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     MENTION_FIELD_NUMBER: _ClassVar[int]
@@ -153,7 +162,7 @@ class AgentSnapshot(_message.Message):
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     SYSTEM_PROMPT_FIELD_NUMBER: _ClassVar[int]
     RUNTIME_FIELD_NUMBER: _ClassVar[int]
-    MODEL_REFERENCE_ID_FIELD_NUMBER: _ClassVar[int]
+    MODEL_SELECTION_ID_FIELD_NUMBER: _ClassVar[int]
     TOOL_NAMES_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
@@ -162,9 +171,9 @@ class AgentSnapshot(_message.Message):
     description: str
     system_prompt: str
     runtime: str
-    model_reference_id: str
+    model_selection_id: str
     tool_names: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., mention: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., system_prompt: _Optional[str] = ..., runtime: _Optional[str] = ..., model_reference_id: _Optional[str] = ..., tool_names: _Optional[_Iterable[str]] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., mention: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., system_prompt: _Optional[str] = ..., runtime: _Optional[str] = ..., model_selection_id: _Optional[str] = ..., tool_names: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class MessageSnapshot(_message.Message):
     __slots__ = ("id", "sender_id", "sender_name", "sender_type", "content", "created_at", "collaboration_run_id", "turn_index", "parent_message_id")
@@ -206,21 +215,25 @@ class KnowledgeChunk(_message.Message):
     content: str
     def __init__(self, id: _Optional[str] = ..., document_id: _Optional[str] = ..., document_name: _Optional[str] = ..., scope: _Optional[str] = ..., scope_id: _Optional[str] = ..., chunk_index: _Optional[int] = ..., content: _Optional[str] = ...) -> None: ...
 
-class ModelReference(_message.Message):
-    __slots__ = ("id", "profile_id", "source", "protocol", "model_name", "runtime_scope")
+class ModelSelection(_message.Message):
+    __slots__ = ("id", "profile_id", "source", "protocol", "model_name", "runtime_scope", "credential_ref", "purpose")
     ID_FIELD_NUMBER: _ClassVar[int]
     PROFILE_ID_FIELD_NUMBER: _ClassVar[int]
     SOURCE_FIELD_NUMBER: _ClassVar[int]
     PROTOCOL_FIELD_NUMBER: _ClassVar[int]
     MODEL_NAME_FIELD_NUMBER: _ClassVar[int]
     RUNTIME_SCOPE_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_REF_FIELD_NUMBER: _ClassVar[int]
+    PURPOSE_FIELD_NUMBER: _ClassVar[int]
     id: str
     profile_id: str
     source: str
     protocol: str
     model_name: str
     runtime_scope: str
-    def __init__(self, id: _Optional[str] = ..., profile_id: _Optional[str] = ..., source: _Optional[str] = ..., protocol: _Optional[str] = ..., model_name: _Optional[str] = ..., runtime_scope: _Optional[str] = ...) -> None: ...
+    credential_ref: str
+    purpose: ModelSelectionPurpose
+    def __init__(self, id: _Optional[str] = ..., profile_id: _Optional[str] = ..., source: _Optional[str] = ..., protocol: _Optional[str] = ..., model_name: _Optional[str] = ..., runtime_scope: _Optional[str] = ..., credential_ref: _Optional[str] = ..., purpose: _Optional[_Union[ModelSelectionPurpose, str]] = ...) -> None: ...
 
 class CollaborationPolicySnapshot(_message.Message):
     __slots__ = ("version", "engine", "trigger_mode", "max_turns", "max_turns_per_agent", "allow_agent_handoff", "allow_self_followup", "cooldown", "stop_on_empty_output", "stop_on_repeated_output")
@@ -281,13 +294,13 @@ class OpaqueCheckpoint(_message.Message):
     def __init__(self, engine: _Optional[_Union[CollaborationEngine, str]] = ..., engine_version: _Optional[str] = ..., format_version: _Optional[str] = ..., sha256: _Optional[str] = ..., size_bytes: _Optional[int] = ..., payload: _Optional[bytes] = ...) -> None: ...
 
 class ConversationSnapshot(_message.Message):
-    __slots__ = ("room", "agents", "trigger", "transcript", "knowledge_chunks", "model_references", "policy", "limits", "initial_candidate_agent_ids")
+    __slots__ = ("room", "agents", "trigger", "transcript", "knowledge_chunks", "model_selections", "policy", "limits", "initial_candidate_agent_ids")
     ROOM_FIELD_NUMBER: _ClassVar[int]
     AGENTS_FIELD_NUMBER: _ClassVar[int]
     TRIGGER_FIELD_NUMBER: _ClassVar[int]
     TRANSCRIPT_FIELD_NUMBER: _ClassVar[int]
     KNOWLEDGE_CHUNKS_FIELD_NUMBER: _ClassVar[int]
-    MODEL_REFERENCES_FIELD_NUMBER: _ClassVar[int]
+    MODEL_SELECTIONS_FIELD_NUMBER: _ClassVar[int]
     POLICY_FIELD_NUMBER: _ClassVar[int]
     LIMITS_FIELD_NUMBER: _ClassVar[int]
     INITIAL_CANDIDATE_AGENT_IDS_FIELD_NUMBER: _ClassVar[int]
@@ -296,11 +309,11 @@ class ConversationSnapshot(_message.Message):
     trigger: MessageSnapshot
     transcript: _containers.RepeatedCompositeFieldContainer[MessageSnapshot]
     knowledge_chunks: _containers.RepeatedCompositeFieldContainer[KnowledgeChunk]
-    model_references: _containers.RepeatedCompositeFieldContainer[ModelReference]
+    model_selections: _containers.RepeatedCompositeFieldContainer[ModelSelection]
     policy: CollaborationPolicySnapshot
     limits: ExecutionLimits
     initial_candidate_agent_ids: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, room: _Optional[_Union[RoomSnapshot, _Mapping]] = ..., agents: _Optional[_Iterable[_Union[AgentSnapshot, _Mapping]]] = ..., trigger: _Optional[_Union[MessageSnapshot, _Mapping]] = ..., transcript: _Optional[_Iterable[_Union[MessageSnapshot, _Mapping]]] = ..., knowledge_chunks: _Optional[_Iterable[_Union[KnowledgeChunk, _Mapping]]] = ..., model_references: _Optional[_Iterable[_Union[ModelReference, _Mapping]]] = ..., policy: _Optional[_Union[CollaborationPolicySnapshot, _Mapping]] = ..., limits: _Optional[_Union[ExecutionLimits, _Mapping]] = ..., initial_candidate_agent_ids: _Optional[_Iterable[str]] = ...) -> None: ...
+    def __init__(self, room: _Optional[_Union[RoomSnapshot, _Mapping]] = ..., agents: _Optional[_Iterable[_Union[AgentSnapshot, _Mapping]]] = ..., trigger: _Optional[_Union[MessageSnapshot, _Mapping]] = ..., transcript: _Optional[_Iterable[_Union[MessageSnapshot, _Mapping]]] = ..., knowledge_chunks: _Optional[_Iterable[_Union[KnowledgeChunk, _Mapping]]] = ..., model_selections: _Optional[_Iterable[_Union[ModelSelection, _Mapping]]] = ..., policy: _Optional[_Union[CollaborationPolicySnapshot, _Mapping]] = ..., limits: _Optional[_Union[ExecutionLimits, _Mapping]] = ..., initial_candidate_agent_ids: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class ExecuteConversationRequest(_message.Message):
     __slots__ = ("protocol_version", "collaboration_run_id", "trace_id", "engine", "snapshot", "checkpoint")
@@ -329,16 +342,16 @@ class Usage(_message.Message):
     def __init__(self, input_tokens: _Optional[int] = ..., output_tokens: _Optional[int] = ..., total_tokens: _Optional[int] = ...) -> None: ...
 
 class ModelAudit(_message.Message):
-    __slots__ = ("model_reference_id", "profile_id", "source", "model_name")
-    MODEL_REFERENCE_ID_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("model_selection_id", "profile_id", "source", "model_name")
+    MODEL_SELECTION_ID_FIELD_NUMBER: _ClassVar[int]
     PROFILE_ID_FIELD_NUMBER: _ClassVar[int]
     SOURCE_FIELD_NUMBER: _ClassVar[int]
     MODEL_NAME_FIELD_NUMBER: _ClassVar[int]
-    model_reference_id: str
+    model_selection_id: str
     profile_id: str
     source: str
     model_name: str
-    def __init__(self, model_reference_id: _Optional[str] = ..., profile_id: _Optional[str] = ..., source: _Optional[str] = ..., model_name: _Optional[str] = ...) -> None: ...
+    def __init__(self, model_selection_id: _Optional[str] = ..., profile_id: _Optional[str] = ..., source: _Optional[str] = ..., model_name: _Optional[str] = ...) -> None: ...
 
 class KnowledgeSource(_message.Message):
     __slots__ = ("document_id", "document_name", "scope")
@@ -397,18 +410,18 @@ class AgentTurnStartedEvent(_message.Message):
     def __init__(self) -> None: ...
 
 class ModelStartedEvent(_message.Message):
-    __slots__ = ("model_reference_id",)
-    MODEL_REFERENCE_ID_FIELD_NUMBER: _ClassVar[int]
-    model_reference_id: str
-    def __init__(self, model_reference_id: _Optional[str] = ...) -> None: ...
+    __slots__ = ("model_selection_id",)
+    MODEL_SELECTION_ID_FIELD_NUMBER: _ClassVar[int]
+    model_selection_id: str
+    def __init__(self, model_selection_id: _Optional[str] = ...) -> None: ...
 
 class ModelCompletedEvent(_message.Message):
-    __slots__ = ("model_reference_id", "usage")
-    MODEL_REFERENCE_ID_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("model_selection_id", "usage")
+    MODEL_SELECTION_ID_FIELD_NUMBER: _ClassVar[int]
     USAGE_FIELD_NUMBER: _ClassVar[int]
-    model_reference_id: str
+    model_selection_id: str
     usage: Usage
-    def __init__(self, model_reference_id: _Optional[str] = ..., usage: _Optional[_Union[Usage, _Mapping]] = ...) -> None: ...
+    def __init__(self, model_selection_id: _Optional[str] = ..., usage: _Optional[_Union[Usage, _Mapping]] = ...) -> None: ...
 
 class ToolStartedEvent(_message.Message):
     __slots__ = ("tool_call_id", "tool_name", "input_summary")

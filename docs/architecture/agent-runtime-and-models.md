@@ -418,6 +418,69 @@ model_profiles fields         = dynamically read connection content
 - 更新同一 Profile 的 Base URL、模型名或 API Key：引用该 ID 的旧房间下一次调用使用新内容；
 - 显式 Profile 失效：旧房间报错，不静默切换到其他凭据。
 
+## 9A. 统一模型执行边界（ADR-001）
+
+ADR-001 将模型选择、协作编排、Agent 执行和模型执行定义为四个独立职责层。以下是运维相关要点。
+
+### 支持的凭据引用
+
+| credential_ref | 解析目标 | 失败行为 |
+| --- | --- | --- |
+| `environment:go` | `LLM_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL` | 环境变量缺失 → `model_not_configured` |
+| `environment:deepagent` | `MODEL_BASE_URL` + `MODEL_API_KEY` + `MODEL_NAME` | 环境变量缺失 → `model_not_configured` |
+| `profile:<id>` | 生产 Secret Provider Adapter | 无 Adapter 时 preparation 阶段失败，**不回退到环境凭据** |
+
+当前加密 MySQL Profile 凭据仍由 Go 控制面拥有，在独立的 Secret Provider 迁移完成前不改变。
+
+### Selector 模型所有权
+
+Go 控制面决定 AutoGen Selector 使用的模型。Selector 接收一个 `selector` purpose 的 `ModelSelection`，通过 `ModelExecutionService` 调用模型，**不直接使用 SDK 或读取环境变量**。
+
+```text
+Go → ModelSelection(purpose=selector)
+       ↓
+AutoGen Selector
+       ↓
+ModelExecutionService → ModelConfigResolver → ModelClient
+```
+
+### 准备阶段事件顺序
+
+```text
+agent_turn_started
+    ↓
+resolve ModelConfig (preparation)
+    ↓ ← 失败时：直接 → failed(code), 不产生 model_started
+model_started
+    ↓
+output_delta*
+    ↓
+model_completed
+    ↓
+agent_message_completed
+```
+
+### 稳定错误映射
+
+| 准备阶段错误 | 事件 code | retryable |
+| --- | --- | --- |
+| `CredentialNotFoundError` / 通用 `ModelConfigPreparationError` | `model_not_configured` | false |
+| `CredentialAccessDeniedError` | `model_authentication_failed` | false |
+| `CredentialProviderUnavailableError` | `engine_unavailable` | true |
+
+### 运维操作
+
+- **`profile:<id>` 未解析**：在控制面为该 Profile 配置 Secret Provider Adapter，或临时切换到 `environment:<scope>` 凭据引用。不要期望 profile 凭据自动回退到环境变量。
+- **`model_not_configured`**：检查环境变量是否设置（`environment:<scope>` 路径），或检查数据库 Profile 是否启用且密钥可解密（`profile:<id>` 路径）。
+- **`model_authentication_failed`**：Provider API Key 无效或已过期。更新对应 Profile 或环境变量中的 API Key。
+- **`engine_unavailable`**：Secret Provider 临时不可用。重试或检查 Provider 连通性。
+
+关键代码：
+
+- `deepagent/src/agent_runtime/model_config.py` — `ModelConfig`、`ModelConfigResolver`、`CredentialResolver`、错误类型
+- `deepagent/src/collaboration_runtime/model_execution.py` — `ModelExecutionService`、`ModelClient` Protocol
+- `deepagent/src/collaboration_runtime/agent_executor.py` — `RuntimeRegistryAgentExecutor` preparation 失败映射
+
 ## 10. API Key 加密和响应边界
 
 Profile API Key 由 `SecretCipher` 使用：

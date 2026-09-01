@@ -6,7 +6,7 @@ from pathlib import Path
 from collaboration_engine_contract import contract_request
 from collaboration_runtime.executor import ExecutorEvent, ExecutorEventKind
 from collaboration_runtime.engines import NativeCollaborationEngine
-from collaboration_runtime.models import AgentSnapshot, ModelReference
+from collaboration_runtime.models import AgentSnapshot, ModelSelection
 
 
 GOLDEN_PATH = (
@@ -70,18 +70,20 @@ async def _execute_case(case):
             description="Golden scenario agent",
             system_prompt=f"You are {item['name']}.",
             runtime="deepagent",
-            model_reference_id=f"model-{item['id']}",
+            model_selection_id=f"model-{item['id']}",
         )
         for item in case["agents"]
     )
     models = tuple(
-        ModelReference(
+        ModelSelection(
             id=f"model-{item['id']}",
             profile_id=f"profile-{item['id']}",
             source="database",
             protocol="fake",
             model_name="research-model",
             runtime_scope="collaboration",
+                credential_ref="",
+                purpose="agent_turn",
         )
         for item in case["agents"]
     )
@@ -89,7 +91,7 @@ async def _execute_case(case):
     request = replace(
         base,
         agents=agents,
-        model_references=models,
+        model_selections=models,
         trigger=replace(base.trigger, content=case["trigger"]),
         initial_candidate_agent_ids=tuple(case["initial_candidate_agent_ids"]),
         policy=replace(

@@ -26,11 +26,11 @@ func TestBuildCreatesOrderedAuthoritativeSnapshot(t *testing.T) {
 	if len(request.Snapshot.Agents) != 2 || request.Snapshot.Agents[0].ID != "agent_1" || request.Snapshot.Agents[1].ID != "agent_2" {
 		t.Fatalf("Agent order changed: %#v", request.Snapshot.Agents)
 	}
-	if request.Snapshot.Agents[0].Runtime != model.AgentRuntimeLLM || request.Snapshot.Agents[0].ModelReferenceID != "model_1" {
+	if request.Snapshot.Agents[0].Runtime != model.AgentRuntimeLLM || request.Snapshot.Agents[0].ModelSelectionID != "model_1" {
 		t.Fatalf("unexpected Agent snapshot: %#v", request.Snapshot.Agents[0])
 	}
-	if len(request.Snapshot.ModelReferences) != 1 {
-		t.Fatalf("shared model reference was not deduplicated: %#v", request.Snapshot.ModelReferences)
+	if len(request.Snapshot.ModelSelections) != 1 {
+		t.Fatalf("shared model reference was not deduplicated: %#v", request.Snapshot.ModelSelections)
 	}
 	if got := request.Snapshot.InitialCandidateAgentIDs; len(got) != 2 || got[0] != "agent_2" || got[1] != "agent_1" {
 		t.Fatalf("candidate order or deduplication changed: %#v", got)
@@ -58,7 +58,7 @@ func TestBuildDetachesSnapshotFromMutableInputs(t *testing.T) {
 
 	input.Agents[0].Agent.Name = "changed"
 	input.Agents[0].ToolNames[0] = "changed"
-	input.Agents[0].ModelReference.ModelName = "changed"
+	input.Agents[0].ModelSelection.ModelName = "changed"
 	input.Transcript[0].Content = "changed"
 	input.KnowledgeChunks[0].Content = "changed"
 	input.InitialCandidateAgentIDs[0] = "changed"
@@ -67,8 +67,8 @@ func TestBuildDetachesSnapshotFromMutableInputs(t *testing.T) {
 	if request.Snapshot.Agents[0].Name != "Architect" || request.Snapshot.Agents[0].ToolNames[0] != "search" {
 		t.Fatalf("Agent snapshot changed with input: %#v", request.Snapshot.Agents[0])
 	}
-	if request.Snapshot.ModelReferences[0].ModelName != "test-model" {
-		t.Fatalf("model reference changed with input: %#v", request.Snapshot.ModelReferences[0])
+	if request.Snapshot.ModelSelections[0].ModelName != "test-model" {
+		t.Fatalf("model reference changed with input: %#v", request.Snapshot.ModelSelections[0])
 	}
 	if request.Snapshot.Transcript[0].Content != "Earlier" || request.Snapshot.KnowledgeChunks[0].Content != "Knowledge" {
 		t.Fatal("transcript or knowledge snapshot changed with input")
@@ -86,7 +86,7 @@ func TestBuildRejectsInvalidAuthorityInputs(t *testing.T) {
 		{name: "no eligible Agents", mutate: func(input *collaboration.Input) { input.Agents = nil }},
 		{name: "disabled Agent", mutate: func(input *collaboration.Input) { input.Agents[0].Agent.Enabled = false }},
 		{name: "duplicate Agent", mutate: func(input *collaboration.Input) { input.Agents[1].Agent.ID = "agent_1" }},
-		{name: "missing model metadata", mutate: func(input *collaboration.Input) { input.Agents[0].ModelReference.Protocol = "" }},
+		{name: "missing model metadata", mutate: func(input *collaboration.Input) { input.Agents[0].ModelSelection.Protocol = "" }},
 		{name: "candidate outside snapshot", mutate: func(input *collaboration.Input) { input.InitialCandidateAgentIDs = []string{"agent_3"} }},
 		{name: "non-human trigger", mutate: func(input *collaboration.Input) { input.Trigger.SenderType = model.SenderTypeAgent }},
 		{name: "negative transcript turn", mutate: func(input *collaboration.Input) { input.Transcript[0].TurnIndex = -1 }},
@@ -108,7 +108,7 @@ func TestBuildRejectsInvalidAuthorityInputs(t *testing.T) {
 
 func validInput() collaboration.Input {
 	payload := []byte("state")
-	reference := collaboration.ModelReference{
+	selection := collaboration.ModelSelection{
 		ID: "model_1", ProfileID: "profile_1", Source: "database",
 		Protocol: model.ModelProtocolOpenAIChatCompletions, ModelName: "test-model", RuntimeScope: model.ModelRuntimeGo,
 	}
@@ -116,8 +116,8 @@ func validInput() collaboration.Input {
 		CollaborationRunID: "collab_1", TraceID: "trace_1",
 		Room: model.RoomMeta{ID: "room_1", Name: "Planning"},
 		Agents: []collaboration.AgentBinding{
-			{Agent: model.Agent{ID: "agent_1", Name: "Architect", Runtime: "", Enabled: true}, ToolNames: []string{"search"}, ModelReference: reference},
-			{Agent: model.Agent{ID: "agent_2", Name: "Reviewer", Runtime: model.AgentRuntimeLLM, Enabled: true}, ModelReference: reference},
+			{Agent: model.Agent{ID: "agent_1", Name: "Architect", Runtime: "", Enabled: true}, ToolNames: []string{"search"}, ModelSelection: selection},
+			{Agent: model.Agent{ID: "agent_2", Name: "Reviewer", Runtime: model.AgentRuntimeLLM, Enabled: true}, ModelSelection: selection},
 		},
 		Trigger: model.Message{
 			ID: "message_1", SenderID: "user_1", SenderName: "Alice", SenderType: model.SenderTypeHuman,

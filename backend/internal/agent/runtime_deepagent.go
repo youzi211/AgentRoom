@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -79,12 +80,8 @@ func (r *DeepAgentRuntime) Respond(ctx context.Context, request AgentRuntimeRequ
 	if strings.TrimSpace(r.config.Config) != "" {
 		args = append(args, "--config", r.config.Config)
 	}
-	args = append(args, "--run-id", runID, "--", question)
+	args = append(args, "--run-id", runID)
 
-	cmd := exec.CommandContext(requestCtx, r.config.Command, args...)
-	if strings.TrimSpace(r.config.WorkDir) != "" {
-		cmd.Dir = r.config.WorkDir
-	}
 	resolved := model.ResolvedModelConfig{}
 	if r.config.Resolver != nil {
 		var err error
@@ -93,6 +90,30 @@ func (r *DeepAgentRuntime) Respond(ctx context.Context, request AgentRuntimeRequ
 			return AgentRuntimeResponse{}, err
 		}
 	}
+
+	// When credentials are resolved, pass them via stdin as JSON instead
+	// of environment variables to reduce credential exposure in process
+	// listings.
+	var stdinJSON []byte
+	if resolved.Source != "" {
+		args = append(args, "--model-config-stdin")
+		config := map[string]string{
+			"protocol":   "openai",
+			"base_url":   resolved.BaseURL,
+			"model_name": resolved.ModelName,
+			"api_key":    resolved.APIKey,
+		}
+		stdinJSON, err = json.Marshal(config)
+		if err != nil {
+			return AgentRuntimeResponse{}, fmt.Errorf("marshal model config: %w", err)
+		}
+	}
+	args = append(args, "--", question)
+
+	cmd := exec.CommandContext(requestCtx, r.config.Command, args...)
+	if strings.TrimSpace(r.config.WorkDir) != "" {
+		cmd.Dir = r.config.WorkDir
+	}
 	metadata := modelAuditMetadata(resolved)
 	if metadata == nil {
 		metadata = make(map[string]string)
@@ -100,8 +121,10 @@ func (r *DeepAgentRuntime) Respond(ctx context.Context, request AgentRuntimeRequ
 	metadata["runtime"] = model.AgentRuntimeDeepAgent
 	metadata["run_id"] = runID
 	cmd.Env = append(os.Environ(), r.config.Env...)
-	if resolved.Source != "" {
-		cmd.Env = append(cmd.Env, "MODEL_PROTOCOL=openai", "MODEL_BASE_URL="+resolved.BaseURL, "MODEL_NAME="+resolved.ModelName, "MODEL_API_KEY="+resolved.APIKey)
+	if stdinJSON != nil {
+		cmd.Stdin = bytes.NewReader(stdinJSON)
+	} else {
+		cmd.Stdin = bytes.NewReader(nil)
 	}
 	var output bytes.Buffer
 	cmd.Stdout = &output

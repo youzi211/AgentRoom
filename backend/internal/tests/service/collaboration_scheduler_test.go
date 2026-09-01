@@ -310,3 +310,56 @@ func collaborationActivityEvents(request collaboration.Request) []collaboration.
 		{ProtocolVersion: collaboration.ProtocolVersion, CollaborationRunID: request.CollaborationRunID, Sequence: 9, OccurredAt: now, Kind: collaboration.EventCompleted, Terminal: &collaboration.Terminal{TurnCount: 1, Reason: collaboration.StopReasonCompleted}},
 	}
 }
+
+
+// ---------------------------------------------------------------------------
+// Task 7: Preparation failure — no fallback, stable error mapping
+// ---------------------------------------------------------------------------
+
+func TestRemoteCollaborationSchedulerPreparationFailureMapsToModelNotConfigured(t *testing.T) {
+	now := time.Now().UTC()
+	coordinator := &capturingCollaborationCoordinator{
+		events: func(request collaboration.Request) []collaboration.Event {
+			return []collaboration.Event{
+				{ProtocolVersion: collaboration.ProtocolVersion, CollaborationRunID: request.CollaborationRunID, Sequence: 1, OccurredAt: now, Kind: collaboration.EventAccepted},
+				{ProtocolVersion: collaboration.ProtocolVersion, CollaborationRunID: request.CollaborationRunID, Sequence: 2, OccurredAt: now, Kind: collaboration.EventCollaborationStarted},
+				{ProtocolVersion: collaboration.ProtocolVersion, CollaborationRunID: request.CollaborationRunID, Sequence: 3, OccurredAt: now, Kind: collaboration.EventSpeakerSelected, TurnID: "turn-1", AgentID: "product"},
+				{ProtocolVersion: collaboration.ProtocolVersion, CollaborationRunID: request.CollaborationRunID, Sequence: 4, OccurredAt: now, Kind: collaboration.EventAgentTurnStarted, TurnID: "turn-1", AgentID: "product"},
+				{ProtocolVersion: collaboration.ProtocolVersion, CollaborationRunID: request.CollaborationRunID, Sequence: 5, OccurredAt: now, Kind: collaboration.EventFailed, Terminal: &collaboration.Terminal{TurnCount: 0, Reason: collaboration.StopReasonEngineFailure, Failure: &collaboration.Failure{Code: collaboration.ErrorModelNotConfigured, Message: "model not configured", Retryable: false}}},
+			}
+		},
+	}
+	store := &teststore.Store{}
+	scheduler := newTestCollaborationScheduler(t, coordinator, store)
+	currentRoom, trigger := collaborationTestRoom(model.CollaborationTriggerAutomatic, "please review this")
+
+	if err := scheduler.HandleHumanMessage(context.Background(), currentRoom, trigger); err != nil {
+		t.Fatalf("preparation failure should not return error from HandleHumanMessage: %v", err)
+	}
+
+	if got := len(coordinator.Requests()); got != 1 {
+		t.Fatalf("expected exactly one collaboration run (no fallback), got %d", got)
+	}
+	if len(store.CollaborationRuns) != 1 {
+		t.Fatalf("expected one collaboration audit, got %d", len(store.CollaborationRuns))
+	}
+	run := store.CollaborationRuns[0]
+	if run.Status != model.CollaborationRunStatusFailed {
+		t.Fatalf("expected failed status, got %s", run.Status)
+	}
+	if run.StopReason != model.CollaborationStopReasonEngineFailure {
+		t.Fatalf("expected engine_failure stop reason, got %s", run.StopReason)
+	}
+	// No legacy dialogue_runs fallback
+	if len(store.DialogueRuns) != 0 {
+		t.Fatalf("expected no legacy dialogue_runs fallback, got %d", len(store.DialogueRuns))
+	}
+	// No committed agent messages — only the human trigger message should be in RoomMessages
+	for roomID, msgs := range store.RoomMessages {
+		for _, msg := range msgs {
+			if msg.SenderType == model.SenderTypeAgent {
+				t.Fatalf("expected no committed agent messages in room %s, but found one", roomID)
+			}
+		}
+	}
+}

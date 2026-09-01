@@ -11,7 +11,7 @@ from .models import (
     ExecutionLimits,
     KnowledgeChunk,
     MessageSnapshot,
-    ModelReference,
+    ModelSelection,
     RoomSnapshot,
 )
 
@@ -39,7 +39,7 @@ class AgentTurnRequest:
     trigger: MessageSnapshot
     transcript: tuple[MessageSnapshot, ...]
     knowledge_chunks: tuple[KnowledgeChunk, ...]
-    model_reference: ModelReference
+    model_selection: ModelSelection
     limits: ExecutionLimits
 
 

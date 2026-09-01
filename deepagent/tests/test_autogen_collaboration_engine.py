@@ -30,7 +30,7 @@ from collaboration_runtime.engines.autogen import (  # noqa: E402
     _ParticipantMapping,
 )
 from collaboration_runtime.executor import ExecutorEvent, ExecutorEventKind  # noqa: E402
-from collaboration_runtime.models import AgentSnapshot, ModelReference  # noqa: E402
+from collaboration_runtime.models import AgentSnapshot, ModelSelection  # noqa: E402
 
 
 TERMINAL_KINDS = {"completed", "stopped", "cancelled", "failed"}
@@ -59,18 +59,20 @@ def _second_agent(base):
         id="agent_reviewer",
         name="Reviewer",
         mention="@Reviewer",
-        model_reference_id="model_reviewer",
+        model_selection_id="model_reviewer",
     )
 
 
 def _second_model():
-    return ModelReference(
+    return ModelSelection(
         id="model_reviewer",
         profile_id="profile_reviewer",
         source="test",
         protocol="fake",
         model_name="fake-reviewer",
         runtime_scope="collaboration",
+        credential_ref="",
+        purpose="agent_turn",
     )
 
 
@@ -79,7 +81,7 @@ def _handoff_request():
     request = replace(
         base,
         agents=(base.agents[0], _second_agent(base)),
-        model_references=(base.model_references[0], _second_model()),
+        model_selections=(base.model_selections[0], _second_model()),
         initial_candidate_agent_ids=("agent_contract",),
         policy=replace(
             base.policy,
@@ -138,7 +140,7 @@ def test_engine_rejects_handoff_to_over_limit_agent(factory):
     request = replace(
         base,
         agents=(base.agents[0], _second_agent(base)),
-        model_references=(base.model_references[0], _second_model()),
+        model_selections=(base.model_selections[0], _second_model()),
         initial_candidate_agent_ids=("agent_contract",),
         policy=replace(
             base.policy,
@@ -168,11 +170,11 @@ def test_engine_rejects_handoff_to_over_limit_agent(factory):
 @pytest.mark.parametrize("factory", [NativeCollaborationEngine, AutoGenCollaborationEngine])
 def test_engine_stops_on_empty_and_duplicate_output(factory):
     base = contract_request(run_id="autogen_stops")
-    second = replace(base.agents[0], id="agent_second", name="Second", mention="@Second", model_reference_id="model_second")
+    second = replace(base.agents[0], id="agent_second", name="Second", mention="@Second", model_selection_id="model_second")
     request = replace(
         base,
         agents=(base.agents[0], second),
-        model_references=(base.model_references[0], ModelReference(id="model_second", profile_id="profile_second", source="test", protocol="fake", model_name="fake-second", runtime_scope="collaboration")),
+        model_selections=(base.model_selections[0], ModelSelection(id="model_second", profile_id="profile_second", source="test", protocol="fake", model_name="fake-second", runtime_scope="collaboration", credential_ref="", purpose="agent_turn")),
         initial_candidate_agent_ids=(base.agents[0].id, second.id),
         policy=replace(base.policy, max_turns=2),
     )
@@ -192,9 +194,9 @@ def test_engine_stops_on_empty_and_duplicate_output(factory):
 
 def test_autogen_engine_participant_mapping_is_stable_and_conflict_free():
     agents = (
-        AgentSnapshot(id="a1", name="Author", mention="@Author", role="r", description="d", system_prompt="s", runtime="llm", model_reference_id="m1"),
-        AgentSnapshot(id="a2", name="Author", mention="@Author2", role="r", description="d", system_prompt="s", runtime="llm", model_reference_id="m2"),
-        AgentSnapshot(id="a3", name="Bad Name!", mention="@Bad", role="r", description="d", system_prompt="s", runtime="llm", model_reference_id="m3"),
+        AgentSnapshot(id="a1", name="Author", mention="@Author", role="r", description="d", system_prompt="s", runtime="llm", model_selection_id="m1"),
+        AgentSnapshot(id="a2", name="Author", mention="@Author2", role="r", description="d", system_prompt="s", runtime="llm", model_selection_id="m2"),
+        AgentSnapshot(id="a3", name="Bad Name!", mention="@Bad", role="r", description="d", system_prompt="s", runtime="llm", model_selection_id="m3"),
     )
     mapping = _ParticipantMapping(agents)
     names = mapping.names
@@ -301,18 +303,20 @@ def test_autogen_engine_speaker_selection_matches_native_on_golden():
                 description="Golden scenario agent",
                 system_prompt=f"You are {item['name']}.",
                 runtime="deepagent",
-                model_reference_id=f"model-{item['id']}",
+                model_selection_id=f"model-{item['id']}",
             )
             for item in case["agents"]
         )
         models = tuple(
-            ModelReference(
+            ModelSelection(
                 id=f"model-{item['id']}",
                 profile_id=f"profile-{item['id']}",
                 source="database",
                 protocol="fake",
                 model_name="research-model",
                 runtime_scope="collaboration",
+                credential_ref="",
+                purpose="agent_turn",
             )
             for item in case["agents"]
         )
@@ -320,7 +324,7 @@ def test_autogen_engine_speaker_selection_matches_native_on_golden():
         request = replace(
             base,
             agents=agents,
-            model_references=models,
+            model_selections=models,
             trigger=replace(base.trigger, content=case["trigger"]),
             initial_candidate_agent_ids=tuple(case["initial_candidate_agent_ids"]),
             policy=replace(
@@ -372,3 +376,88 @@ async def _collect(engine, request, *, cancelled=False):
     if cancelled:
         cancel_event.set()
     return [event async for event in engine.execute(request, cancel_event)]
+
+
+
+# ---------------------------------------------------------------------------
+# Task 7: No-fallback regression for AutoGen engine
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("factory", [NativeCollaborationEngine, AutoGenCollaborationEngine])
+def test_engine_preparation_failure_terminates_without_fallback(factory):
+    """A Resolver/executor failure must terminate the run immediately.
+
+    No second turn, no legacy runner, no engine switch.
+    """
+
+    class CountingFailingExecutor:
+        def __init__(self):
+            self.calls = 0
+            self.agent_ids: list[str] = []
+
+        async def execute(self, turn, _cancel_event):
+            self.calls += 1
+            self.agent_ids.append(turn.agent.id)
+            yield ExecutorEvent(
+                ExecutorEventKind.FAILED,
+                data={"code": "model_not_configured", "retryable": False},
+            )
+
+    executor = CountingFailingExecutor()
+    engine = factory(executor)
+    events = asyncio.run(_collect(engine, contract_request("no_fallback_test")))
+
+    assert [event.kind for event in events if event.kind in TERMINAL_KINDS] == ["failed"]
+    assert events[-1].kind == "failed"
+    assert events[-1].data["code"] == "model_not_configured"
+    assert events[-1].data["retryable"] is False
+    # Only one executor call — no retry or fallback
+    assert executor.calls == 1
+    assert executor.agent_ids == ["agent_contract"]
+
+
+@pytest.mark.parametrize("factory", [NativeCollaborationEngine, AutoGenCollaborationEngine])
+def test_engine_preparation_failure_emits_no_model_events(factory):
+    """Preparation failure must not emit model_started or model_completed."""
+
+    class FailingExecutor:
+        async def execute(self, turn, _cancel_event):
+            yield ExecutorEvent(
+                ExecutorEventKind.FAILED,
+                data={"code": "model_not_configured", "retryable": False},
+            )
+
+    engine = FailingExecutor()
+    events = asyncio.run(_collect(factory(engine), contract_request("no_model_events")))
+
+    assert not any(event.kind == "model_started" for event in events)
+    assert not any(event.kind == "model_completed" for event in events)
+    assert not any(event.kind == "agent_message_completed" for event in events)
+    assert events[-1].kind == "failed"
+
+
+@pytest.mark.parametrize("factory", [NativeCollaborationEngine, AutoGenCollaborationEngine])
+def test_engine_preparation_failure_does_not_leak_credentials(factory):
+    """Failed event payload must not contain api_key or credential_ref."""
+
+    class LeakyExecutor:
+        async def execute(self, turn, _cancel_event):
+            yield ExecutorEvent(
+                ExecutorEventKind.FAILED,
+                data={
+                    "code": "model_not_configured",
+                    "retryable": False,
+                    "api_key": "sk-secret-key-12345",
+                    "credential_ref": "environment:deepagent",
+                },
+            )
+
+    engine = LeakyExecutor()
+    events = asyncio.run(_collect(factory(engine), contract_request("leak_check")))
+
+    serialized = repr(events)
+    assert "sk-secret-key-12345" not in serialized
+    failed_event = [event for event in events if event.kind == "failed"][0]
+    assert "api_key" not in failed_event.data
+    assert "credential_ref" not in failed_event.data

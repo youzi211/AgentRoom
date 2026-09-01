@@ -60,7 +60,7 @@ def request(run_id="collaboration_test"):
                     id="agent_test",
                     name="Test agent",
                     runtime="llm",
-                    model_reference_id="model_test",
+                    model_selection_id="model_test",
                 )
             ],
             trigger=collaboration_runtime_pb2.MessageSnapshot(
@@ -70,8 +70,8 @@ def request(run_id="collaboration_test"):
                 sender_type=collaboration_runtime_pb2.SENDER_TYPE_HUMAN,
                 content="Test",
             ),
-            model_references=[
-                collaboration_runtime_pb2.ModelReference(
+            model_selections=[
+                collaboration_runtime_pb2.ModelSelection(
                     id="model_test",
                     profile_id="profile_test",
                     source="test",
@@ -169,7 +169,7 @@ def test_service_maps_request_and_streams_service_owned_ordered_terminal():
             grpc.StatusCode.INVALID_ARGUMENT,
         ),
         (
-            lambda value: setattr(value.snapshot.agents[0], "model_reference_id", "model_unknown"),
+            lambda value: setattr(value.snapshot.agents[0], "model_selection_id", "model_unknown"),
             grpc.StatusCode.INVALID_ARGUMENT,
         ),
     ],

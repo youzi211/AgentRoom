@@ -1,6 +1,6 @@
 # ADR-001：分离控制面、协作编排、Agent 执行与模型执行
 
-- 状态：Accepted
+- 状态：Implemented
 - 日期：2026-09-01
 - 决策范围：Go Backend、Python Agent Runtime、Native/AutoGen Collaboration Engine、所有模型消费者
 
@@ -299,6 +299,36 @@ AutoGen Selector、DeepAgent 等消费者的执行形态不同。统一点应是
 - DeepAgent 和 AutoGen 现有配置旁路必须迁移；
 - 本地环境、生产 Secret Manager 和现有数据库凭据需要明确迁移策略；
 - Runtime 必须确保 `ModelConfig` 生命周期短且不会被日志、checkpoint 或异常对象保留。
+
+## 实施状态
+
+本 ADR 的第一阶段已实施完成：
+
+### 已落地
+
+- `ModelSelection` 替换了 Collaboration 合约中的 `ModelReference`（Go + Python + Proto）
+- `ModelConfigResolver` + `CredentialResolver` 在 Python Agent Execution 层统一解析
+- `RuntimeRegistryAgentExecutor` 在 preparation 阶段解析 `ModelConfig`，失败时产生稳定 `FAILED` 事件
+- `ModelExecutionService` 为 AutoGen Selector 提供统一 Model Client 入口
+- `credential_ref` 从 `autogen.py` 移除，Go 子进程通过 `--model-config-stdin` JSON 管道传递配置
+- 架构边界测试防止 Engine 文件 import `agent_runtime.model_config`
+- `profile:<id>` 无 Adapter 时 preparation 阶段失败，不回退环境凭据
+- 端到端集成测试验证 `environment:go` 凭据解析、密钥不泄漏、`profile:p1` fail-closed
+
+### 稳定错误映射
+
+| 准备阶段错误 | 事件 code | retryable |
+| --- | --- | --- |
+| `CredentialNotFoundError` / 通用 `ModelConfigPreparationError` | `model_not_configured` | false |
+| `CredentialAccessDeniedError` | `model_authentication_failed` | false |
+| `CredentialProviderUnavailableError` | `engine_unavailable` | true |
+
+### 待实施（独立变更）
+
+- 生产 Secret Manager 产品选型与 Adapter 实现
+- 现有 MySQL 加密 Profile 凭据迁移到 Provider-managed `credential_ref`
+- 多租户凭据授权与轮换策略
+- 单 Agent gRPC 合约是否也停止携带 legacy `ModelConnection`
 
 ## 不在本 ADR 范围内
 

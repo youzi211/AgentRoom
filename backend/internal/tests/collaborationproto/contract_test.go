@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	collaborationruntimev1 "agentroom/backend/internal/collaboration/proto/v1"
+	collaborationruntimev1 "agentroom/backend/internal/collaborationproto/v1"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -127,10 +127,10 @@ func TestCollaborationModelReferenceHasNoCredentialFields(t *testing.T) {
 			t.Fatalf("contract fixture contains sensitive field %q", forbidden)
 		}
 	}
-	fields := (&collaborationruntimev1.ModelReference{}).ProtoReflect().Descriptor().Fields()
+	fields := (&collaborationruntimev1.ModelSelection{}).ProtoReflect().Descriptor().Fields()
 	for _, forbidden := range []protoreflect.Name{"api_key", "authorization", "provider_response"} {
 		if fields.ByName(forbidden) != nil {
-			t.Fatalf("model reference exposes sensitive field %q", forbidden)
+			t.Fatalf("model selection exposes sensitive field %q", forbidden)
 		}
 	}
 }

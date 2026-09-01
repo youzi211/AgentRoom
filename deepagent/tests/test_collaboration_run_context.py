@@ -32,7 +32,7 @@ def request(run_id: str = "shared_run") -> CollaborationRequest:
                 description="Test agent",
                 system_prompt="Respond",
                 runtime="llm",
-                model_reference_id="model_test",
+                model_selection_id="model_test",
             ),
         ),
         trigger=MessageSnapshot(
@@ -44,7 +44,7 @@ def request(run_id: str = "shared_run") -> CollaborationRequest:
         ),
         transcript=(),
         knowledge_chunks=(),
-        model_references=(),
+        model_selections=(),
         policy=CollaborationPolicy(
             version="v1",
             engine="native",

@@ -10,7 +10,7 @@ from .models import (
     ExecutionLimits,
     KnowledgeChunk,
     MessageSnapshot,
-    ModelReference,
+    ModelSelection,
     RoomSnapshot,
 )
 from .protocol import validate_checkpoint_size, validate_deadline
@@ -29,6 +29,10 @@ SENDER_TYPE_NAMES = {
     collaboration_runtime_pb2.SENDER_TYPE_HUMAN: "human",
     collaboration_runtime_pb2.SENDER_TYPE_AGENT: "agent",
     collaboration_runtime_pb2.SENDER_TYPE_SYSTEM: "system",
+}
+PURPOSE_NAMES = {
+    collaboration_runtime_pb2.MODEL_SELECTION_PURPOSE_AGENT_TURN: "agent_turn",
+    collaboration_runtime_pb2.MODEL_SELECTION_PURPOSE_SPEAKER_SELECTION: "speaker_selection",
 }
 
 
@@ -53,7 +57,7 @@ def map_request(request) -> CollaborationRequest:
         trigger=_message(snapshot.trigger),
         transcript=tuple(_message(item) for item in snapshot.transcript),
         knowledge_chunks=tuple(_knowledge(item) for item in snapshot.knowledge_chunks),
-        model_references=tuple(_model(item) for item in snapshot.model_references),
+        model_selections=tuple(_model(item) for item in snapshot.model_selections),
         policy=_policy(snapshot.policy),
         limits=ExecutionLimits(
             timeout_seconds=limits.timeout.ToTimedelta().total_seconds(),
@@ -78,7 +82,7 @@ def _agent(item) -> AgentSnapshot:
         description=item.description,
         system_prompt=item.system_prompt,
         runtime=item.runtime,
-        model_reference_id=item.model_reference_id,
+        model_selection_id=item.model_selection_id,
         tool_names=tuple(item.tool_names),
     )
 
@@ -110,14 +114,17 @@ def _knowledge(item) -> KnowledgeChunk:
     )
 
 
-def _model(item) -> ModelReference:
-    return ModelReference(
+def _model(item) -> ModelSelection:
+    purpose = _optional_name(PURPOSE_NAMES, item.purpose, "")
+    return ModelSelection(
         id=item.id,
         profile_id=item.profile_id,
         source=item.source,
         protocol=item.protocol,
         model_name=item.model_name,
         runtime_scope=item.runtime_scope,
+        credential_ref=item.credential_ref,
+        purpose=purpose,
     )
 
 
@@ -152,3 +159,8 @@ def _required_name(mapping: dict[int, str], value: int, label: str) -> str:
         return mapping[value]
     except KeyError as exc:
         raise ValueError(f"{label} is required") from exc
+
+
+def _optional_name(mapping: dict[int, str], value: int, fallback: str) -> str:
+    """Map an enum value to a name, returning fallback for unspecified/unknown."""
+    return mapping.get(value, fallback)

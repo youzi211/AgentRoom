@@ -43,7 +43,7 @@ class AgentSnapshot:
     description: str
     system_prompt: str
     runtime: str
-    model_reference_id: str
+    model_selection_id: str
     tool_names: tuple[str, ...] = ()
 
 
@@ -72,13 +72,15 @@ class KnowledgeChunk:
 
 
 @dataclass(frozen=True)
-class ModelReference:
+class ModelSelection:
     id: str
     profile_id: str
     source: str
     protocol: str
     model_name: str
     runtime_scope: str
+    credential_ref: str
+    purpose: str
 
 
 @dataclass(frozen=True)
@@ -127,7 +129,7 @@ class CollaborationRequest:
     trigger: MessageSnapshot
     transcript: tuple[MessageSnapshot, ...]
     knowledge_chunks: tuple[KnowledgeChunk, ...]
-    model_references: tuple[ModelReference, ...]
+    model_selections: tuple[ModelSelection, ...]
     policy: CollaborationPolicy
     limits: ExecutionLimits
     initial_candidate_agent_ids: tuple[str, ...] = ()

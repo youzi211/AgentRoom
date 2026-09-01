@@ -20,7 +20,7 @@ from ..models import (
     EngineEvent,
     EventKind,
     MessageSnapshot,
-    ModelReference,
+    ModelSelection,
 )
 
 
@@ -51,7 +51,7 @@ def initial_candidates(request: CollaborationRequest) -> tuple[AgentSnapshot, ..
     speaker so the engine never fires every agent at once.
     """
     agents_by_id = {agent.id: agent for agent in request.agents}
-    model_ids = {model.id for model in request.model_references}
+    model_ids = {model.id for model in request.model_selections}
     seen: set[str] = set()
     candidates: list[AgentSnapshot] = []
     for agent_id in request.initial_candidate_agent_ids:
@@ -63,14 +63,14 @@ def initial_candidates(request: CollaborationRequest) -> tuple[AgentSnapshot, ..
             continue
         if agent.runtime not in {"llm", "deepagent"}:
             continue
-        if agent.model_reference_id not in model_ids:
+        if agent.model_selection_id not in model_ids:
             continue
         candidates.append(agent)
     if not request.initial_candidate_agent_ids and request.policy.trigger_mode == "automatic":
         for agent in request.agents:
             if agent.runtime not in {"llm", "deepagent"}:
                 continue
-            if agent.model_reference_id not in model_ids:
+            if agent.model_selection_id not in model_ids:
                 continue
             return (agent,)
     return tuple(candidates)
@@ -85,7 +85,7 @@ def eligible_agents(
         agent
         for agent in agents
         if agent.runtime in {"llm", "deepagent"}
-        and agent.model_reference_id in model_ids
+        and agent.model_selection_id in model_ids
     )
 
 
@@ -148,7 +148,7 @@ def map_executor_event(
     event: ExecutorEvent,
     turn_id: str,
     agent_id: str,
-    model_reference: ModelReference,
+    model_selection: ModelSelection,
 ) -> EngineEvent | None:
     """Map an Executor event to a neutral Engine event, or None to skip."""
     data = event.data
@@ -157,7 +157,7 @@ def map_executor_event(
             EventKind.MODEL_STARTED,
             turn_id=turn_id,
             agent_id=agent_id,
-            data={"model_reference_id": model_reference.id},
+            data={"model_selection_id": model_selection.id},
         )
     if event.kind is ExecutorEventKind.MODEL_COMPLETED:
         return EngineEvent(
@@ -165,7 +165,7 @@ def map_executor_event(
             turn_id=turn_id,
             agent_id=agent_id,
             data={
-                "model_reference_id": model_reference.id,
+                "model_selection_id": model_selection.id,
                 "usage": usage_data(data.get("usage")),
             },
         )
@@ -222,7 +222,7 @@ def map_executor_event(
 
 def completed_data(
     data: Mapping[str, object],
-    model_reference: ModelReference,
+    model_selection: ModelSelection,
 ) -> dict[str, object]:
     """Build the ``agent_message_completed`` payload from executor output."""
     return {
@@ -232,10 +232,10 @@ def completed_data(
             knowledge_source_data(item) for item in data.get("knowledge_sources", ())
         ),
         "model": {
-            "model_reference_id": model_reference.id,
-            "profile_id": model_reference.profile_id,
-            "source": model_reference.source,
-            "model_name": model_reference.model_name,
+            "model_selection_id": model_selection.id,
+            "profile_id": model_selection.profile_id,
+            "source": model_selection.source,
+            "model_name": model_selection.model_name,
         },
         "usage": usage_data(data.get("usage")),
     }

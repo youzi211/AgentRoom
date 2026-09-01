@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	collaborationruntimev1 "agentroom/backend/internal/collaboration/proto/v1"
+	collaborationruntimev1 "agentroom/backend/internal/collaborationproto/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
@@ -88,7 +88,7 @@ func TestClientMapsRequestAndOrderedEvents(t *testing.T) {
 			protoEvent(1, &collaborationruntimev1.CollaborationEvent_Accepted{Accepted: &collaborationruntimev1.AcceptedEvent{}}),
 			turnProtoEvent(2, &collaborationruntimev1.CollaborationEvent_SpeakerSelected{SpeakerSelected: &collaborationruntimev1.SpeakerSelectedEvent{ReasonCategory: "mention"}}),
 			turnProtoEvent(3, &collaborationruntimev1.CollaborationEvent_ModelCompleted{ModelCompleted: &collaborationruntimev1.ModelCompletedEvent{
-				ModelReferenceId: "model_1", Usage: &collaborationruntimev1.Usage{InputTokens: 3, OutputTokens: 5, TotalTokens: 8},
+				ModelSelectionId: "model_1", Usage: &collaborationruntimev1.Usage{InputTokens: 3, OutputTokens: 5, TotalTokens: 8},
 			}}),
 			turnProtoEvent(4, &collaborationruntimev1.CollaborationEvent_ToolFailed{ToolFailed: &collaborationruntimev1.ToolFailedEvent{
 				ToolCallId: "tool_1", ToolName: "search", Failure: &collaborationruntimev1.CollaborationFailure{
@@ -105,7 +105,7 @@ func TestClientMapsRequestAndOrderedEvents(t *testing.T) {
 			turnProtoEvent(7, &collaborationruntimev1.CollaborationEvent_AgentMessageCompleted{AgentMessageCompleted: &collaborationruntimev1.AgentMessageCompletedEvent{
 				Content: "final", Artifacts: []*collaborationruntimev1.Artifact{{Id: "artifact_1", Content: []byte("data")}},
 				KnowledgeSources: []*collaborationruntimev1.KnowledgeSource{{DocumentId: "doc_1", DocumentName: "Plan", Scope: "room"}},
-				Model:            &collaborationruntimev1.ModelAudit{ModelReferenceId: "model_1", ProfileId: "profile_1", Source: "database", ModelName: "test-model"},
+				Model:            &collaborationruntimev1.ModelAudit{ModelSelectionId: "model_1", ProfileId: "profile_1", Source: "database", ModelName: "test-model"},
 				Usage:            &collaborationruntimev1.Usage{InputTokens: 3, OutputTokens: 5, TotalTokens: 8},
 			}}),
 			protoEvent(8, &collaborationruntimev1.CollaborationEvent_Checkpoint{Checkpoint: &collaborationruntimev1.CheckpointEvent{
@@ -143,7 +143,7 @@ func TestClientMapsRequestAndOrderedEvents(t *testing.T) {
 	if request.GetEngine() != collaborationruntimev1.CollaborationEngine_COLLABORATION_ENGINE_NATIVE || request.GetSnapshot().GetRoom().GetId() != "room_1" {
 		t.Fatalf("unexpected mapped request: %#v", request)
 	}
-	if got := request.GetSnapshot().GetAgents()[0]; got.GetModelReferenceId() != "model_1" || len(got.GetToolNames()) != 1 {
+	if got := request.GetSnapshot().GetAgents()[0]; got.GetModelSelectionId() != "model_1" || len(got.GetToolNames()) != 1 {
 		t.Fatalf("unexpected Agent mapping: %#v", got)
 	}
 	if request.GetSnapshot().GetTrigger().GetCreatedAt() == nil || request.GetCheckpoint().GetEngineVersion() != "native-v1" {
@@ -155,7 +155,7 @@ func TestClientMapsRequestAndOrderedEvents(t *testing.T) {
 	if events[1].Kind != collaboration.EventSpeakerSelected || events[1].ReasonCategory != "mention" {
 		t.Fatalf("unexpected speaker event: %#v", events[1])
 	}
-	if events[2].ModelReferenceID != "model_1" || events[2].Usage.TotalTokens != 8 {
+	if events[2].ModelSelectionID != "model_1" || events[2].Usage.TotalTokens != 8 {
 		t.Fatalf("unexpected model event: %#v", events[2])
 	}
 	if events[3].Tool == nil || events[3].Tool.Failure == nil || events[3].Tool.Failure.Code != collaboration.ErrorToolFailed {
@@ -368,7 +368,7 @@ func validRequest() collaboration.Request {
 			Room: collaboration.RoomSnapshot{ID: "room_1", Name: "Planning", Status: "active"},
 			Agents: []collaboration.AgentSnapshot{{
 				ID: "agent_1", Name: "Architect", Mention: "Architect", Runtime: "llm",
-				ModelReferenceID: "model_1", ToolNames: []string{"search"},
+				ModelSelectionID: "model_1", ToolNames: []string{"search"},
 			}},
 			Trigger: collaboration.MessageSnapshot{
 				ID: "message_1", SenderID: "user_1", SenderName: "Alice", SenderType: collaboration.SenderHuman,
@@ -378,7 +378,7 @@ func validRequest() collaboration.Request {
 				ID: "message_0", SenderID: "user_1", SenderType: collaboration.SenderHuman, Content: "Context", CreatedAt: createdAt,
 			}},
 			KnowledgeChunks: []collaboration.KnowledgeChunk{{ID: "chunk_1", DocumentID: "doc_1", DocumentName: "Plan", Scope: "room", ScopeID: "room_1", Content: "Knowledge"}},
-			ModelReferences: []collaboration.ModelReference{{ID: "model_1", ProfileID: "profile_1", Source: "database", Protocol: "openai_chat_completions", ModelName: "test-model", RuntimeScope: "llm"}},
+			ModelSelections: []collaboration.ModelSelection{{ID: "model_1", ProfileID: "profile_1", Source: "database", Protocol: "openai_chat_completions", ModelName: "test-model", RuntimeScope: "llm"}},
 			Policy: collaboration.PolicySnapshot{
 				Version: "v1", Engine: collaboration.EngineNative, TriggerMode: collaboration.TriggerMentionOnly,
 				MaxTurns: 3, MaxTurnsPerAgent: 1, AllowAgentHandoff: true, Cooldown: time.Millisecond,

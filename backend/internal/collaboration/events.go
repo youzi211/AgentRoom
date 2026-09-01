@@ -35,7 +35,7 @@ type Event struct {
 	Kind               EventKind
 
 	ReasonCategory   string
-	ModelReferenceID string
+	ModelSelectionID string
 	Usage            Usage
 	Tool             *ToolActivity
 	OutputDelta      string

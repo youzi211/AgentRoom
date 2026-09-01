@@ -24,6 +24,20 @@
 | Python 事件写入器限制 artifact 大小且不静默截断 | `deepagent/tests/test_agent_runtime_events.py`、`test_deepagent_executor.py` |
 | Prompt、Authorization 和请求级凭据不进入结构化日志、错误或 artifact | `deepagent/tests/test_agent_runtime_security.py`、`test_agent_runtime_service.py`、`test_deepagent_executor.py` |
 
+## 统一模型执行边界不变量（ADR-001）
+
+ADR-001 实施后新增以下基线不变量：
+
+| 不变量 | 证据 |
+| --- | --- |
+| `credential_ref` 只出现在 `ModelConfigResolver` 和 `CredentialResolver`，不进入 Engine、事件、checkpoint 或日志 | `deepagent/tests/test_collaboration_dependency_boundaries.py` |
+| `profile:<id>` 在无 Secret Provider Adapter 时 preparation 阶段失败，不回退环境凭据 | `deepagent/tests/test_collaboration_model_execution_integration.py` |
+| `environment:go` 凭据解析后正确传递 Authorization 和 model_name 到 HTTP server | `deepagent/tests/test_collaboration_model_execution_integration.py` |
+| API key 不出现在事件流、序列化 checkpoint 或日志中 | `deepagent/tests/test_collaboration_model_execution_integration.py` |
+| 准备阶段失败产生稳定错误码（`model_not_configured` / `model_authentication_failed` / `engine_unavailable`） | `deepagent/tests/test_collaboration_agent_executor.py`、`backend/internal/tests/collaboration/validator_test.go` |
+| Native/AutoGen Engine 不 import `agent_runtime.model_config` | `deepagent/tests/test_collaboration_dependency_boundaries.py` |
+| 协作运行配置失败不回退 Legacy 引擎 | `backend/internal/tests/service/collaboration_scheduler_test.go` |
+
 ## 基线验证命令
 
 ```powershell

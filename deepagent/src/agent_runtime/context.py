@@ -5,8 +5,12 @@ import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .v1 import agent_runtime_pb2
+
+if TYPE_CHECKING:
+    from agent_runtime.model_config import ModelConfig
 
 
 @dataclass
@@ -14,6 +18,7 @@ class RunContext:
     request: agent_runtime_pb2.ExecuteAgentRequest
     work_dir: Path
     cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
+    model_config: ModelConfig | None = None
 
     @classmethod
     def create(

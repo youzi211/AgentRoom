@@ -103,12 +103,12 @@ def test_collaboration_event_validator_rejects_out_of_order_and_duplicate_termin
         )
 
 
-def test_collaboration_model_reference_has_no_credential_fields():
+def test_collaboration_model_selection_has_no_credential_fields():
     request_json = json.dumps(_fixture()["request"]).lower()
     for forbidden in ("api_key", "apikey", "authorization", "provider_response", "providerresponse"):
         assert forbidden not in request_json
 
-    fields = collaboration_runtime_pb2.ModelReference.DESCRIPTOR.fields_by_name
+    fields = collaboration_runtime_pb2.ModelSelection.DESCRIPTOR.fields_by_name
     assert "api_key" not in fields
     assert "authorization" not in fields
     assert "provider_response" not in fields

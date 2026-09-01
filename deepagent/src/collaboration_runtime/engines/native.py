@@ -11,7 +11,7 @@ from ..models import (
     EngineEvent,
     EventKind,
     MessageSnapshot,
-    ModelReference,
+    ModelSelection,
 )
 from ._shared import (
     completed_data,
@@ -119,8 +119,8 @@ class NativeCollaborationEngine:
                 turn_id=turn_id,
                 agent_id=agent.id,
             )
-            model_reference = next(
-                model for model in request.model_references if model.id == agent.model_reference_id
+            model_selection = next(
+                model for model in request.model_selections if model.id == agent.model_selection_id
             )
             completed_payload = None
             executor_terminal = False
@@ -135,7 +135,7 @@ class NativeCollaborationEngine:
                     trigger=trigger,
                     transcript=tuple(transcript),
                     knowledge_chunks=request.knowledge_chunks,
-                    model_reference=model_reference,
+                    model_selection=model_selection,
                     limits=request.limits,
                 ),
                 cancel_event,
@@ -151,7 +151,7 @@ class NativeCollaborationEngine:
                         yield protocol_failure(turn_count)
                         return
                     try:
-                        completed_payload = completed_data(event.data, model_reference)
+                        completed_payload = completed_data(event.data, model_selection)
                     except (AttributeError, TypeError, ValueError, OverflowError):
                         yield protocol_failure(turn_count)
                         return
@@ -179,7 +179,7 @@ class NativeCollaborationEngine:
                             event,
                             turn_id,
                             agent.id,
-                            model_reference,
+                            model_selection,
                         )
                     except (AttributeError, TypeError, ValueError, OverflowError):
                         mapped = None

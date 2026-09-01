@@ -343,6 +343,56 @@ func (CollaborationErrorCode) EnumDescriptor() ([]byte, []int) {
 	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{4}
 }
 
+// ModelSelectionPurpose classifies why a model profile is being requested.
+type ModelSelectionPurpose int32
+
+const (
+	ModelSelectionPurpose_MODEL_SELECTION_PURPOSE_UNSPECIFIED       ModelSelectionPurpose = 0
+	ModelSelectionPurpose_MODEL_SELECTION_PURPOSE_AGENT_TURN        ModelSelectionPurpose = 1
+	ModelSelectionPurpose_MODEL_SELECTION_PURPOSE_SPEAKER_SELECTION ModelSelectionPurpose = 2
+)
+
+// Enum value maps for ModelSelectionPurpose.
+var (
+	ModelSelectionPurpose_name = map[int32]string{
+		0: "MODEL_SELECTION_PURPOSE_UNSPECIFIED",
+		1: "MODEL_SELECTION_PURPOSE_AGENT_TURN",
+		2: "MODEL_SELECTION_PURPOSE_SPEAKER_SELECTION",
+	}
+	ModelSelectionPurpose_value = map[string]int32{
+		"MODEL_SELECTION_PURPOSE_UNSPECIFIED":       0,
+		"MODEL_SELECTION_PURPOSE_AGENT_TURN":        1,
+		"MODEL_SELECTION_PURPOSE_SPEAKER_SELECTION": 2,
+	}
+)
+
+func (x ModelSelectionPurpose) Enum() *ModelSelectionPurpose {
+	p := new(ModelSelectionPurpose)
+	*p = x
+	return p
+}
+
+func (x ModelSelectionPurpose) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ModelSelectionPurpose) Descriptor() protoreflect.EnumDescriptor {
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_enumTypes[5].Descriptor()
+}
+
+func (ModelSelectionPurpose) Type() protoreflect.EnumType {
+	return &file_collaboration_runtime_v1_collaboration_runtime_proto_enumTypes[5]
+}
+
+func (x ModelSelectionPurpose) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ModelSelectionPurpose.Descriptor instead.
+func (ModelSelectionPurpose) EnumDescriptor() ([]byte, []int) {
+	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{5}
+}
+
 type GetCapabilitiesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -584,7 +634,7 @@ type AgentSnapshot struct {
 	Description      string                 `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
 	SystemPrompt     string                 `protobuf:"bytes,6,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
 	Runtime          string                 `protobuf:"bytes,7,opt,name=runtime,proto3" json:"runtime,omitempty"`
-	ModelReferenceId string                 `protobuf:"bytes,8,opt,name=model_reference_id,json=modelReferenceId,proto3" json:"model_reference_id,omitempty"`
+	ModelSelectionId string                 `protobuf:"bytes,8,opt,name=model_selection_id,json=modelSelectionId,proto3" json:"model_selection_id,omitempty"`
 	ToolNames        []string               `protobuf:"bytes,9,rep,name=tool_names,json=toolNames,proto3" json:"tool_names,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -669,9 +719,9 @@ func (x *AgentSnapshot) GetRuntime() string {
 	return ""
 }
 
-func (x *AgentSnapshot) GetModelReferenceId() string {
+func (x *AgentSnapshot) GetModelSelectionId() string {
 	if x != nil {
-		return x.ModelReferenceId
+		return x.ModelSelectionId
 	}
 	return ""
 }
@@ -883,9 +933,10 @@ func (x *KnowledgeChunk) GetContent() string {
 	return ""
 }
 
-// ModelReference identifies a control-plane approved model profile. Credentials
+// ModelSelection identifies a control-plane approved model profile. Credentials
 // and provider clients are resolved behind the framework-neutral model port.
-type ModelReference struct {
+// credential_ref is opaque to Engines and Events; only the Resolver uses it.
+type ModelSelection struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	ProfileId     string                 `protobuf:"bytes,2,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
@@ -893,24 +944,26 @@ type ModelReference struct {
 	Protocol      string                 `protobuf:"bytes,4,opt,name=protocol,proto3" json:"protocol,omitempty"`
 	ModelName     string                 `protobuf:"bytes,5,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
 	RuntimeScope  string                 `protobuf:"bytes,6,opt,name=runtime_scope,json=runtimeScope,proto3" json:"runtime_scope,omitempty"`
+	CredentialRef string                 `protobuf:"bytes,7,opt,name=credential_ref,json=credentialRef,proto3" json:"credential_ref,omitempty"`
+	Purpose       ModelSelectionPurpose  `protobuf:"varint,8,opt,name=purpose,proto3,enum=agentroom.collaboration.v1.ModelSelectionPurpose" json:"purpose,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ModelReference) Reset() {
-	*x = ModelReference{}
+func (x *ModelSelection) Reset() {
+	*x = ModelSelection{}
 	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ModelReference) String() string {
+func (x *ModelSelection) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ModelReference) ProtoMessage() {}
+func (*ModelSelection) ProtoMessage() {}
 
-func (x *ModelReference) ProtoReflect() protoreflect.Message {
+func (x *ModelSelection) ProtoReflect() protoreflect.Message {
 	mi := &file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -922,51 +975,65 @@ func (x *ModelReference) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ModelReference.ProtoReflect.Descriptor instead.
-func (*ModelReference) Descriptor() ([]byte, []int) {
+// Deprecated: Use ModelSelection.ProtoReflect.Descriptor instead.
+func (*ModelSelection) Descriptor() ([]byte, []int) {
 	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *ModelReference) GetId() string {
+func (x *ModelSelection) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *ModelReference) GetProfileId() string {
+func (x *ModelSelection) GetProfileId() string {
 	if x != nil {
 		return x.ProfileId
 	}
 	return ""
 }
 
-func (x *ModelReference) GetSource() string {
+func (x *ModelSelection) GetSource() string {
 	if x != nil {
 		return x.Source
 	}
 	return ""
 }
 
-func (x *ModelReference) GetProtocol() string {
+func (x *ModelSelection) GetProtocol() string {
 	if x != nil {
 		return x.Protocol
 	}
 	return ""
 }
 
-func (x *ModelReference) GetModelName() string {
+func (x *ModelSelection) GetModelName() string {
 	if x != nil {
 		return x.ModelName
 	}
 	return ""
 }
 
-func (x *ModelReference) GetRuntimeScope() string {
+func (x *ModelSelection) GetRuntimeScope() string {
 	if x != nil {
 		return x.RuntimeScope
 	}
 	return ""
+}
+
+func (x *ModelSelection) GetCredentialRef() string {
+	if x != nil {
+		return x.CredentialRef
+	}
+	return ""
+}
+
+func (x *ModelSelection) GetPurpose() ModelSelectionPurpose {
+	if x != nil {
+		return x.Purpose
+	}
+	return ModelSelectionPurpose_MODEL_SELECTION_PURPOSE_UNSPECIFIED
 }
 
 type CollaborationPolicySnapshot struct {
@@ -1270,7 +1337,7 @@ type ConversationSnapshot struct {
 	Trigger                  *MessageSnapshot             `protobuf:"bytes,3,opt,name=trigger,proto3" json:"trigger,omitempty"`
 	Transcript               []*MessageSnapshot           `protobuf:"bytes,4,rep,name=transcript,proto3" json:"transcript,omitempty"`
 	KnowledgeChunks          []*KnowledgeChunk            `protobuf:"bytes,5,rep,name=knowledge_chunks,json=knowledgeChunks,proto3" json:"knowledge_chunks,omitempty"`
-	ModelReferences          []*ModelReference            `protobuf:"bytes,6,rep,name=model_references,json=modelReferences,proto3" json:"model_references,omitempty"`
+	ModelSelections          []*ModelSelection            `protobuf:"bytes,6,rep,name=model_selections,json=modelSelections,proto3" json:"model_selections,omitempty"`
 	Policy                   *CollaborationPolicySnapshot `protobuf:"bytes,7,opt,name=policy,proto3" json:"policy,omitempty"`
 	Limits                   *ExecutionLimits             `protobuf:"bytes,8,opt,name=limits,proto3" json:"limits,omitempty"`
 	InitialCandidateAgentIds []string                     `protobuf:"bytes,9,rep,name=initial_candidate_agent_ids,json=initialCandidateAgentIds,proto3" json:"initial_candidate_agent_ids,omitempty"`
@@ -1343,9 +1410,9 @@ func (x *ConversationSnapshot) GetKnowledgeChunks() []*KnowledgeChunk {
 	return nil
 }
 
-func (x *ConversationSnapshot) GetModelReferences() []*ModelReference {
+func (x *ConversationSnapshot) GetModelSelections() []*ModelSelection {
 	if x != nil {
-		return x.ModelReferences
+		return x.ModelSelections
 	}
 	return nil
 }
@@ -1517,7 +1584,7 @@ func (x *Usage) GetTotalTokens() uint64 {
 
 type ModelAudit struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
-	ModelReferenceId string                 `protobuf:"bytes,1,opt,name=model_reference_id,json=modelReferenceId,proto3" json:"model_reference_id,omitempty"`
+	ModelSelectionId string                 `protobuf:"bytes,1,opt,name=model_selection_id,json=modelSelectionId,proto3" json:"model_selection_id,omitempty"`
 	ProfileId        string                 `protobuf:"bytes,2,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
 	Source           string                 `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
 	ModelName        string                 `protobuf:"bytes,4,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
@@ -1555,9 +1622,9 @@ func (*ModelAudit) Descriptor() ([]byte, []int) {
 	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{14}
 }
 
-func (x *ModelAudit) GetModelReferenceId() string {
+func (x *ModelAudit) GetModelSelectionId() string {
 	if x != nil {
-		return x.ModelReferenceId
+		return x.ModelSelectionId
 	}
 	return ""
 }
@@ -1949,7 +2016,7 @@ func (*AgentTurnStartedEvent) Descriptor() ([]byte, []int) {
 
 type ModelStartedEvent struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
-	ModelReferenceId string                 `protobuf:"bytes,1,opt,name=model_reference_id,json=modelReferenceId,proto3" json:"model_reference_id,omitempty"`
+	ModelSelectionId string                 `protobuf:"bytes,1,opt,name=model_selection_id,json=modelSelectionId,proto3" json:"model_selection_id,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1984,16 +2051,16 @@ func (*ModelStartedEvent) Descriptor() ([]byte, []int) {
 	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *ModelStartedEvent) GetModelReferenceId() string {
+func (x *ModelStartedEvent) GetModelSelectionId() string {
 	if x != nil {
-		return x.ModelReferenceId
+		return x.ModelSelectionId
 	}
 	return ""
 }
 
 type ModelCompletedEvent struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
-	ModelReferenceId string                 `protobuf:"bytes,1,opt,name=model_reference_id,json=modelReferenceId,proto3" json:"model_reference_id,omitempty"`
+	ModelSelectionId string                 `protobuf:"bytes,1,opt,name=model_selection_id,json=modelSelectionId,proto3" json:"model_selection_id,omitempty"`
 	Usage            *Usage                 `protobuf:"bytes,2,opt,name=usage,proto3" json:"usage,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -2029,9 +2096,9 @@ func (*ModelCompletedEvent) Descriptor() ([]byte, []int) {
 	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{23}
 }
 
-func (x *ModelCompletedEvent) GetModelReferenceId() string {
+func (x *ModelCompletedEvent) GetModelSelectionId() string {
 	if x != nil {
-		return x.ModelReferenceId
+		return x.ModelSelectionId
 	}
 	return ""
 }
@@ -2759,7 +2826,7 @@ func (x *CollaborationEvent) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ProtoReflect.Descriptor instead.
+// Deprecated: Use CollaborationEvent.ProtoReflect.Descriptor instead.
 func (*CollaborationEvent) Descriptor() ([]byte, []int) {
 	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP(), []int{36}
 }
@@ -3115,7 +3182,7 @@ const file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc = "" +
 	"\vdescription\x18\x05 \x01(\tR\vdescription\x12#\n" +
 	"\rsystem_prompt\x18\x06 \x01(\tR\fsystemPrompt\x12\x18\n" +
 	"\aruntime\x18\a \x01(\tR\aruntime\x12,\n" +
-	"\x12model_reference_id\x18\b \x01(\tR\x10modelReferenceId\x12\x1d\n" +
+	"\x12model_selection_id\x18\b \x01(\tR\x10modelSelectionId\x12\x1d\n" +
 	"\n" +
 	"tool_names\x18\t \x03(\tR\ttoolNames\"\xfa\x02\n" +
 	"\x0fMessageSnapshot\x12\x0e\n" +
@@ -3141,8 +3208,8 @@ const file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc = "" +
 	"\bscope_id\x18\x05 \x01(\tR\ascopeId\x12\x1f\n" +
 	"\vchunk_index\x18\x06 \x01(\rR\n" +
 	"chunkIndex\x12\x18\n" +
-	"\acontent\x18\a \x01(\tR\acontent\"\xb7\x01\n" +
-	"\x0eModelReference\x12\x0e\n" +
+	"\acontent\x18\a \x01(\tR\acontent\"\xab\x02\n" +
+	"\x0eModelSelection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
 	"profile_id\x18\x02 \x01(\tR\tprofileId\x12\x16\n" +
@@ -3150,7 +3217,9 @@ const file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc = "" +
 	"\bprotocol\x18\x04 \x01(\tR\bprotocol\x12\x1d\n" +
 	"\n" +
 	"model_name\x18\x05 \x01(\tR\tmodelName\x12#\n" +
-	"\rruntime_scope\x18\x06 \x01(\tR\fruntimeScope\"\x97\x04\n" +
+	"\rruntime_scope\x18\x06 \x01(\tR\fruntimeScope\x12%\n" +
+	"\x0ecredential_ref\x18\a \x01(\tR\rcredentialRef\x12K\n" +
+	"\apurpose\x18\b \x01(\x0e21.agentroom.collaboration.v1.ModelSelectionPurposeR\apurpose\"\x97\x04\n" +
 	"\x1bCollaborationPolicySnapshot\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12G\n" +
 	"\x06engine\x18\x02 \x01(\x0e2/.agentroom.collaboration.v1.CollaborationEngineR\x06engine\x12J\n" +
@@ -3187,7 +3256,7 @@ const file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc = "" +
 	"transcript\x18\x04 \x03(\v2+.agentroom.collaboration.v1.MessageSnapshotR\n" +
 	"transcript\x12U\n" +
 	"\x10knowledge_chunks\x18\x05 \x03(\v2*.agentroom.collaboration.v1.KnowledgeChunkR\x0fknowledgeChunks\x12U\n" +
-	"\x10model_references\x18\x06 \x03(\v2*.agentroom.collaboration.v1.ModelReferenceR\x0fmodelReferences\x12O\n" +
+	"\x10model_selections\x18\x06 \x03(\v2*.agentroom.collaboration.v1.ModelSelectionR\x0fmodelSelections\x12O\n" +
 	"\x06policy\x18\a \x01(\v27.agentroom.collaboration.v1.CollaborationPolicySnapshotR\x06policy\x12C\n" +
 	"\x06limits\x18\b \x01(\v2+.agentroom.collaboration.v1.ExecutionLimitsR\x06limits\x12=\n" +
 	"\x1binitial_candidate_agent_ids\x18\t \x03(\tR\x18initialCandidateAgentIds\"\xf9\x02\n" +
@@ -3206,7 +3275,7 @@ const file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc = "" +
 	"\ftotal_tokens\x18\x03 \x01(\x04R\vtotalTokens\"\x90\x01\n" +
 	"\n" +
 	"ModelAudit\x12,\n" +
-	"\x12model_reference_id\x18\x01 \x01(\tR\x10modelReferenceId\x12\x1d\n" +
+	"\x12model_selection_id\x18\x01 \x01(\tR\x10modelSelectionId\x12\x1d\n" +
 	"\n" +
 	"profile_id\x18\x02 \x01(\tR\tprofileId\x12\x16\n" +
 	"\x06source\x18\x03 \x01(\tR\x06source\x12\x1d\n" +
@@ -3235,9 +3304,9 @@ const file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc = "" +
 	"\x0freason_category\x18\x01 \x01(\tR\x0ereasonCategory\"\x17\n" +
 	"\x15AgentTurnStartedEvent\"A\n" +
 	"\x11ModelStartedEvent\x12,\n" +
-	"\x12model_reference_id\x18\x01 \x01(\tR\x10modelReferenceId\"|\n" +
+	"\x12model_selection_id\x18\x01 \x01(\tR\x10modelSelectionId\"|\n" +
 	"\x13ModelCompletedEvent\x12,\n" +
-	"\x12model_reference_id\x18\x01 \x01(\tR\x10modelReferenceId\x127\n" +
+	"\x12model_selection_id\x18\x01 \x01(\tR\x10modelSelectionId\x127\n" +
 	"\x05usage\x18\x02 \x01(\v2!.agentroom.collaboration.v1.UsageR\x05usage\"v\n" +
 	"\x10ToolStartedEvent\x12 \n" +
 	"\ftool_call_id\x18\x01 \x01(\tR\n" +
@@ -3366,10 +3435,14 @@ const file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc = "" +
 	"'COLLABORATION_ERROR_CODE_PROTOCOL_ERROR\x10\x0e\x12&\n" +
 	"\"COLLABORATION_ERROR_CODE_CANCELLED\x10\x0f\x12.\n" +
 	"*COLLABORATION_ERROR_CODE_DEADLINE_EXCEEDED\x10\x10\x12%\n" +
-	"!COLLABORATION_ERROR_CODE_INTERNAL\x10\x112\x9a\x02\n" +
+	"!COLLABORATION_ERROR_CODE_INTERNAL\x10\x11*\x97\x01\n" +
+	"\x15ModelSelectionPurpose\x12'\n" +
+	"#MODEL_SELECTION_PURPOSE_UNSPECIFIED\x10\x00\x12&\n" +
+	"\"MODEL_SELECTION_PURPOSE_AGENT_TURN\x10\x01\x12-\n" +
+	")MODEL_SELECTION_PURPOSE_SPEAKER_SELECTION\x10\x022\x9a\x02\n" +
 	"\x1bCollaborationRuntimeService\x12z\n" +
 	"\x0fGetCapabilities\x122.agentroom.collaboration.v1.GetCapabilitiesRequest\x1a3.agentroom.collaboration.v1.GetCapabilitiesResponse\x12\x7f\n" +
-	"\x13ExecuteConversation\x126.agentroom.collaboration.v1.ExecuteConversationRequest\x1a..agentroom.collaboration.v1.CollaborationEvent0\x01BIZGagentroom/backend/internal/collaboration/proto/v1;collaborationruntimev1b\x06proto3"
+	"\x13ExecuteConversation\x126.agentroom.collaboration.v1.ExecuteConversationRequest\x1a..agentroom.collaboration.v1.CollaborationEvent0\x01BIZGagentroom/backend/internal/collaborationproto/v1;collaborationruntimev1b\x06proto3"
 
 var (
 	file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescOnce sync.Once
@@ -3383,7 +3456,7 @@ func file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescGZIP() []b
 	return file_collaboration_runtime_v1_collaboration_runtime_proto_rawDescData
 }
 
-var file_collaboration_runtime_v1_collaboration_runtime_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_collaboration_runtime_v1_collaboration_runtime_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
 var file_collaboration_runtime_v1_collaboration_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_collaboration_runtime_v1_collaboration_runtime_proto_goTypes = []any{
 	(CollaborationEngine)(0),              // 0: agentroom.collaboration.v1.CollaborationEngine
@@ -3391,108 +3464,110 @@ var file_collaboration_runtime_v1_collaboration_runtime_proto_goTypes = []any{
 	(SenderType)(0),                       // 2: agentroom.collaboration.v1.SenderType
 	(CollaborationStopReason)(0),          // 3: agentroom.collaboration.v1.CollaborationStopReason
 	(CollaborationErrorCode)(0),           // 4: agentroom.collaboration.v1.CollaborationErrorCode
-	(*GetCapabilitiesRequest)(nil),        // 5: agentroom.collaboration.v1.GetCapabilitiesRequest
-	(*CollaborationEngineCapability)(nil), // 6: agentroom.collaboration.v1.CollaborationEngineCapability
-	(*GetCapabilitiesResponse)(nil),       // 7: agentroom.collaboration.v1.GetCapabilitiesResponse
-	(*RoomSnapshot)(nil),                  // 8: agentroom.collaboration.v1.RoomSnapshot
-	(*AgentSnapshot)(nil),                 // 9: agentroom.collaboration.v1.AgentSnapshot
-	(*MessageSnapshot)(nil),               // 10: agentroom.collaboration.v1.MessageSnapshot
-	(*KnowledgeChunk)(nil),                // 11: agentroom.collaboration.v1.KnowledgeChunk
-	(*ModelReference)(nil),                // 12: agentroom.collaboration.v1.ModelReference
-	(*CollaborationPolicySnapshot)(nil),   // 13: agentroom.collaboration.v1.CollaborationPolicySnapshot
-	(*ExecutionLimits)(nil),               // 14: agentroom.collaboration.v1.ExecutionLimits
-	(*OpaqueCheckpoint)(nil),              // 15: agentroom.collaboration.v1.OpaqueCheckpoint
-	(*ConversationSnapshot)(nil),          // 16: agentroom.collaboration.v1.ConversationSnapshot
-	(*ExecuteConversationRequest)(nil),    // 17: agentroom.collaboration.v1.ExecuteConversationRequest
-	(*Usage)(nil),                         // 18: agentroom.collaboration.v1.Usage
-	(*ModelAudit)(nil),                    // 19: agentroom.collaboration.v1.ModelAudit
-	(*KnowledgeSource)(nil),               // 20: agentroom.collaboration.v1.KnowledgeSource
-	(*Artifact)(nil),                      // 21: agentroom.collaboration.v1.Artifact
-	(*CollaborationFailure)(nil),          // 22: agentroom.collaboration.v1.CollaborationFailure
-	(*AcceptedEvent)(nil),                 // 23: agentroom.collaboration.v1.AcceptedEvent
-	(*CollaborationStartedEvent)(nil),     // 24: agentroom.collaboration.v1.CollaborationStartedEvent
-	(*SpeakerSelectedEvent)(nil),          // 25: agentroom.collaboration.v1.SpeakerSelectedEvent
-	(*AgentTurnStartedEvent)(nil),         // 26: agentroom.collaboration.v1.AgentTurnStartedEvent
-	(*ModelStartedEvent)(nil),             // 27: agentroom.collaboration.v1.ModelStartedEvent
-	(*ModelCompletedEvent)(nil),           // 28: agentroom.collaboration.v1.ModelCompletedEvent
-	(*ToolStartedEvent)(nil),              // 29: agentroom.collaboration.v1.ToolStartedEvent
-	(*ToolCompletedEvent)(nil),            // 30: agentroom.collaboration.v1.ToolCompletedEvent
-	(*ToolFailedEvent)(nil),               // 31: agentroom.collaboration.v1.ToolFailedEvent
-	(*OutputDeltaEvent)(nil),              // 32: agentroom.collaboration.v1.OutputDeltaEvent
-	(*ArtifactReadyEvent)(nil),            // 33: agentroom.collaboration.v1.ArtifactReadyEvent
-	(*HandoffRequestedEvent)(nil),         // 34: agentroom.collaboration.v1.HandoffRequestedEvent
-	(*AgentMessageCompletedEvent)(nil),    // 35: agentroom.collaboration.v1.AgentMessageCompletedEvent
-	(*CheckpointEvent)(nil),               // 36: agentroom.collaboration.v1.CheckpointEvent
-	(*CompletedEvent)(nil),                // 37: agentroom.collaboration.v1.CompletedEvent
-	(*StoppedEvent)(nil),                  // 38: agentroom.collaboration.v1.StoppedEvent
-	(*CancelledEvent)(nil),                // 39: agentroom.collaboration.v1.CancelledEvent
-	(*FailedEvent)(nil),                   // 40: agentroom.collaboration.v1.FailedEvent
-	(*CollaborationEvent)(nil),            // 41: agentroom.collaboration.v1.CollaborationEvent
-	(*timestamppb.Timestamp)(nil),         // 42: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),           // 43: google.protobuf.Duration
+	(ModelSelectionPurpose)(0),            // 5: agentroom.collaboration.v1.ModelSelectionPurpose
+	(*GetCapabilitiesRequest)(nil),        // 6: agentroom.collaboration.v1.GetCapabilitiesRequest
+	(*CollaborationEngineCapability)(nil), // 7: agentroom.collaboration.v1.CollaborationEngineCapability
+	(*GetCapabilitiesResponse)(nil),       // 8: agentroom.collaboration.v1.GetCapabilitiesResponse
+	(*RoomSnapshot)(nil),                  // 9: agentroom.collaboration.v1.RoomSnapshot
+	(*AgentSnapshot)(nil),                 // 10: agentroom.collaboration.v1.AgentSnapshot
+	(*MessageSnapshot)(nil),               // 11: agentroom.collaboration.v1.MessageSnapshot
+	(*KnowledgeChunk)(nil),                // 12: agentroom.collaboration.v1.KnowledgeChunk
+	(*ModelSelection)(nil),                // 13: agentroom.collaboration.v1.ModelSelection
+	(*CollaborationPolicySnapshot)(nil),   // 14: agentroom.collaboration.v1.CollaborationPolicySnapshot
+	(*ExecutionLimits)(nil),               // 15: agentroom.collaboration.v1.ExecutionLimits
+	(*OpaqueCheckpoint)(nil),              // 16: agentroom.collaboration.v1.OpaqueCheckpoint
+	(*ConversationSnapshot)(nil),          // 17: agentroom.collaboration.v1.ConversationSnapshot
+	(*ExecuteConversationRequest)(nil),    // 18: agentroom.collaboration.v1.ExecuteConversationRequest
+	(*Usage)(nil),                         // 19: agentroom.collaboration.v1.Usage
+	(*ModelAudit)(nil),                    // 20: agentroom.collaboration.v1.ModelAudit
+	(*KnowledgeSource)(nil),               // 21: agentroom.collaboration.v1.KnowledgeSource
+	(*Artifact)(nil),                      // 22: agentroom.collaboration.v1.Artifact
+	(*CollaborationFailure)(nil),          // 23: agentroom.collaboration.v1.CollaborationFailure
+	(*AcceptedEvent)(nil),                 // 24: agentroom.collaboration.v1.AcceptedEvent
+	(*CollaborationStartedEvent)(nil),     // 25: agentroom.collaboration.v1.CollaborationStartedEvent
+	(*SpeakerSelectedEvent)(nil),          // 26: agentroom.collaboration.v1.SpeakerSelectedEvent
+	(*AgentTurnStartedEvent)(nil),         // 27: agentroom.collaboration.v1.AgentTurnStartedEvent
+	(*ModelStartedEvent)(nil),             // 28: agentroom.collaboration.v1.ModelStartedEvent
+	(*ModelCompletedEvent)(nil),           // 29: agentroom.collaboration.v1.ModelCompletedEvent
+	(*ToolStartedEvent)(nil),              // 30: agentroom.collaboration.v1.ToolStartedEvent
+	(*ToolCompletedEvent)(nil),            // 31: agentroom.collaboration.v1.ToolCompletedEvent
+	(*ToolFailedEvent)(nil),               // 32: agentroom.collaboration.v1.ToolFailedEvent
+	(*OutputDeltaEvent)(nil),              // 33: agentroom.collaboration.v1.OutputDeltaEvent
+	(*ArtifactReadyEvent)(nil),            // 34: agentroom.collaboration.v1.ArtifactReadyEvent
+	(*HandoffRequestedEvent)(nil),         // 35: agentroom.collaboration.v1.HandoffRequestedEvent
+	(*AgentMessageCompletedEvent)(nil),    // 36: agentroom.collaboration.v1.AgentMessageCompletedEvent
+	(*CheckpointEvent)(nil),               // 37: agentroom.collaboration.v1.CheckpointEvent
+	(*CompletedEvent)(nil),                // 38: agentroom.collaboration.v1.CompletedEvent
+	(*StoppedEvent)(nil),                  // 39: agentroom.collaboration.v1.StoppedEvent
+	(*CancelledEvent)(nil),                // 40: agentroom.collaboration.v1.CancelledEvent
+	(*FailedEvent)(nil),                   // 41: agentroom.collaboration.v1.FailedEvent
+	(*CollaborationEvent)(nil),            // 42: agentroom.collaboration.v1.CollaborationEvent
+	(*timestamppb.Timestamp)(nil),         // 43: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),           // 44: google.protobuf.Duration
 }
 var file_collaboration_runtime_v1_collaboration_runtime_proto_depIdxs = []int32{
-	6,  // 0: agentroom.collaboration.v1.GetCapabilitiesResponse.engines:type_name -> agentroom.collaboration.v1.CollaborationEngineCapability
+	7,  // 0: agentroom.collaboration.v1.GetCapabilitiesResponse.engines:type_name -> agentroom.collaboration.v1.CollaborationEngineCapability
 	2,  // 1: agentroom.collaboration.v1.MessageSnapshot.sender_type:type_name -> agentroom.collaboration.v1.SenderType
-	42, // 2: agentroom.collaboration.v1.MessageSnapshot.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 3: agentroom.collaboration.v1.CollaborationPolicySnapshot.engine:type_name -> agentroom.collaboration.v1.CollaborationEngine
-	1,  // 4: agentroom.collaboration.v1.CollaborationPolicySnapshot.trigger_mode:type_name -> agentroom.collaboration.v1.TriggerMode
-	43, // 5: agentroom.collaboration.v1.CollaborationPolicySnapshot.cooldown:type_name -> google.protobuf.Duration
-	43, // 6: agentroom.collaboration.v1.ExecutionLimits.timeout:type_name -> google.protobuf.Duration
-	0,  // 7: agentroom.collaboration.v1.OpaqueCheckpoint.engine:type_name -> agentroom.collaboration.v1.CollaborationEngine
-	8,  // 8: agentroom.collaboration.v1.ConversationSnapshot.room:type_name -> agentroom.collaboration.v1.RoomSnapshot
-	9,  // 9: agentroom.collaboration.v1.ConversationSnapshot.agents:type_name -> agentroom.collaboration.v1.AgentSnapshot
-	10, // 10: agentroom.collaboration.v1.ConversationSnapshot.trigger:type_name -> agentroom.collaboration.v1.MessageSnapshot
-	10, // 11: agentroom.collaboration.v1.ConversationSnapshot.transcript:type_name -> agentroom.collaboration.v1.MessageSnapshot
-	11, // 12: agentroom.collaboration.v1.ConversationSnapshot.knowledge_chunks:type_name -> agentroom.collaboration.v1.KnowledgeChunk
-	12, // 13: agentroom.collaboration.v1.ConversationSnapshot.model_references:type_name -> agentroom.collaboration.v1.ModelReference
-	13, // 14: agentroom.collaboration.v1.ConversationSnapshot.policy:type_name -> agentroom.collaboration.v1.CollaborationPolicySnapshot
-	14, // 15: agentroom.collaboration.v1.ConversationSnapshot.limits:type_name -> agentroom.collaboration.v1.ExecutionLimits
-	0,  // 16: agentroom.collaboration.v1.ExecuteConversationRequest.engine:type_name -> agentroom.collaboration.v1.CollaborationEngine
-	16, // 17: agentroom.collaboration.v1.ExecuteConversationRequest.snapshot:type_name -> agentroom.collaboration.v1.ConversationSnapshot
-	15, // 18: agentroom.collaboration.v1.ExecuteConversationRequest.checkpoint:type_name -> agentroom.collaboration.v1.OpaqueCheckpoint
-	4,  // 19: agentroom.collaboration.v1.CollaborationFailure.code:type_name -> agentroom.collaboration.v1.CollaborationErrorCode
-	18, // 20: agentroom.collaboration.v1.ModelCompletedEvent.usage:type_name -> agentroom.collaboration.v1.Usage
-	22, // 21: agentroom.collaboration.v1.ToolFailedEvent.failure:type_name -> agentroom.collaboration.v1.CollaborationFailure
-	21, // 22: agentroom.collaboration.v1.ArtifactReadyEvent.artifact:type_name -> agentroom.collaboration.v1.Artifact
-	21, // 23: agentroom.collaboration.v1.AgentMessageCompletedEvent.artifacts:type_name -> agentroom.collaboration.v1.Artifact
-	20, // 24: agentroom.collaboration.v1.AgentMessageCompletedEvent.knowledge_sources:type_name -> agentroom.collaboration.v1.KnowledgeSource
-	19, // 25: agentroom.collaboration.v1.AgentMessageCompletedEvent.model:type_name -> agentroom.collaboration.v1.ModelAudit
-	18, // 26: agentroom.collaboration.v1.AgentMessageCompletedEvent.usage:type_name -> agentroom.collaboration.v1.Usage
-	15, // 27: agentroom.collaboration.v1.CheckpointEvent.checkpoint:type_name -> agentroom.collaboration.v1.OpaqueCheckpoint
-	3,  // 28: agentroom.collaboration.v1.CompletedEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
-	3,  // 29: agentroom.collaboration.v1.StoppedEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
-	3,  // 30: agentroom.collaboration.v1.CancelledEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
-	3,  // 31: agentroom.collaboration.v1.FailedEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
-	22, // 32: agentroom.collaboration.v1.FailedEvent.failure:type_name -> agentroom.collaboration.v1.CollaborationFailure
-	42, // 33: agentroom.collaboration.v1.occurred_at:type_name -> google.protobuf.Timestamp
-	23, // 34: agentroom.collaboration.v1.accepted:type_name -> agentroom.collaboration.v1.AcceptedEvent
-	24, // 35: agentroom.collaboration.v1.collaboration_started:type_name -> agentroom.collaboration.v1.CollaborationStartedEvent
-	25, // 36: agentroom.collaboration.v1.speaker_selected:type_name -> agentroom.collaboration.v1.SpeakerSelectedEvent
-	26, // 37: agentroom.collaboration.v1.agent_turn_started:type_name -> agentroom.collaboration.v1.AgentTurnStartedEvent
-	27, // 38: agentroom.collaboration.v1.model_started:type_name -> agentroom.collaboration.v1.ModelStartedEvent
-	28, // 39: agentroom.collaboration.v1.model_completed:type_name -> agentroom.collaboration.v1.ModelCompletedEvent
-	29, // 40: agentroom.collaboration.v1.tool_started:type_name -> agentroom.collaboration.v1.ToolStartedEvent
-	30, // 41: agentroom.collaboration.v1.tool_completed:type_name -> agentroom.collaboration.v1.ToolCompletedEvent
-	31, // 42: agentroom.collaboration.v1.tool_failed:type_name -> agentroom.collaboration.v1.ToolFailedEvent
-	32, // 43: agentroom.collaboration.v1.output_delta:type_name -> agentroom.collaboration.v1.OutputDeltaEvent
-	33, // 44: agentroom.collaboration.v1.artifact_ready:type_name -> agentroom.collaboration.v1.ArtifactReadyEvent
-	34, // 45: agentroom.collaboration.v1.handoff_requested:type_name -> agentroom.collaboration.v1.HandoffRequestedEvent
-	35, // 46: agentroom.collaboration.v1.agent_message_completed:type_name -> agentroom.collaboration.v1.AgentMessageCompletedEvent
-	36, // 47: agentroom.collaboration.v1.checkpoint:type_name -> agentroom.collaboration.v1.CheckpointEvent
-	37, // 48: agentroom.collaboration.v1.completed:type_name -> agentroom.collaboration.v1.CompletedEvent
-	38, // 49: agentroom.collaboration.v1.stopped:type_name -> agentroom.collaboration.v1.StoppedEvent
-	39, // 50: agentroom.collaboration.v1.cancelled:type_name -> agentroom.collaboration.v1.CancelledEvent
-	40, // 51: agentroom.collaboration.v1.failed:type_name -> agentroom.collaboration.v1.FailedEvent
-	5,  // 52: agentroom.collaboration.v1.CollaborationRuntimeService.GetCapabilities:input_type -> agentroom.collaboration.v1.GetCapabilitiesRequest
-	17, // 53: agentroom.collaboration.v1.CollaborationRuntimeService.ExecuteConversation:input_type -> agentroom.collaboration.v1.ExecuteConversationRequest
-	7,  // 54: agentroom.collaboration.v1.CollaborationRuntimeService.GetCapabilities:output_type -> agentroom.collaboration.v1.GetCapabilitiesResponse
-	41, // 55: agentroom.collaboration.v1.CollaborationRuntimeService.ExecuteConversation:output_type -> agentroom.collaboration.v1.CollaborationEvent
-	54, // [54:56] is the sub-list for method output_type
-	52, // [52:54] is the sub-list for method input_type
-	52, // [52:52] is the sub-list for extension type_name
-	52, // [52:52] is the sub-list for extension extendee
-	0,  // [0:52] is the sub-list for field type_name
+	43, // 2: agentroom.collaboration.v1.MessageSnapshot.created_at:type_name -> google.protobuf.Timestamp
+	5,  // 3: agentroom.collaboration.v1.ModelSelection.purpose:type_name -> agentroom.collaboration.v1.ModelSelectionPurpose
+	0,  // 4: agentroom.collaboration.v1.CollaborationPolicySnapshot.engine:type_name -> agentroom.collaboration.v1.CollaborationEngine
+	1,  // 5: agentroom.collaboration.v1.CollaborationPolicySnapshot.trigger_mode:type_name -> agentroom.collaboration.v1.TriggerMode
+	44, // 6: agentroom.collaboration.v1.CollaborationPolicySnapshot.cooldown:type_name -> google.protobuf.Duration
+	44, // 7: agentroom.collaboration.v1.ExecutionLimits.timeout:type_name -> google.protobuf.Duration
+	0,  // 8: agentroom.collaboration.v1.OpaqueCheckpoint.engine:type_name -> agentroom.collaboration.v1.CollaborationEngine
+	9,  // 9: agentroom.collaboration.v1.ConversationSnapshot.room:type_name -> agentroom.collaboration.v1.RoomSnapshot
+	10, // 10: agentroom.collaboration.v1.ConversationSnapshot.agents:type_name -> agentroom.collaboration.v1.AgentSnapshot
+	11, // 11: agentroom.collaboration.v1.ConversationSnapshot.trigger:type_name -> agentroom.collaboration.v1.MessageSnapshot
+	11, // 12: agentroom.collaboration.v1.ConversationSnapshot.transcript:type_name -> agentroom.collaboration.v1.MessageSnapshot
+	12, // 13: agentroom.collaboration.v1.ConversationSnapshot.knowledge_chunks:type_name -> agentroom.collaboration.v1.KnowledgeChunk
+	13, // 14: agentroom.collaboration.v1.ConversationSnapshot.model_selections:type_name -> agentroom.collaboration.v1.ModelSelection
+	14, // 15: agentroom.collaboration.v1.ConversationSnapshot.policy:type_name -> agentroom.collaboration.v1.CollaborationPolicySnapshot
+	15, // 16: agentroom.collaboration.v1.ConversationSnapshot.limits:type_name -> agentroom.collaboration.v1.ExecutionLimits
+	0,  // 17: agentroom.collaboration.v1.ExecuteConversationRequest.engine:type_name -> agentroom.collaboration.v1.CollaborationEngine
+	17, // 18: agentroom.collaboration.v1.ExecuteConversationRequest.snapshot:type_name -> agentroom.collaboration.v1.ConversationSnapshot
+	16, // 19: agentroom.collaboration.v1.ExecuteConversationRequest.checkpoint:type_name -> agentroom.collaboration.v1.OpaqueCheckpoint
+	4,  // 20: agentroom.collaboration.v1.CollaborationFailure.code:type_name -> agentroom.collaboration.v1.CollaborationErrorCode
+	19, // 21: agentroom.collaboration.v1.ModelCompletedEvent.usage:type_name -> agentroom.collaboration.v1.Usage
+	23, // 22: agentroom.collaboration.v1.ToolFailedEvent.failure:type_name -> agentroom.collaboration.v1.CollaborationFailure
+	22, // 23: agentroom.collaboration.v1.ArtifactReadyEvent.artifact:type_name -> agentroom.collaboration.v1.Artifact
+	22, // 24: agentroom.collaboration.v1.AgentMessageCompletedEvent.artifacts:type_name -> agentroom.collaboration.v1.Artifact
+	21, // 25: agentroom.collaboration.v1.AgentMessageCompletedEvent.knowledge_sources:type_name -> agentroom.collaboration.v1.KnowledgeSource
+	20, // 26: agentroom.collaboration.v1.AgentMessageCompletedEvent.model:type_name -> agentroom.collaboration.v1.ModelAudit
+	19, // 27: agentroom.collaboration.v1.AgentMessageCompletedEvent.usage:type_name -> agentroom.collaboration.v1.Usage
+	16, // 28: agentroom.collaboration.v1.CheckpointEvent.checkpoint:type_name -> agentroom.collaboration.v1.OpaqueCheckpoint
+	3,  // 29: agentroom.collaboration.v1.CompletedEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
+	3,  // 30: agentroom.collaboration.v1.StoppedEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
+	3,  // 31: agentroom.collaboration.v1.CancelledEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
+	3,  // 32: agentroom.collaboration.v1.FailedEvent.reason:type_name -> agentroom.collaboration.v1.CollaborationStopReason
+	23, // 33: agentroom.collaboration.v1.FailedEvent.failure:type_name -> agentroom.collaboration.v1.CollaborationFailure
+	43, // 34: agentroom.collaboration.v1.CollaborationEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	24, // 35: agentroom.collaboration.v1.CollaborationEvent.accepted:type_name -> agentroom.collaboration.v1.AcceptedEvent
+	25, // 36: agentroom.collaboration.v1.CollaborationEvent.collaboration_started:type_name -> agentroom.collaboration.v1.CollaborationStartedEvent
+	26, // 37: agentroom.collaboration.v1.CollaborationEvent.speaker_selected:type_name -> agentroom.collaboration.v1.SpeakerSelectedEvent
+	27, // 38: agentroom.collaboration.v1.CollaborationEvent.agent_turn_started:type_name -> agentroom.collaboration.v1.AgentTurnStartedEvent
+	28, // 39: agentroom.collaboration.v1.CollaborationEvent.model_started:type_name -> agentroom.collaboration.v1.ModelStartedEvent
+	29, // 40: agentroom.collaboration.v1.CollaborationEvent.model_completed:type_name -> agentroom.collaboration.v1.ModelCompletedEvent
+	30, // 41: agentroom.collaboration.v1.CollaborationEvent.tool_started:type_name -> agentroom.collaboration.v1.ToolStartedEvent
+	31, // 42: agentroom.collaboration.v1.CollaborationEvent.tool_completed:type_name -> agentroom.collaboration.v1.ToolCompletedEvent
+	32, // 43: agentroom.collaboration.v1.CollaborationEvent.tool_failed:type_name -> agentroom.collaboration.v1.ToolFailedEvent
+	33, // 44: agentroom.collaboration.v1.CollaborationEvent.output_delta:type_name -> agentroom.collaboration.v1.OutputDeltaEvent
+	34, // 45: agentroom.collaboration.v1.CollaborationEvent.artifact_ready:type_name -> agentroom.collaboration.v1.ArtifactReadyEvent
+	35, // 46: agentroom.collaboration.v1.CollaborationEvent.handoff_requested:type_name -> agentroom.collaboration.v1.HandoffRequestedEvent
+	36, // 47: agentroom.collaboration.v1.CollaborationEvent.agent_message_completed:type_name -> agentroom.collaboration.v1.AgentMessageCompletedEvent
+	37, // 48: agentroom.collaboration.v1.CollaborationEvent.checkpoint:type_name -> agentroom.collaboration.v1.CheckpointEvent
+	38, // 49: agentroom.collaboration.v1.CollaborationEvent.completed:type_name -> agentroom.collaboration.v1.CompletedEvent
+	39, // 50: agentroom.collaboration.v1.CollaborationEvent.stopped:type_name -> agentroom.collaboration.v1.StoppedEvent
+	40, // 51: agentroom.collaboration.v1.CollaborationEvent.cancelled:type_name -> agentroom.collaboration.v1.CancelledEvent
+	41, // 52: agentroom.collaboration.v1.CollaborationEvent.failed:type_name -> agentroom.collaboration.v1.FailedEvent
+	6,  // 53: agentroom.collaboration.v1.CollaborationRuntimeService.GetCapabilities:input_type -> agentroom.collaboration.v1.GetCapabilitiesRequest
+	18, // 54: agentroom.collaboration.v1.CollaborationRuntimeService.ExecuteConversation:input_type -> agentroom.collaboration.v1.ExecuteConversationRequest
+	8,  // 55: agentroom.collaboration.v1.CollaborationRuntimeService.GetCapabilities:output_type -> agentroom.collaboration.v1.GetCapabilitiesResponse
+	42, // 56: agentroom.collaboration.v1.CollaborationRuntimeService.ExecuteConversation:output_type -> agentroom.collaboration.v1.CollaborationEvent
+	55, // [55:57] is the sub-list for method output_type
+	53, // [53:55] is the sub-list for method input_type
+	53, // [53:53] is the sub-list for extension type_name
+	53, // [53:53] is the sub-list for extension extendee
+	0,  // [0:53] is the sub-list for field type_name
 }
 
 func init() { file_collaboration_runtime_v1_collaboration_runtime_proto_init() }
@@ -3525,7 +3600,7 @@ func file_collaboration_runtime_v1_collaboration_runtime_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc), len(file_collaboration_runtime_v1_collaboration_runtime_proto_rawDesc)),
-			NumEnums:      5,
+			NumEnums:      6,
 			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   1,

@@ -80,7 +80,7 @@ type ConversationSnapshot struct {
 	Trigger                  MessageSnapshot
 	Transcript               []MessageSnapshot
 	KnowledgeChunks          []KnowledgeChunk
-	ModelReferences          []ModelReference
+	ModelSelections          []ModelSelection
 	Policy                   PolicySnapshot
 	Limits                   ExecutionLimits
 	InitialCandidateAgentIDs []string
@@ -100,7 +100,7 @@ type AgentSnapshot struct {
 	Description      string
 	SystemPrompt     string
 	Runtime          string
-	ModelReferenceID string
+	ModelSelectionID string
 	ToolNames        []string
 }
 
@@ -126,13 +126,23 @@ type KnowledgeChunk struct {
 	Content      string
 }
 
-type ModelReference struct {
-	ID           string
-	ProfileID    string
-	Source       string
-	Protocol     string
-	ModelName    string
-	RuntimeScope string
+type ModelSelectionPurpose string
+
+const (
+	ModelSelectionPurposeUnspecified      ModelSelectionPurpose = ""
+	ModelSelectionPurposeAgentTurn        ModelSelectionPurpose = "agent_turn"
+	ModelSelectionPurposeSpeakerSelection  ModelSelectionPurpose = "speaker_selection"
+)
+
+type ModelSelection struct {
+	ID            string
+	ProfileID     string
+	Source        string
+	Protocol      string
+	ModelName     string
+	RuntimeScope  string
+	CredentialRef string
+	Purpose       ModelSelectionPurpose
 }
 
 type PolicySnapshot struct {
@@ -174,7 +184,7 @@ type Usage struct {
 }
 
 type ModelAudit struct {
-	ModelReferenceID string
+	ModelSelectionID string
 	ProfileID        string
 	Source           string
 	ModelName        string
