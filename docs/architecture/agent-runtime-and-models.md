@@ -2,6 +2,10 @@
 
 ## 当前远程执行拓扑
 
+> 本节的 ASCII 图表已补充为可渲染的 Mermaid 版本，见 [架构图](diagrams.md)。
+
+
+
 `AGENT_RUNTIME_TRANSPORT=grpc` 时，Go 是控制面，长驻 Python 服务是执行面。它同时注册两个逻辑服务：
 
 ```text
